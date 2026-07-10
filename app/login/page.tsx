@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import { panelPathForRole } from "@/app/_lib/role-routes";
+import type { SessionUser } from "@/app/_lib/use-session";
 import { uiClasses } from "@/app/_lib/ui";
 
 interface LoginResponse {
@@ -12,7 +14,7 @@ interface LoginResponse {
 
 interface SessionResponse {
   authenticated: boolean;
-  user: { globalRole: "SUPERADMIN" | "ADMIN" | "TRAINER" | "ATHLETE" } | null;
+  user: SessionUser | null;
 }
 
 export default function LoginPage() {
@@ -33,8 +35,10 @@ export default function LoginPage() {
       });
 
       const session = await apiFetch<SessionResponse>("/api/auth/session");
-      const role = session.user?.globalRole;
-      router.push(role === "ATHLETE" ? "/atleta" : "/treinador");
+      // Role-based landing; ADMIN/SUPERADMIN have no panel yet, so they go to
+      // the home, which shows the "administrativo em breve" state.
+      const panel = session.user ? panelPathForRole(session.user.globalRole) : null;
+      router.push(panel ?? "/");
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Erro inesperado.");
     } finally {
