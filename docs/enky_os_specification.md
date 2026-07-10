@@ -13,7 +13,7 @@ Este documento consolida a especificação de produto e engenharia da ENKY.
 
 A partir desta versão, este documento deve ser tratado como a fonte única de verdade para implementação técnica, arquitetura funcional, regras de negócio, permissões, modelo de dados, MVP, roadmap e critérios de pronto.
 
-Ele não substitui a filosofia da marca, mas transforma a visão da ENKY in uma especificação operacional para desenvolvimento.
+Ele não substitui a filosofia da marca, mas transforma a visão da ENKY em uma especificação operacional para desenvolvimento.
 
 Este documento deve ser lido antes de qualquer implementação no Claude Code, Codex ou outro ambiente de desenvolvimento.
 
@@ -281,38 +281,42 @@ A ENKY deve ser organizada em quatro grandes áreas:
 
 ## 12. MODELO DE DADOS ESSENCIAL
 
-Entidades essenciais do MVP:
-- User
-- TrainerProfile
-- AthleteProfile
-- CoachAthleteRelationship
-- AthleteGroup
-- Assessment
-- TestResult
-- Periodization
-- TrainingWeek
-- Workout
-- WorkoutBlock
-- Exercise
-- WorkoutExercise
-- WorkoutTemplate
-- CalendarEvent
-- WorkoutFeedback
-- MetricRecord
-- DerivedMetric
-- AthleteInsight
-- AIRecommendation
-- Report
-- MarketplacePlan
-- MarketplacePurchase
-- SubscriptionPlan
-- Subscription
-- PaymentTransaction
-- Notification
-- Message/Comment
-- AuditLog
-- FileAttachment
-- SystemSetting
+> **Reconciliado na Fase 01.5 (achado F2):** esta lista original divergia do Prisma "Approved for Implementation" do Data Model Specification v1.2.1 — 9 entidades citadas aqui não existiam no schema aprovado. Cada item abaixo recebe uma classificação fechada antes da expansão formal do schema. Nenhuma mudança desta reconciliação altera `prisma/schema.prisma` nesta fase — o schema mínimo da Fase 01 permanece `User`/`Organization`/`OrganizationMembership`/`Session`.
+
+Entidades essenciais do MVP (classificação reconciliada):
+- User — **[MVP]** — já no schema mínimo (Fase 01)
+- TrainerProfile — **[MVP]**
+- AthleteProfile — **[MVP]**
+- CoachAthleteRelationship — **[MVP]**
+- AthleteGroup — **[PÓS-MVP]** — sem modelo no Data Model v1.2.1; junto com periodização em grupo (ENKY 25 §29). Fica para a Fase 6 do roadmap, junto de organizações multiusuário — ver `docs/adr/ADR-001-multitenancy-enforcement.md`.
+- Assessment — **[SUBSTITUÍDO]** por `TestResult` (Data Model v1.2.1 §7) — não criar entidade paralela.
+- TestResult — **[MVP]**
+- Periodization — **[MVP]**
+- TrainingWeek — **[MVP]**
+- Workout — **[MVP]**
+- WorkoutBlock — **[MVP]**
+- Exercise — **[MVP]**
+- WorkoutExercise — **[MVP]**
+- WorkoutTemplate — **[MVP]** — incluir na expansão do schema; ainda não modelada no Data Model v1.2.1 (o enum `WorkoutSource.TEMPLATE` já prevê a origem, falta o modelo).
+- CalendarEvent — **[MVP]**
+- WorkoutFeedback — **[MVP]**
+- MetricRecord — **[SUBSTITUÍDO]** por `DerivedMetric` + `WorkoutFeedback` + `TestResult` (Data Model v1.2.1 §6–7) — não criar uma entidade de métrica bruta separada.
+- DerivedMetric — **[MVP]**
+- AthleteInsight — **[SUBSTITUÍDO]** — mesma cobertura de AIRecommendation, abaixo.
+- AIRecommendation — **[SUBSTITUÍDO]** por `generationRationale`/`confidenceLevel` em `Workout` + `Report` (Data Model v1.2.1 §5, §7). Não criar uma tabela de recomendação de IA separada no MVP — ver módulo `intelligence`.
+- Report — **[MVP]**
+- MarketplacePlan — **[MVP]** (com `MarketplacePlanVersion`, Data Model v1.2.1 §8)
+- MarketplacePurchase — **[MVP]**
+- SubscriptionPlan — **[MVP]**
+- Subscription — **[MVP]**
+- PaymentTransaction — **[MVP]**
+- Notification — **[MVP, se necessária]** — notificação mínima de eventos essenciais (convite de atleta, treino publicado, feedback pendente). Ainda não modelada no Data Model v1.2.1; incluir na expansão do schema apenas se o fluxo funcional da Fase 02 exigir persistência (um e-mail transacional sem persistência pode bastar no início).
+- Message/Comment — **[PÓS-MVP]** — mensageria completa está fora do MVP (§9, "Fora do MVP").
+- AuditLog — **[MVP]** — já modelado (Data Model v1.2.1 §9).
+- FileAttachment — **[PÓS-MVP]** — anexos genéricos adiados.
+- SystemSetting — **[SUBSTITUÍDO]** por feature flags quando aplicável.
+
+**Entidades propostas nesta reconciliação, ainda sem aprovação formal:** `FeatureFlag`/`OrganizationFeature` foram cogitadas como substituto de `SystemSetting`, mas **não estão aprovadas** em nenhum documento canônico — não incluir no schema até uma decisão formal registrada em ADR dedicado.
 
 ---
 

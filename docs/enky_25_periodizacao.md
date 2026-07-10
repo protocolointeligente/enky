@@ -117,13 +117,41 @@ Campos:
 
 ## 8. VÍNCULO DO WORKOUT COM A PERIODIZAÇÃO
 
-Todo `Workout` derivado da periodização deve conter:
-- `periodizationId`, `phaseId`, `trainingWeekId`, `athleteId`, `trainerId`;
-- `plannedDate`, `modality`;
-- `source` (`PERIODIZATION_MANUAL`, `PERIODIZATION_ASSISTED`, `PERIODIZATION_AUTOMATIC`, etc.);
-- `generationBatchId`, `isGenerated`, `generationReason`.
+> **Reconciliado na Fase 01.5 (achado F3):** esta seção usava valores de `source`
+> (`PERIODIZATION_MANUAL`, `PERIODIZATION_ASSISTED`, `PERIODIZATION_AUTOMATIC`) e
+> nomes de campo (`phaseId`, `isGenerated`, `generationReason`) que não existem no
+> enum `WorkoutSource` nem no modelo `Workout` do Data Model Specification v1.2.1
+> — documento de maior hierarquia. Corrigido abaixo para usar exatamente o
+> contrato aprovado.
 
-*Regra:* Alterar um `Workout` não deve apagar o vínculo com a periodização. O sistema deve registrar que o treino foi modificado após a geração (`trainerModified = true`).
+O contrato canônico de origem é:
+
+```prisma
+enum WorkoutSource {
+  MANUAL
+  PERIODIZATION_GENERATED
+  TEMPLATE
+  MARKETPLACE
+  IMPORTED
+}
+
+enum GenerationMode {
+  AUTOMATIC
+  ASSISTED
+}
+```
+
+- **Prescrição manual vinculada a uma periodização** (fluxo "Não gerar sessões" do §15, modo 1): `source = MANUAL`. O treino ainda carrega `periodizationId`/`periodizationPhaseId`/`trainingWeekId` para contexto, mas não foi produzido pelo motor de geração.
+- **Qualquer treino produzido pela `PeriodizationGenerationEngine`** (modos 2–4 do §15): `source = PERIODIZATION_GENERATED`. A distinção entre sugestão assistida e rascunho automático completo fica em `generationMode` (`AUTOMATIC` | `ASSISTED`), nunca em um novo valor de `source`.
+- Não criar valores de origem redundantes com `generationMode` — a pergunta "veio da periodização?" é `source`; a pergunta "com quanto automatismo?" é `generationMode`.
+
+Todo `Workout` derivado da periodização deve conter, com os nomes de campo exatamente como no Data Model Specification v1.2.1 §5:
+- `periodizationId`, `periodizationPhaseId`, `trainingWeekId`, `athleteId`, `trainerId`;
+- `plannedDate`, `modality`;
+- `source` (ver acima) e, quando `PERIODIZATION_GENERATED`, `generationMode`;
+- `generationBatchId`, `generationVersion`, `algorithmVersion`, `generationRationale` (não existe campo separado `isGenerated`/`generationReason` — a origem já é dada por `source`, e a justificativa textual por `generationRationale`).
+
+*Regra:* Alterar um `Workout` não deve apagar o vínculo com a periodização. O sistema deve registrar que o treino foi modificado após a geração (`trainerModified = true`, `trainerModifiedAt`, `trainerModifiedBy`, `modifiedFields`).
 
 ---
 

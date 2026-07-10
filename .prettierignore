@@ -1,0 +1,16 @@
+.next
+node_modules
+coverage
+playwright-report
+test-results
+package-lock.json
+
+# Canonical spec documents and brand assets are not source code —
+# never reformatted by tooling.
+docs
+brand
+architecture
+
+# Third-party Claude Code skills installed via claude-code-templates —
+# not project source, never reformatted.
+.claude

@@ -34,3 +34,25 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# os
+Thumbs.db
+
+# logs
+*.log
+logs/
+
+# prisma
+prisma/*.db
+prisma/*.db-journal

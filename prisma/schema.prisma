@@ -1,0 +1,98 @@
+// ENKY OS — Prisma schema
+//
+// Fase 01 (fundação técnica): schema mínimo apenas para validar a
+// integração com PostgreSQL. Contém somente as entidades de identidade
+// e tenant necessárias para provar o pipeline (User, Organization,
+// OrganizationMembership) — não é uma cópia do Data Model Specification
+// v1.2.1. A modelagem completa (28 modelos, 22 enums) é implementada em
+// uma fase dedicada, após a reconciliação documental descrita no
+// relatório de Fase 1 (achados F1–F9).
+//
+// Fonte: docs/enky_data_model_specification.md §2.
+//
+// `Session` foi adicionada na Fase 01.5 como infraestrutura de
+// autenticação (não é uma entidade de produto do Product Spec/Data
+// Model) — ver docs/adr/ADR-002-authentication.md.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  TRAINER
+  ATHLETE
+}
+
+enum OrganizationRole {
+  OWNER
+  COACH
+  ADMIN
+  SUPPORT
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String?
+  name         String
+  globalRole   Role     @default(ATHLETE)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+  lockVersion  Int      @default(1)
+
+  memberships OrganizationMembership[]
+  sessions    Session[]
+
+  @@index([email])
+}
+
+model Session {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  createdAt DateTime  @default(now()) @db.Timestamptz
+  expiresAt DateTime  @db.Timestamptz
+  revokedAt DateTime? @db.Timestamptz
+  userAgent String?
+  ipAddress String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  timezone    String   @default("America/Sao_Paulo")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  lockVersion Int      @default(1)
+
+  memberships OrganizationMembership[]
+}
+
+model OrganizationMembership {
+  id             String           @id @default(uuid())
+  userId         String
+  organizationId String
+  role           OrganizationRole @default(COACH)
+  createdAt      DateTime         @default(now()) @db.Timestamptz
+  updatedAt      DateTime         @updatedAt @db.Timestamptz
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+}
