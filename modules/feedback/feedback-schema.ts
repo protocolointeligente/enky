@@ -17,14 +17,45 @@ const feedbackFieldsSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
 });
 
-export const submitWorkoutFeedbackInputSchema = feedbackFieldsSchema;
+// Um treino marcado como MISSED (não realizado) é logicamente incompatível
+// com reportar quanto tempo/esforço a sessão teve. No formulário interativo
+// isso é um erro de entrada que deve ser recusado imediatamente (400), não
+// persistido — por isso o refine aqui, aplicado a cada schema concreto após
+// o `.extend()` (um `.refine()` retorna ZodEffects, que não tem `.extend()`,
+// mesmo motivo do prescription-schema). O estado `INVALID` de
+// calculateSessionRpeLoad continua existindo como defesa em profundidade
+// para vias NÃO interativas (importação, integração, dados legados) que não
+// passam por este schema.
+const missedConsistencyRefinement = {
+  message:
+    "Um treino marcado como não realizado (MISSED) não pode reportar duração ou RPE de sessão.",
+  path: ["completionStatus"],
+};
+
+function isMissedConsistent(data: {
+  completionStatus: "COMPLETED" | "PARTIAL" | "MISSED";
+  actualDurationMinutes?: number;
+  sessionRpe?: number;
+}): boolean {
+  return (
+    data.completionStatus !== "MISSED" ||
+    (data.actualDurationMinutes == null && data.sessionRpe == null)
+  );
+}
+
+export const submitWorkoutFeedbackInputSchema = feedbackFieldsSchema.refine(
+  isMissedConsistent,
+  missedConsistencyRefinement,
+);
 export type SubmitWorkoutFeedbackInput = z.infer<typeof submitWorkoutFeedbackInputSchema>;
 
 // Controlled update, allowed once (§11): the caller must echo back the
 // feedback's current `updatedAt` — the closest equivalent to optimistic
 // locking without adding a lockVersion column that doesn't exist yet on
 // WorkoutFeedback (no schema change needed for this phase).
-export const updateWorkoutFeedbackInputSchema = feedbackFieldsSchema.extend({
-  knownUpdatedAt: z.string().datetime("knownUpdatedAt é obrigatório para atualizar o feedback."),
-});
+export const updateWorkoutFeedbackInputSchema = feedbackFieldsSchema
+  .extend({
+    knownUpdatedAt: z.string().datetime("knownUpdatedAt é obrigatório para atualizar o feedback."),
+  })
+  .refine(isMissedConsistent, missedConsistencyRefinement);
 export type UpdateWorkoutFeedbackInput = z.infer<typeof updateWorkoutFeedbackInputSchema>;

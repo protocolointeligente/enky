@@ -24,7 +24,11 @@ export function calculateSessionRpeLoad(input: SessionRpeInput): SessionRpeResul
 
   // MISSED is logically incompatible with reporting how the session went —
   // if either value is present anyway, the payload is inconsistent, not
-  // just incomplete.
+  // just incomplete. Interactive form submissions never reach this branch:
+  // feedback-schema.ts rejects MISSED+duration/RPE with a 400 before the
+  // service runs. INVALID survives here only as defense-in-depth for
+  // NON-interactive callers (import, integration, legacy) that bypass that
+  // schema — see the refine note in feedback-schema.ts.
   if (input.completionStatus === "MISSED") {
     if (hasDuration || hasRpe) {
       return { loadStatus: "INVALID", sessionRpeLoad: null };

@@ -9,12 +9,18 @@ const userFindUnique = vi.fn();
 const membershipFindFirst = vi.fn();
 const membershipFindUnique = vi.fn();
 const relationshipFindUnique = vi.fn();
+const relationshipFindMany = vi.fn();
+const athleteProfileFindUnique = vi.fn();
 
 vi.mock("@/infrastructure/database/prisma", () => ({
   prisma: {
     user: { findUnique: userFindUnique },
     organizationMembership: { findFirst: membershipFindFirst, findUnique: membershipFindUnique },
-    coachAthleteRelationship: { findUnique: relationshipFindUnique },
+    coachAthleteRelationship: {
+      findUnique: relationshipFindUnique,
+      findMany: relationshipFindMany,
+    },
+    athleteProfile: { findUnique: athleteProfileFindUnique },
   },
 }));
 
@@ -31,6 +37,7 @@ const {
   requireOrganizationMembership,
   requireTrainerAccessToAthlete,
   resolveActiveOrganization,
+  resolveAthleteOrganization,
 } = await import("@/server/auth/guards");
 
 beforeEach(() => {
@@ -39,6 +46,8 @@ beforeEach(() => {
   membershipFindFirst.mockReset();
   membershipFindUnique.mockReset();
   relationshipFindUnique.mockReset();
+  relationshipFindMany.mockReset();
+  athleteProfileFindUnique.mockReset();
   sessionVerify.mockReset();
 });
 
@@ -111,6 +120,39 @@ describe("server/auth/guards", () => {
       organizationId: "org1",
       organizationRole: "OWNER",
     });
+  });
+
+  it("resolveAthleteOrganization throws when the user has no athlete profile", async () => {
+    athleteProfileFindUnique.mockResolvedValue(null);
+    await expect(resolveAthleteOrganization("u1")).rejects.toThrow();
+  });
+
+  it("resolveAthleteOrganization throws when there is no active relationship", async () => {
+    athleteProfileFindUnique.mockResolvedValue({ id: "ath1" });
+    relationshipFindMany.mockResolvedValue([]);
+    await expect(resolveAthleteOrganization("u1")).rejects.toThrow();
+  });
+
+  it("resolveAthleteOrganization returns the single active organization", async () => {
+    athleteProfileFindUnique.mockResolvedValue({ id: "ath1" });
+    relationshipFindMany.mockResolvedValue([{ organizationId: "org1" }]);
+    expect(await resolveAthleteOrganization("u1")).toEqual({
+      organizationId: "org1",
+      athleteProfileId: "ath1",
+    });
+  });
+
+  // MVP invariant: an athlete has at most one active organization. If the DB
+  // ever holds more than one, resolving a tenant would be non-deterministic
+  // and could leak the wrong organization's workouts — so it fails loudly
+  // instead of silently picking one.
+  it("resolveAthleteOrganization throws when the athlete has multiple active organizations", async () => {
+    athleteProfileFindUnique.mockResolvedValue({ id: "ath1" });
+    relationshipFindMany.mockResolvedValue([
+      { organizationId: "org1" },
+      { organizationId: "org2" },
+    ]);
+    await expect(resolveAthleteOrganization("u1")).rejects.toThrow();
   });
 
   it("requireOrganizationMembership throws when the user isn't a member", async () => {

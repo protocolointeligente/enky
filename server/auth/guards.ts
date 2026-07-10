@@ -76,22 +76,47 @@ export async function resolveActiveOrganization(userId: string): Promise<ActiveO
 
 // Athletes never get an OrganizationMembership row — only the trainer who
 // owns a personal organization does (ADR-001). An athlete's tenant is
-// instead reached through their CoachAthleteRelationship, so this is the
-// athlete-side equivalent of resolveActiveOrganization(): same MVP
-// single-relationship assumption, same single extension point for when
-// Fase 6 allows an athlete to train with more than one organization.
-export async function resolveAthleteOrganization(userId: string): Promise<AthleteOrganizationScope> {
+// instead reached through their CoachAthleteRelationship.
+//
+// MVP política (Fase 02D): um atleta tem NO MÁXIMO uma organização ativa.
+// Isso não é uma suposição frouxa — o fluxo de ativação de convite já a
+// garante: ativar um segundo convite para o mesmo e-mail falha com
+// ConflictError ("e-mail já cadastrado") em activate-invitation.ts, então
+// nenhum User de atleta chega a acumular dois vínculos ativos pela via
+// suportada. Por isso NUNCA resolvemos "a primeira" organização de forma
+// arbitrária (o antigo findFirst+orderBy escondia um bug latente): se
+// houver mais de um vínculo ativo, isso é uma violação de invariante e
+// falhamos ruidosamente, em vez de escolher um tenant não-determinístico
+// que poderia vazar treinos da organização errada.
+//
+// Suporte real a múltiplas organizações por atleta — derivar o tenant do
+// próprio recurso acessado (Workout.organizationId) para detalhes e
+// agregar/segregar listagens por organização — é trabalho de Fase 6. Este
+// é o único ponto de extensão; nenhuma rota de atleta resolve tenant de
+// outra forma.
+export async function resolveAthleteOrganization(
+  userId: string,
+): Promise<AthleteOrganizationScope> {
   const athleteProfile = await prisma.athleteProfile.findUnique({ where: { userId } });
   if (!athleteProfile) {
     throw new AuthorizationError("Usuário não possui perfil de atleta.");
   }
 
-  const relationship = await prisma.coachAthleteRelationship.findFirst({
+  const activeRelationships = await prisma.coachAthleteRelationship.findMany({
     where: { athleteId: athleteProfile.id, isActive: true },
-    orderBy: { startedAt: "asc" },
+    select: { organizationId: true },
   });
+
+  const [relationship, ...extraRelationships] = activeRelationships;
   if (!relationship) {
-    throw new AuthorizationError("Atleta não pertence a nenhuma organização.");
+    throw new AuthorizationError("Atleta não pertence a nenhuma organização ativa.");
+  }
+  if (extraRelationships.length > 0) {
+    // Invariante do MVP violada — melhor recusar do que servir dados de
+    // uma organização escolhida de forma não-determinística.
+    throw new AuthorizationError(
+      "Atleta possui vínculos ativos em múltiplas organizações — não suportado no MVP.",
+    );
   }
 
   return { organizationId: relationship.organizationId, athleteProfileId: athleteProfile.id };
