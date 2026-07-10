@@ -1,27 +1,37 @@
 // ENKY OS — Prisma schema
 //
-// Fase 01 (fundação técnica): schema mínimo apenas para validar a
-// integração com PostgreSQL. Contém somente as entidades de identidade
-// e tenant necessárias para provar o pipeline (User, Organization,
-// OrganizationMembership) — não é uma cópia do Data Model Specification
-// v1.2.1. A modelagem completa (28 modelos, 22 enums) é implementada em
-// uma fase dedicada, após a reconciliação documental descrita no
-// relatório de Fase 1 (achados F1–F9).
+// Fase 02A: schema expandido do modelo mínimo da Fase 01 para o modelo
+// completo necessário à fundação e ao fluxo central do MVP, seguindo o
+// Data Model Specification v1.2.1 (documento de maior hierarquia para
+// banco/enums/relações/índices/constraints) e as reconciliações da
+// Fase 01.5 (achados F1–F9, ADR-001, ADR-002).
 //
-// Fonte: docs/enky_data_model_specification.md §2.
+// Duas extensões deliberadas sobre o Data Model v1.2.1 original, ambas
+// documentadas no relatório de Fase 02A:
+//   - `Session`: infraestrutura de autenticação (ADR-002-authentication.md),
+//     não uma entidade de produto do Data Model.
+//   - `WorkoutTemplate` + `Workout.workoutTemplateId`: reconciliação do
+//     achado F2 (enky_os_specification.md §12) — sem isso o valor de enum
+//     já aprovado `WorkoutSource.TEMPLATE` não seria rastreável.
 //
-// `Session` foi adicionada na Fase 01.5 como infraestrutura de
-// autenticação (não é uma entidade de produto do Product Spec/Data
-// Model) — ver docs/adr/ADR-002-authentication.md.
+// Fora do escopo desta fase (ver relatório de Fase 02A): `Notification`
+// (adiada — nenhum fluxo desta fase escreve nela ainda), `AthleteGroup`,
+// mensageria completa, anexos genéricos, `AIRecommendation` independente
+// (todos classificados como pós-MVP ou substituídos em enky_os_specification.md §12).
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
+
+// ---------------------------------------------------------------------------
+// 1. ENUMS
+// ---------------------------------------------------------------------------
 
 enum Role {
   SUPERADMIN
@@ -37,6 +47,165 @@ enum OrganizationRole {
   SUPPORT
 }
 
+enum WorkoutStatus {
+  DRAFT
+  PUBLISHED
+  IN_PROGRESS // Reservado para pós-MVP
+  COMPLETED
+  PARTIAL
+  MISSED
+  ARCHIVED
+  CANCELLED
+}
+
+enum WorkoutCompletionSource {
+  ATHLETE_REPORTED
+  SYSTEM_EXPIRED
+  TRAINER_MARKED
+}
+
+enum SessionRpeLoadStatus {
+  COMPLETE
+  PARTIAL
+  NOT_AVAILABLE
+  INVALID
+}
+
+enum MarketplaceStatus {
+  DRAFT
+  PENDING_REVIEW
+  PUBLISHED
+  REJECTED
+  ARCHIVED
+}
+
+enum MarketplacePurchaseStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+  DISPUTED
+  EXPIRED
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  UNPAID
+  PAUSED
+  CANCELLED
+  EXPIRED
+}
+
+enum GenerationMode {
+  AUTOMATIC
+  ASSISTED
+}
+
+enum GenerationBatchStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum GenerationScope {
+  FULL_CYCLE
+  MESOCYCLE
+  MICROCYCLE
+  SINGLE_WEEK
+}
+
+enum CalendarEventType {
+  PROVA
+  VIAGEM
+  EXAME
+  INDISPONIBILIDADE
+}
+
+enum WorkoutStepType {
+  TIRO
+  RODAGEM
+  PAUSA_ATIVA
+  PAUSA_PASSIVA
+  PROGRESSIVO
+  SUBIDA
+}
+
+enum IntensityTargetType {
+  PACE
+  HEART_RATE_ZONE
+  POWER
+  CADENCE
+  RPE
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  CRON
+  SUPPORT_AGENT
+}
+
+enum BillingCycle {
+  MENSAL
+  ANUAL
+}
+
+enum Modality {
+  RUNNING
+  STRENGTH
+  FUNCTIONAL
+  CYCLING
+  SWIMMING
+  TRIATHLON
+}
+
+enum ReportStatus {
+  DRAFT
+  PUBLISHED
+  REVOKED
+  ARCHIVED
+}
+
+enum WorkoutSource {
+  MANUAL
+  PERIODIZATION_GENERATED
+  TEMPLATE
+  MARKETPLACE
+  IMPORTED
+}
+
+enum ConfidenceLevel {
+  LOW
+  MODERATE
+  HIGH
+  NOT_ASSESSED
+}
+
+enum DerivedMetricStatus {
+  PENDING
+  CONSOLIDATED
+  STALE
+  INSUFFICIENT_DATA
+  INVALID
+}
+
+// ---------------------------------------------------------------------------
+// 2. IDENTIDADE, TENANT E AUTENTICAÇÃO
+// ---------------------------------------------------------------------------
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -48,12 +217,18 @@ model User {
   updatedAt    DateTime @updatedAt @db.Timestamptz
   lockVersion  Int      @default(1)
 
-  memberships OrganizationMembership[]
-  sessions    Session[]
+  trainerProfile             TrainerProfile?
+  athleteProfile             AthleteProfile?
+  memberships                OrganizationMembership[]
+  sessions                   Session[]
+  requestedGenerationBatches GenerationBatch[]        @relation("GenerationRequestedBy")
+  auditLogs                  AuditLog[]
 
   @@index([email])
 }
 
+// Infraestrutura de autenticação (ADR-002) — token opaco no cookie,
+// apenas o hash HMAC-SHA256(AUTH_SECRET, token) é persistido aqui.
 model Session {
   id        String    @id @default(uuid())
   userId    String
@@ -67,6 +242,7 @@ model Session {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([expiresAt])
 }
 
 model Organization {
@@ -79,7 +255,22 @@ model Organization {
   updatedAt   DateTime @updatedAt @db.Timestamptz
   lockVersion Int      @default(1)
 
-  memberships OrganizationMembership[]
+  memberships          OrganizationMembership[]
+  subscriptions        Subscription[]
+  invitations          AthleteInvitation[]
+  relationships        CoachAthleteRelationship[]
+  periodizations       Periodization[]
+  workouts             Workout[]
+  workoutTemplates     WorkoutTemplate[]
+  calendarEvents       CalendarEvent[]
+  generationBatches    GenerationBatch[]
+  marketplacePlans     MarketplacePlan[]
+  marketplacePurchases MarketplacePurchase[]
+  reports              Report[]
+  exercises            Exercise[]
+  testResults          TestResult[]
+  derivedMetrics       DerivedMetric[]
+  auditLogs            AuditLog[]
 }
 
 model OrganizationMembership {
@@ -95,4 +286,636 @@ model OrganizationMembership {
 
   @@unique([userId, organizationId])
   @@index([organizationId])
+}
+
+model TrainerProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  crefCode    String?
+  companyName String?
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  lockVersion Int      @default(1)
+
+  user              User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  relationships     CoachAthleteRelationship[]
+  workouts          Workout[]
+  workoutTemplates  WorkoutTemplate[]
+  periodizations    Periodization[]
+  calendarEvents    CalendarEvent[]
+  generationBatches GenerationBatch[]
+  marketplacePlans  MarketplacePlan[]
+  invitations       AthleteInvitation[]
+  testResults       TestResult[]
+  reports           Report[]
+}
+
+model AthleteProfile {
+  id          String    @id @default(uuid())
+  userId      String?   @unique
+  birthDate   DateTime? @db.Date
+  gender      String?
+  weightKg    Decimal?  @db.Decimal(5, 2)
+  heightCm    Decimal?  @db.Decimal(5, 2)
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @db.Timestamptz
+  lockVersion Int       @default(1)
+
+  user              User?                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  relationships     CoachAthleteRelationship[]
+  periodizations    Periodization[]
+  workouts          Workout[]
+  calendarEvents    CalendarEvent[]
+  generationBatches GenerationBatch[]
+  testResults       TestResult[]
+  derivedMetrics    DerivedMetric[]
+  reports           Report[]
+  purchases         MarketplacePurchase[]
+  invitations       AthleteInvitation[]
+}
+
+model CoachAthleteRelationship {
+  id                String    @id @default(uuid())
+  organizationId    String
+  trainerId         String
+  athleteId         String
+  isActive          Boolean   @default(true)
+  startedAt         DateTime  @default(now()) @db.Timestamptz
+  endedAt           DateTime? @db.Timestamptz
+  terminationReason String?
+  createdAt         DateTime  @default(now()) @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @db.Timestamptz
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, trainerId, athleteId])
+  @@index([organizationId, athleteId])
+}
+
+model AthleteInvitation {
+  id             String    @id @default(uuid())
+  organizationId String
+  trainerId      String
+  athleteId      String
+  email          String
+  tokenHash      String    @unique
+  expiresAt      DateTime  @db.Timestamptz
+  isConsumed     Boolean   @default(false)
+  consumedAt     DateTime? @db.Timestamptz
+  isRevoked      Boolean   @default(false)
+  revokedAt      DateTime? @db.Timestamptz
+  resentCount    Int       @default(0)
+  lastSentAt     DateTime? @db.Timestamptz
+  createdAt      DateTime  @default(now()) @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @db.Timestamptz
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@index([tokenHash])
+}
+
+// ---------------------------------------------------------------------------
+// 3. CORE ESTRATÉGICO: PERIODIZAÇÃO E MICROCICLOS
+// ---------------------------------------------------------------------------
+
+model Periodization {
+  id             String   @id @default(uuid())
+  organizationId String
+  athleteId      String
+  trainerId      String
+  title          String
+  goal           String
+  startDate      DateTime @db.Date
+  endDate        DateTime @db.Date
+  createdAt      DateTime @default(now()) @db.Timestamptz
+  updatedAt      DateTime @updatedAt @db.Timestamptz
+  lockVersion    Int      @default(1)
+
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete           AthleteProfile       @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  trainer           TrainerProfile       @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  phases            PeriodizationPhase[]
+  weeks             TrainingWeek[]
+  workouts          Workout[]
+  generationBatches GenerationBatch[]
+
+  @@index([organizationId, athleteId])
+  @@index([trainerId])
+}
+
+model PeriodizationPhase {
+  id              String   @id @default(uuid())
+  periodizationId String
+  name            String
+  startDate       DateTime @db.Date
+  endDate         DateTime @db.Date
+  targetVolumeKm  Decimal? @db.Decimal(10, 2)
+  targetIntensity String?
+  sequence        Int
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+  lockVersion     Int      @default(1)
+
+  periodization Periodization  @relation(fields: [periodizationId], references: [id], onDelete: Cascade)
+  weeks         TrainingWeek[]
+  workouts      Workout[]
+
+  @@unique([periodizationId, sequence])
+  @@index([periodizationId, startDate])
+}
+
+model TrainingWeek {
+  id              String   @id @default(uuid())
+  periodizationId String
+  phaseId         String?
+  sequence        Int
+  startDate       DateTime @db.Date
+  endDate         DateTime @db.Date
+  focus           String?
+  targetVolume    Decimal? @db.Decimal(10, 2)
+  targetIntensity String?
+  isRecoveryWeek  Boolean  @default(false)
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+  lockVersion     Int      @default(1)
+
+  periodization Periodization       @relation(fields: [periodizationId], references: [id], onDelete: Cascade)
+  phase         PeriodizationPhase? @relation(fields: [phaseId], references: [id], onDelete: SetNull)
+  workouts      Workout[]
+
+  @@unique([periodizationId, sequence])
+  @@index([periodizationId, startDate])
+}
+
+// ---------------------------------------------------------------------------
+// 4. PIPELINE DE AUTOMAÇÃO EM LOTE
+// ---------------------------------------------------------------------------
+
+model GenerationBatch {
+  id                         String                @id @default(uuid())
+  organizationId             String
+  periodizationId            String
+  athleteId                  String
+  trainerId                  String
+  requestedByUserId          String
+  generationMode             GenerationMode
+  generationVersion          Int
+  algorithmVersion           String
+  generationRationaleVersion String?
+  contextSnapshot            Json
+  scope                      GenerationScope
+  status                     GenerationBatchStatus @default(PENDING)
+  startedAt                  DateTime?             @db.Timestamptz
+  completedAt                DateTime?             @db.Timestamptz
+  failedAt                   DateTime?             @db.Timestamptz
+  failureCode                String?
+  createdAt                  DateTime              @default(now()) @db.Timestamptz
+  updatedAt                  DateTime              @updatedAt @db.Timestamptz
+
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  periodization   Periodization  @relation(fields: [periodizationId], references: [id], onDelete: Cascade)
+  athlete         AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  trainer         TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  requestedByUser User           @relation("GenerationRequestedBy", fields: [requestedByUserId], references: [id], onDelete: Restrict)
+  workouts        Workout[]
+
+  @@index([organizationId])
+  @@index([periodizationId])
+  @@index([athleteId, createdAt])
+  @@index([trainerId, createdAt])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// 5. CORE OPERACIONAL: CALENDÁRIO, PRESCRIÇÃO E SESSÕES MULTIESPORTE
+// ---------------------------------------------------------------------------
+// Diretriz temporal: `plannedDate` é a data civil no fuso do atleta;
+// `plannedStartAt`/`plannedEndAt` são instantes UTC; `plannedDate` nunca é
+// convertido usando o fuso físico do servidor.
+
+model Workout {
+  id                         String           @id @default(uuid())
+  organizationId             String
+  athleteId                  String
+  trainerId                  String
+  periodizationId            String?
+  periodizationPhaseId       String?
+  trainingWeekId             String?
+  generationBatchId          String?
+  marketplacePurchaseId      String?
+  workoutTemplateId          String?
+  title                      String
+  description                String?
+  modality                   Modality
+  status                     WorkoutStatus    @default(DRAFT)
+  source                     WorkoutSource    @default(MANUAL)
+  plannedDate                DateTime         @db.Date
+  plannedStartAt             DateTime?        @db.Timestamptz
+  plannedEndAt               DateTime?        @db.Timestamptz
+  timezone                   String           @default("America/Sao_Paulo")
+  generationMode             GenerationMode?
+  generationVersion          Int?
+  algorithmVersion           String?
+  generationRationaleVersion String?
+  confidenceLevel            ConfidenceLevel? @default(NOT_ASSESSED)
+  generationRationale        Json?
+  trainerModified            Boolean          @default(false)
+  trainerModifiedAt          DateTime?        @db.Timestamptz
+  trainerModifiedBy          String?
+  modifiedFields             String[]         @default([])
+  createdAt                  DateTime         @default(now()) @db.Timestamptz
+  updatedAt                  DateTime         @updatedAt @db.Timestamptz
+  lockVersion                Int              @default(1)
+
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete             AthleteProfile       @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  trainer             TrainerProfile       @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  periodization       Periodization?       @relation(fields: [periodizationId], references: [id], onDelete: Restrict)
+  phase               PeriodizationPhase?  @relation(fields: [periodizationPhaseId], references: [id], onDelete: Restrict)
+  trainingWeek        TrainingWeek?        @relation(fields: [trainingWeekId], references: [id], onDelete: SetNull)
+  generationBatch     GenerationBatch?     @relation(fields: [generationBatchId], references: [id], onDelete: SetNull)
+  marketplacePurchase MarketplacePurchase? @relation(fields: [marketplacePurchaseId], references: [id], onDelete: SetNull)
+  workoutTemplate     WorkoutTemplate?     @relation(fields: [workoutTemplateId], references: [id], onDelete: SetNull)
+  blocks              WorkoutBlock[]
+  feedback            WorkoutFeedback?
+
+  @@index([organizationId, athleteId, plannedDate])
+  @@index([trainerId])
+  @@index([generationBatchId])
+}
+
+// Extensão da Fase 02A (reconciliação F2) — permite que
+// `WorkoutSource.TEMPLATE`, já aprovado no enum, seja rastreável.
+// Usa snapshot estruturado (`contentSnapshot`), não duplica a árvore
+// completa de `Workout`/`WorkoutBlock`/`WorkoutExercise`.
+model WorkoutTemplate {
+  id              String   @id @default(uuid())
+  organizationId  String
+  trainerId       String
+  title           String
+  description     String?
+  modality        Modality
+  contentSnapshot Json
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+  lockVersion     Int      @default(1)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  workouts     Workout[]
+
+  @@index([organizationId, trainerId])
+}
+
+model WorkoutBlock {
+  id          String   @id @default(uuid())
+  workoutId   String
+  sequence    Int      @default(1)
+  name        String?
+  repetitions Int      @default(1)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  workout   Workout           @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercises WorkoutExercise[]
+  steps     WorkoutStep[]
+
+  @@unique([workoutId, sequence])
+}
+
+model WorkoutExercise {
+  id              String   @id @default(uuid())
+  workoutBlockId  String
+  exerciseId      String
+  sequence        Int      @default(1)
+  sets            Int
+  reps            Int?
+  durationSeconds Int?
+  loadKg          Decimal? @db.Decimal(6, 2)
+  rir             Int?
+  rpeTarget       Float?
+  restSeconds     Int?
+  notes           String?
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+
+  block    WorkoutBlock @relation(fields: [workoutBlockId], references: [id], onDelete: Cascade)
+  exercise Exercise     @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+
+  @@unique([workoutBlockId, sequence])
+}
+
+model WorkoutStep {
+  id              String               @id @default(uuid())
+  workoutBlockId  String
+  sequence        Int
+  stepType        WorkoutStepType
+  repetitions     Int?
+  durationSeconds Int?
+  distanceMeters  Int?
+  targetType      IntensityTargetType?
+  targetMin       Decimal?             @db.Decimal(10, 2)
+  targetMax       Decimal?             @db.Decimal(10, 2)
+  recoverySeconds Int?
+  recoveryMeters  Int?
+  metadata        Json?
+  createdAt       DateTime             @default(now()) @db.Timestamptz
+  updatedAt       DateTime             @updatedAt @db.Timestamptz
+
+  block WorkoutBlock @relation(fields: [workoutBlockId], references: [id], onDelete: Cascade)
+
+  @@unique([workoutBlockId, sequence])
+}
+
+model Exercise {
+  id             String    @id @default(uuid())
+  organizationId String?
+  name           String
+  category       String
+  targetMuscles  String[]
+  videoUrl       String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @db.Timestamptz
+  archivedAt     DateTime? @db.Timestamptz
+
+  organization     Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workoutExercises WorkoutExercise[]
+
+  @@unique([name, organizationId])
+}
+
+model CalendarEvent {
+  id             String            @id @default(uuid())
+  organizationId String
+  athleteId      String
+  trainerId      String?
+  eventType      CalendarEventType
+  title          String
+  description    String?
+  startAt        DateTime          @db.Timestamptz
+  endAt          DateTime          @db.Timestamptz
+  timezone       String            @default("America/Sao_Paulo")
+  createdAt      DateTime          @default(now()) @db.Timestamptz
+  updatedAt      DateTime          @updatedAt @db.Timestamptz
+  lockVersion    Int               @default(1)
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile  @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  trainer      TrainerProfile? @relation(fields: [trainerId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, athleteId, startAt])
+}
+
+// ---------------------------------------------------------------------------
+// 6. SINTOMAS E EQUAÇÃO DE CARGA SUBJETIVA REALIZADA
+// ---------------------------------------------------------------------------
+// O frontend nunca calcula nem envia sessionRpeLoad — o backend calcula na
+// mesma transação e ignora qualquer valor enviado pelo cliente.
+// Fórmula: sessionRpeLoad = actualDurationMinutes × sessionRpe
+
+model WorkoutFeedback {
+  id                    String                   @id @default(uuid())
+  workoutId             String                   @unique
+  actualDurationMinutes Int?
+  actualDistanceKm      Decimal?                 @db.Decimal(10, 3)
+  sessionRpe            Float?
+  sessionRpeLoad        Decimal?                 @db.Decimal(10, 2)
+  loadStatus            SessionRpeLoadStatus     @default(NOT_AVAILABLE)
+  completionSource      WorkoutCompletionSource?
+  fatigueLevel          Int?
+  recoveryLevel         Int?
+  painLevel             Int?                     @default(0)
+  painLaterality        String?
+  painRegion            String?
+  notes                 String?
+  createdAt             DateTime                 @default(now()) @db.Timestamptz
+  updatedAt             DateTime                 @updatedAt @db.Timestamptz
+
+  workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+}
+
+// ---------------------------------------------------------------------------
+// 7. INTELIGÊNCIA ESPORTIVA, TESTES E RELATÓRIOS
+// ---------------------------------------------------------------------------
+
+model TestResult {
+  id                String   @id @default(uuid())
+  organizationId    String
+  athleteId         String
+  trainerId         String
+  testType          String
+  resultValue       Decimal  @db.Decimal(12, 4)
+  unit              String
+  protocol          String?
+  calculatedMetrics Json?
+  performedAt       DateTime @db.Timestamptz
+  createdAt         DateTime @default(now()) @db.Timestamptz
+  updatedAt         DateTime @updatedAt @db.Timestamptz
+  lockVersion       Int      @default(1)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, athleteId, performedAt])
+}
+
+model DerivedMetric {
+  id             String              @id @default(uuid())
+  organizationId String
+  athleteId      String
+  metricKey      String
+  metricValue    Decimal             @db.Decimal(12, 4)
+  periodStart    DateTime            @db.Date
+  periodEnd      DateTime            @db.Date
+  formulaVersion String              @default("1.0.0")
+  status         DerivedMetricStatus @default(PENDING)
+  createdAt      DateTime            @default(now()) @db.Timestamptz
+  updatedAt      DateTime            @updatedAt @db.Timestamptz
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, athleteId, metricKey, periodStart, periodEnd], map: "uq_derived_metric_period")
+}
+
+model Report {
+  id              String       @id @default(uuid())
+  organizationId  String
+  athleteId       String
+  trainerId       String
+  status          ReportStatus @default(DRAFT)
+  periodStart     DateTime     @db.Date
+  periodEnd       DateTime     @db.Date
+  metricsSnapshot Json
+  insights        String?
+  recommendations String?
+  limitations     String?
+  content         String?
+  sharedAt        DateTime?    @db.Timestamptz
+  createdAt       DateTime     @default(now()) @db.Timestamptz
+  updatedAt       DateTime     @updatedAt @db.Timestamptz
+  lockVersion     Int          @default(1)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, athleteId])
+}
+
+// ---------------------------------------------------------------------------
+// 8. INFRAESTRUTURA FINANCEIRA, ASSINATURAS E MARKETPLACE IMUTÁVEL
+// ---------------------------------------------------------------------------
+// O checkout usa exclusivamente MarketplacePlanVersion.priceSnapshot da
+// versão publicada. MarketplacePlan.price é o valor em edição da próxima versão.
+
+model MarketplacePlan {
+  id                 String            @id @default(uuid())
+  organizationId     String
+  trainerId          String
+  title              String
+  description        String
+  price              Decimal           @db.Decimal(12, 2)
+  modality           Modality
+  targetLevel        String
+  durationWeeks      Int
+  status             MarketplaceStatus @default(DRAFT)
+  publishedVersionId String?           @unique
+  lockVersion        Int               @default(1)
+  commercialVersion  Int               @default(1)
+  createdAt          DateTime          @default(now()) @db.Timestamptz
+  updatedAt          DateTime          @updatedAt @db.Timestamptz
+
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  trainer          TrainerProfile           @relation(fields: [trainerId], references: [id], onDelete: Restrict)
+  versions         MarketplacePlanVersion[] @relation("PlanVersions")
+  publishedVersion MarketplacePlanVersion?  @relation("PublishedPlanVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+}
+
+model MarketplacePlanVersion {
+  id                  String   @id @default(uuid())
+  marketplacePlanId   String
+  titleSnapshot       String
+  descriptionSnapshot String
+  priceSnapshot       Decimal  @db.Decimal(12, 2)
+  commercialVersion   Int
+  contentSnapshot     Json
+  createdAt           DateTime @default(now()) @db.Timestamptz
+
+  plan             MarketplacePlan       @relation("PlanVersions", fields: [marketplacePlanId], references: [id], onDelete: Cascade)
+  publishedByPlans MarketplacePlan?      @relation("PublishedPlanVersion")
+  purchases        MarketplacePurchase[]
+
+  @@unique([marketplacePlanId, commercialVersion])
+}
+
+model MarketplacePurchase {
+  id                       String                    @id @default(uuid())
+  organizationId           String
+  marketplacePlanVersionId String
+  athleteId                String
+  status                   MarketplacePurchaseStatus @default(PENDING)
+  pricePaid                Decimal                   @db.Decimal(12, 2)
+  currency                 String                    @default("BRL") @db.VarChar(3)
+  titleSnapshot            String
+  activationStartDate      DateTime?                 @db.Date
+  activatedAt              DateTime?                 @db.Timestamptz
+  activationBatchId        String?
+  purchasedAt              DateTime                  @default(now()) @db.Timestamptz
+  lockVersion              Int                       @default(1)
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  version      MarketplacePlanVersion @relation(fields: [marketplacePlanVersionId], references: [id], onDelete: Restrict)
+  athlete      AthleteProfile         @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  transactions PaymentTransaction[]
+  workouts     Workout[]
+}
+
+model SubscriptionPlan {
+  id             String       @id @default(uuid())
+  name           String       @unique
+  price          Decimal      @db.Decimal(12, 2)
+  billingCycle   BillingCycle
+  featuresLimits Json
+  isActive       Boolean      @default(true)
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                    String             @id @default(uuid())
+  organizationId        String
+  subscriptionPlanId    String
+  status                SubscriptionStatus @default(INCOMPLETE)
+  gatewaySubscriptionId String?            @unique
+  currentPeriodStart    DateTime?          @db.Timestamptz
+  currentPeriodEnd      DateTime?          @db.Timestamptz
+  cancelAtPeriodEnd     Boolean            @default(false)
+  cancelledAt           DateTime?          @db.Timestamptz
+  createdAt             DateTime           @default(now()) @db.Timestamptz
+  updatedAt             DateTime           @updatedAt @db.Timestamptz
+  lockVersion           Int                @default(1)
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  plan         SubscriptionPlan     @relation(fields: [subscriptionPlanId], references: [id], onDelete: Restrict)
+  transactions PaymentTransaction[]
+}
+
+model PaymentTransaction {
+  id                 String        @id @default(uuid())
+  purchaseId         String?
+  subscriptionId     String?
+  gatewayRefId       String?       @unique
+  amount             Decimal       @db.Decimal(12, 2)
+  currency           String        @default("BRL") @db.VarChar(3)
+  status             PaymentStatus @default(PENDING)
+  idempotencyKey     String        @unique
+  lockVersion        Int           @default(1)
+  webhookEventId     String?       @unique
+  webhookEventType   String?
+  webhookPayloadHash String?
+  webhookReceivedAt  DateTime?     @db.Timestamptz
+  webhookProcessedAt DateTime?     @db.Timestamptz
+  createdAt          DateTime      @default(now()) @db.Timestamptz
+  updatedAt          DateTime      @updatedAt @db.Timestamptz
+
+  purchase     MarketplacePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  subscription Subscription?        @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+}
+
+// ---------------------------------------------------------------------------
+// 9. AUDITORIA MINIMIZADA
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id                 String         @id @default(uuid())
+  userId             String?
+  organizationId     String?
+  action             String
+  entityName         String
+  entityId           String?
+  actorType          AuditActorType @default(USER)
+  ipAddress          String?
+  requestId          String?
+  correlationId      String?
+  userAgent          String?
+  reason             String?
+  changedFields      String[]       @default([])
+  previousValuesHash String?
+  newValuesHash      String?
+  createdAt          DateTime       @default(now()) @db.Timestamptz
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([action])
+  @@index([correlationId])
+  @@index([organizationId, createdAt])
 }

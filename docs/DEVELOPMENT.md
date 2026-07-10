@@ -39,6 +39,26 @@ Todos precisam passar. Nenhum PR é aberto com lint, typecheck, teste ou build q
 - Nunca promover um usuário a admin via variável de ambiente ou lista de e-mails fixa (`ADMIN_EMAILS` e equivalentes são proibidos — ver ENKY 24 §22).
 - Antes de commitar, revisar o diff em busca de chaves, tokens ou credenciais coladas por engano — inclusive em arquivos de teste e fixtures.
 
+## Banco de dados local
+
+Duas opções, ambas apontando para um Postgres **de desenvolvimento, nunca produção**:
+
+1. **Docker Compose (padrão recomendado):**
+   ```bash
+   docker compose up -d
+   # DATABASE_URL="postgresql://enky:enky@localhost:5433/enky_dev?schema=public"
+   # DIRECT_URL pode repetir o mesmo valor — não há split pooled/direto local.
+   ```
+2. **Provedor gerenciado com split pooled/direto (Neon, Supabase, PgBouncer):** preencha `DATABASE_URL` (endpoint pooled) e `DIRECT_URL` (endpoint direto) em `.env` — `prisma/schema.prisma` já usa `directUrl` para migrations. Foi o caminho usado para validar a Fase 02A neste ambiente (sem Docker disponível).
+
+Depois de configurado:
+```bash
+npx prisma migrate dev   # aplica migrations pendentes
+npm run test:integration # testes de persistência contra o banco real
+```
+
+`npm run test` (unitário) nunca precisa de banco — usa `tests/setup.ts` com valores falsos. `npm run test:integration` sempre precisa de um `DATABASE_URL` real e válido.
+
 ## Regras para migrations
 
 Seguem a Política de Migrations em Produção do Data Model Specification v1.2.1 §12:
@@ -51,7 +71,7 @@ Seguem a Política de Migrations em Produção do Data Model Specification v1.2.
 
 **Pipeline obrigatório:** auditoria do schema existente → backup integral → migration aditiva → backfill controlado → validação de integridade → ativação gradual → plano de rollback documentado.
 
-Nesta fase de fundação nenhuma migration foi executada — o schema em `prisma/schema.prisma` é intencionalmente mínimo (ver `prisma/schema.prisma`, comentário de topo).
+O histórico de migrations vive em `prisma/migrations/` — nunca editar uma migration já aplicada em qualquer ambiente compartilhado; crie uma nova.
 
 ## Critérios mínimos de conclusão de uma tarefa
 
