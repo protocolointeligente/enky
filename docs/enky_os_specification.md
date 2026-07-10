@@ -297,7 +297,7 @@ Entidades essenciais do MVP (classificação reconciliada):
 - WorkoutBlock — **[MVP]**
 - Exercise — **[MVP]**
 - WorkoutExercise — **[MVP]**
-- WorkoutTemplate — **[MVP]** — incluir na expansão do schema; ainda não modelada no Data Model v1.2.1 (o enum `WorkoutSource.TEMPLATE` já prevê a origem, falta o modelo).
+- WorkoutTemplate — **[MVP — aprovado, Fase 02A]** — modelada em `prisma/schema.prisma`; a Interface Architecture v1.4 já prevê biblioteca de modelos e substituição por template. Clonagem é cópia imutável (`contentSnapshot`), nunca referência viva ao template original.
 - CalendarEvent — **[MVP]**
 - WorkoutFeedback — **[MVP]**
 - MetricRecord — **[SUBSTITUÍDO]** por `DerivedMetric` + `WorkoutFeedback` + `TestResult` (Data Model v1.2.1 §6–7) — não criar uma entidade de métrica bruta separada.
@@ -310,7 +310,7 @@ Entidades essenciais do MVP (classificação reconciliada):
 - SubscriptionPlan — **[MVP]**
 - Subscription — **[MVP]**
 - PaymentTransaction — **[MVP]**
-- Notification — **[MVP, se necessária]** — notificação mínima de eventos essenciais (convite de atleta, treino publicado, feedback pendente). Ainda não modelada no Data Model v1.2.1; incluir na expansão do schema apenas se o fluxo funcional da Fase 02 exigir persistência (um e-mail transacional sem persistência pode bastar no início).
+- Notification — **[PÓS-MVP — decisão fechada]** — `AthleteInvitation` controla o convite; um serviço de e-mail transacional entrega o link de ativação; falhas de envio são logadas. Notificação interna só entra quando existir uma central de notificações real no produto — não criar tabela por especulação de uso futuro.
 - Message/Comment — **[PÓS-MVP]** — mensageria completa está fora do MVP (§9, "Fora do MVP").
 - AuditLog — **[MVP]** — já modelado (Data Model v1.2.1 §9).
 - FileAttachment — **[PÓS-MVP]** — anexos genéricos adiados.

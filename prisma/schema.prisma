@@ -6,18 +6,28 @@
 // banco/enums/relações/índices/constraints) e as reconciliações da
 // Fase 01.5 (achados F1–F9, ADR-001, ADR-002).
 //
-// Duas extensões deliberadas sobre o Data Model v1.2.1 original, ambas
-// documentadas no relatório de Fase 02A:
+// Duas extensões sobre o Data Model v1.2.1 original, ambas aprovadas
+// formalmente após o relatório de Fase 02A:
 //   - `Session`: infraestrutura de autenticação (ADR-002-authentication.md),
 //     não uma entidade de produto do Data Model.
-//   - `WorkoutTemplate` + `Workout.workoutTemplateId`: reconciliação do
-//     achado F2 (enky_os_specification.md §12) — sem isso o valor de enum
-//     já aprovado `WorkoutSource.TEMPLATE` não seria rastreável.
+//   - `WorkoutTemplate` + `Workout.workoutTemplateId`: entidade oficial do
+//     MVP (aprovada — a Interface Architecture v1.4 já prevê biblioteca de
+//     modelos e substituição por template). Regras de clonagem:
+//       * um Workout clonado de um template mantém `source = TEMPLATE`
+//         permanentemente — não muda para MANUAL após edição;
+//       * `contentSnapshot` é copiado no momento da clonagem e nunca mais
+//         sincronizado — editar o Workout clonado NUNCA altera o
+//         WorkoutTemplate original, e editar o template NUNCA retroage
+//         sobre clones já criados (cópia imutável, não referência viva).
 //
 // Fora do escopo desta fase (ver relatório de Fase 02A): `Notification`
-// (adiada — nenhum fluxo desta fase escreve nela ainda), `AthleteGroup`,
-// mensageria completa, anexos genéricos, `AIRecommendation` independente
-// (todos classificados como pós-MVP ou substituídos em enky_os_specification.md §12).
+// interna (adiada — decisão: `AthleteInvitation` controla o convite,
+// e-mail transacional entrega o link, falhas de envio são logadas;
+// notificação interna só entra quando existir central de notificações
+// real no produto — não criar tabela "porque pode ser útil"),
+// `AthleteGroup`, mensageria completa, anexos genéricos,
+// `AIRecommendation` independente (todos classificados como pós-MVP ou
+// substituídos em enky_os_specification.md §12).
 
 generator client {
   provider = "prisma-client-js"
@@ -548,10 +558,12 @@ model Workout {
   @@index([generationBatchId])
 }
 
-// Extensão da Fase 02A (reconciliação F2) — permite que
+// Entidade oficial do MVP (aprovada após Fase 02A) — permite que
 // `WorkoutSource.TEMPLATE`, já aprovado no enum, seja rastreável.
 // Usa snapshot estruturado (`contentSnapshot`), não duplica a árvore
-// completa de `Workout`/`WorkoutBlock`/`WorkoutExercise`.
+// completa de `Workout`/`WorkoutBlock`/`WorkoutExercise`. `contentSnapshot`
+// é copiado no momento da clonagem — cópia imutável, nunca referência
+// viva; ver comentário de topo deste arquivo para as regras completas.
 model WorkoutTemplate {
   id              String   @id @default(uuid())
   organizationId  String
