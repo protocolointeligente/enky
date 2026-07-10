@@ -5,7 +5,8 @@ export type AppErrorCode =
   | "NOT_FOUND"
   | "CONFLICT"
   | "BUSINESS_RULE_VIOLATION"
-  | "EXTERNAL_SERVICE_ERROR";
+  | "EXTERNAL_SERVICE_ERROR"
+  | "RATE_LIMITED";
 
 export abstract class AppError extends Error {
   abstract readonly code: AppErrorCode;
@@ -53,6 +54,18 @@ export class BusinessRuleError extends AppError {
 export class ExternalServiceError extends AppError {
   readonly code = "EXTERNAL_SERVICE_ERROR" as const;
   readonly httpStatus = 502;
+}
+
+export class RateLimitError extends AppError {
+  readonly code = "RATE_LIMITED" as const;
+  readonly httpStatus = 429;
+
+  constructor(
+    message: string,
+    readonly retryAfterMs: number,
+  ) {
+    super(message);
+  }
 }
 
 export function isAppError(error: unknown): error is AppError {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { isAppError } from "@/domain/errors";
+import { isAppError, RateLimitError } from "@/domain/errors";
 import { logger } from "@/server/observability/logger";
 
 interface SuccessBody<T> {
@@ -27,9 +27,13 @@ export function apiSuccess<T>(data: T, status = 200): NextResponse<SuccessBody<T
 export function apiError(error: unknown, correlationId = randomUUID()): NextResponse<ErrorBody> {
   if (isAppError(error)) {
     logger.warn({ correlationId, code: error.code }, error.message);
+    const headers =
+      error instanceof RateLimitError
+        ? { "Retry-After": String(Math.ceil(error.retryAfterMs / 1000)) }
+        : undefined;
     return NextResponse.json(
       { ok: false, error: { code: error.code, message: error.message, correlationId } },
-      { status: error.httpStatus },
+      { status: error.httpStatus, headers },
     );
   }
 

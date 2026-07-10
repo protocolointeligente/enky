@@ -8,8 +8,9 @@ Camada de adaptação entre o mundo HTTP (rotas do App Router) e o domínio. Rot
 
   **Exceção deliberada ao fluxo de dependência:** `auth/session.ts` e `auth/guards.ts` importam `infrastructure/database/prisma` diretamente. Gestão de sessão é infraestrutura de identidade, não lógica de domínio de negócio — tratá-la como uma exceção documentada evita forçar uma camada de indireção artificial só para preservar a regra geral.
 
-- `http/` — formato padronizado de resposta de API (`response.ts`), que nunca expõe stack trace em produção.
+- `http/` — formato padronizado de resposta de API (`response.ts`), que nunca expõe stack trace em produção, e parsing/validação de corpo JSON (`parse-body.ts`).
 - `observability/` — logging estruturado (`logger.ts`) com redação automática de senha, token, cookie e campos de saúde/texto livre.
+- `security/` — CSRF (`csrf.ts`, `assertTrustedOrigin`, ver ADR-004), rate limiting (`rate-limit.ts`, interface + adapter em memória para dev/single-instance) e extração de IP do cliente (`ip.ts`). Toda rota de mutação chama `assertTrustedOrigin` e o limitador apropriado antes de qualquer regra de negócio.
 
 ## Regras
 

@@ -87,4 +87,8 @@ Justificativa: o Product & Engineering Specification v1.0 (§38, ENKY 24 §18) d
 
 - Uma tabela nova (`Session`) entra no schema antes da expansão formal do Data Model — documentado aqui para não ser confundido com os achados F2 (que tratam de entidades de **produto**, não de infraestrutura de identidade).
 - `server/auth/session.ts` agora depende de `infrastructure/database/prisma` — uma exceção deliberada ao fluxo de dependência descrito em `docs/ARCHITECTURE.md` (gestão de sessão é infraestrutura de identidade, não lógica de domínio de negócio). Documentado também em `docs/ARCHITECTURE.md`.
-- CSRF além do `sameSite=lax` fica como item aberto para quando existirem rotas de mutação reais (Fase 02).
+- CSRF além do `sameSite=lax` fica como item aberto para quando existirem rotas de mutação reais — resolvido na Fase 02B, ver `docs/adr/ADR-004-csrf-strategy.md`.
+
+## 6. Implementação (Fase 02B)
+
+Cadastro (`registerTrainer`), login (`login`) e logout (`logout`) conectados em `app/api/auth/{register,login,logout,session}/route.ts`, usando exatamente a arquitetura desta ADR. Testado contra PostgreSQL real: sessão criada/verificada/revogada, expiração, e mensagem idêntica para conta inexistente vs. senha incorreta (proteção contra enumeração) — ver `tests/integration/identity-auth.test.ts`.

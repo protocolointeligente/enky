@@ -9,7 +9,12 @@ Plataforma de inteligência esportiva para treinadores, assessorias e atletas: g
 
 ## Status
 
-**Fundação técnica (Fase 01).** Este repositório contém a base estrutural do projeto — projeto Next.js configurado, arquitetura de monólito modular, autenticação preparada, Prisma inicializado com um schema mínimo. Nenhuma tela, dashboard, marketplace, motor de geração de treinos ou funcionalidade de produto foi implementada ainda. Ver `docs/DEVELOPMENT.md` para o que "pronto" significa em cada entrega.
+**Fase 02B — Identidade, autenticação e convite de atleta.** Schema completo migrado (Fase 02A); cadastro de treinador, login, logout e o pipeline de convite de atleta (convidar/ativar/reenviar/revogar) estão implementados e testados contra PostgreSQL real. Nenhuma tela, dashboard, calendário, marketplace ou motor de geração de treinos foi implementado ainda. Ver `docs/DEVELOPMENT.md` para o que "pronto" significa em cada entrega.
+
+**Rotas implementadas:**
+
+- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`
+- `POST /api/athletes/invitations`, `POST /api/athletes/invitations/activate`, `POST /api/athletes/invitations/[id]/resend`, `POST /api/athletes/invitations/[id]/revoke`
 
 ## Documentos oficiais (fonte única de verdade)
 
@@ -74,6 +79,7 @@ npm run start             # servidor de produção (após build)
 npm run lint               # ESLint
 npm run typecheck          # TypeScript --noEmit
 npm run test                # Vitest (unitário)
+npm run test:integration    # Vitest contra PostgreSQL real (requer DATABASE_URL válido)
 npm run test:e2e            # Playwright (requer `npx playwright install` antes)
 npm run format               # Prettier --write
 npm run validate              # lint + typecheck + test + build
@@ -109,6 +115,8 @@ Ver `docs/ARCHITECTURE.md` para o fluxo de dependência entre camadas.
 - Nenhum dado de cartão, CVV ou validade é recebido ou persistido pela ENKY — apenas tokens do gateway de pagamento.
 - Logs redigem automaticamente senha, token, cookie e campos de texto livre que podem conter dados de saúde.
 - Nenhum admin é promovido automaticamente por variável de ambiente ou lista de e-mails.
+- Toda rota de mutação valida `Origin`/`Referer` (CSRF) e aplica rate limiting antes de tocar o banco — ver `docs/adr/ADR-004-csrf-strategy.md`.
+- Login nunca revela se uma conta existe — mesma mensagem genérica para conta inexistente e senha incorreta.
 
 ## Proibições de comandos destrutivos
 

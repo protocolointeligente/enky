@@ -2,6 +2,19 @@
 
 Registro de mudanças nos documentos oficiais (fora do código). Ordem cronológica reversa.
 
+## Fase 02B — Identidade, Autenticação, Organização Pessoal e Convite de Atleta
+
+- Criado `docs/adr/ADR-004-csrf-strategy.md`: validação de `Origin`/`Referer` como defesa de CSRF, escolhida sobre token de duplo envio.
+- `docs/adr/ADR-001-multitenancy-enforcement.md` e `docs/adr/ADR-002-authentication.md` ganharam seção "Implementação (Fase 02B)" registrando onde cada decisão foi conectada em código real.
+- `modules/identity/README.md` e `modules/athletes/README.md` atualizados de "fundação apenas" para o inventário real de serviços implementados.
+- Criado `infrastructure/mail/README.md` e `server/README.md` atualizado com a nova camada `server/security/`.
+- `README.md`, `docs/ARCHITECTURE.md` e `.env.example` atualizados para refletir rotas, guards renomeados (`getCurrentSession`/`requireAuthenticatedUser`/`requireGlobalRole`/`resolveActiveOrganization`/`requireOrganizationMembership`/`requireTrainerAccessToAthlete`) e o novo uso de `AUTH_SECRET`/`APP_URL`.
+
+## Fase 02A — Consolidação do Data Model e Migration Inicial
+
+- `WorkoutTemplate` formalizada como entidade oficial do MVP (antes classificada como extensão pendente de revisão) — `enky_os_specification.md` §12 e comentário de topo de `prisma/schema.prisma` atualizados com as regras de clonagem.
+- `Notification` interna teve decisão fechada (adiada — `AthleteInvitation` + e-mail transacional cobrem o MVP) em vez de "incluir se necessário".
+
 ## Fase 01.5 — Reconciliação e Hardening da Fundação
 
 **Achado F1 (crítico) — documento duplicado:**

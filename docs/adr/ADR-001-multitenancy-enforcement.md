@@ -34,3 +34,7 @@ Resolvido nesta ADR, não deixado em aberto:
 - Todo fluxo de cadastro de treinador (Fase 02) implementa as 4 escritas atômicas da seção 1 numa única transação Prisma (`$transaction`) — nunca em passos separados que possam deixar um `User` sem `Organization`.
 - A UI nunca precisa (nem deve) perguntar "qual organização?" no MVP — resolvido implicitamente.
 - Quando a Fase 6 chegar, o trabalho é **aditivo** (convidar membros extras para uma `Organization` já existente), não uma migração de dados de "sem tenant" para "com tenant".
+
+## 4. Implementação (Fase 02B)
+
+`modules/identity/register-trainer.ts` (`registerTrainer()`) implementa exatamente as 4 escritas atômicas desta ADR. `server/auth/guards.ts` (`resolveActiveOrganization()`) implementa a resolução de tenant no servidor — nenhuma rota aceita `organizationId` do cliente. Testado contra PostgreSQL real, incluindo uma corrida de dois cadastros simultâneos com o mesmo e-mail (nenhum dado parcial sobrevive) — ver `tests/integration/identity-auth.test.ts`.
