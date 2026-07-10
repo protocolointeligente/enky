@@ -6,9 +6,16 @@ const envSchema = z.object({
   AUTH_SECRET: z.string().min(32, "AUTH_SECRET deve ter pelo menos 32 caracteres."),
   APP_URL: z.string().url().default("http://localhost:3000"),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  LOG_LEVEL: z
-    .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
-    .default("info"),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  // Optional so `next build` and local dev without a real mailer still work —
+  // the mailer factory (infrastructure/mail/get-invitation-mailer.ts) is the
+  // single place that decides what to do when they're absent, and refuses to
+  // fall back to the dev (log-only) mailer in production.
+  EMAIL_PROVIDER_API_KEY: z.string().optional(),
+  // Sender identity for transactional e-mail. Resend accepts either a bare
+  // address or the "Nome <endereco@dominio>" form; the domain must be
+  // verified in the Resend dashboard.
+  EMAIL_FROM: z.string().optional(),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -29,7 +36,9 @@ function loadEnv(): Env {
 
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
-    const issues = parsed.error.issues.map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`);
+    const issues = parsed.error.issues.map(
+      (issue) => `  - ${issue.path.join(".")}: ${issue.message}`,
+    );
     throw new Error(`Variáveis de ambiente inválidas:\n${issues.join("\n")}`);
   }
 

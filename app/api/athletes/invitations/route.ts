@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { DevInvitationMailer } from "@/infrastructure/mail/dev-invitation-mailer";
+import { getInvitationMailer } from "@/infrastructure/mail/get-invitation-mailer";
 import { prisma } from "@/infrastructure/database/prisma";
 import { env } from "@/lib/env";
 import { inviteAthlete, inviteAthleteInputSchema } from "@/modules/athletes/invite-athlete";
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     });
 
     const activationUrl = `${env.APP_URL}/convite/ativar?token=${result.rawToken}`;
-    await new DevInvitationMailer().sendInvitation({
+    await getInvitationMailer().sendInvitation({
       to: input.email,
       athleteName: input.athleteName ?? null,
       trainerName: identity.name,

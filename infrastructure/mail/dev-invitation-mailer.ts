@@ -9,9 +9,14 @@ import type { InvitationEmailPayload, InvitationMailer } from "./invitation-mail
 // invitation can never silently "succeed" by just being logged nowhere.
 export class DevInvitationMailer implements InvitationMailer {
   constructor() {
-    if (env.NODE_ENV === "production") {
+    // Decisão 02D.1 #4: este mailer só pode existir em NODE_ENV=development.
+    // Recusa-se a instanciar em produção (um convite jamais pode "suceder"
+    // apenas logando o link) E em teste (os testes usam FakeInvitationMailer,
+    // nunca este). Na Vercel, Preview e Production rodam ambos com
+    // NODE_ENV=production, então ambos caem nesta recusa.
+    if (env.NODE_ENV !== "development") {
       throw new Error(
-        "DevInvitationMailer não pode ser usado em produção — configure um InvitationMailer real.",
+        "DevInvitationMailer só pode ser usado em desenvolvimento — configure um InvitationMailer real.",
       );
     }
   }

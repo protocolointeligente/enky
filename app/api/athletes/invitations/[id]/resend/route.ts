@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { DevInvitationMailer } from "@/infrastructure/mail/dev-invitation-mailer";
+import { getInvitationMailer } from "@/infrastructure/mail/get-invitation-mailer";
 import { prisma } from "@/infrastructure/database/prisma";
 import { env } from "@/lib/env";
 import { resendInvitation } from "@/modules/athletes/resend-invitation";
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const invitation = await prisma.athleteInvitation.findUniqueOrThrow({ where: { id } });
     const activationUrl = `${env.APP_URL}/convite/ativar?token=${result.rawToken}`;
-    await new DevInvitationMailer().sendInvitation({
+    await getInvitationMailer().sendInvitation({
       to: invitation.email,
       trainerName: identity.name,
       activationUrl,
