@@ -63,6 +63,8 @@ Autorização nunca é decidida apenas no frontend. `server/auth/guards.ts` exp�
 
 Toda rota protegida chama esses guards no início do handler, nunca espalha a própria consulta de autorização. O papel é sempre lido do banco no momento da requisição (nunca cacheado no token de sessão — ver ADR-002), para que uma alteração de papel ou desativação de conta tenha efeito imediato. Matriz de permissões completa em `docs/enky_role_permission_matrix.md`.
 
+**Exceção documentada (Fase 02C):** `requireTrainerAccessToAthlete()` também é chamado de dentro de `modules/workouts/create-workout-draft.ts` e `update-workout-draft.ts`, não só da rota — porque o vínculo treinador-atleta é um invariante de negócio do próprio caso de uso (nunca prescrever para um atleta sem vínculo ativo), não apenas um controle de acesso HTTP. Isso mantém o serviço seguro mesmo se chamado de um futuro ponto de entrada (calendário, aplicação de template) que esqueça de revalidar o vínculo na rota.
+
 ## CSRF e rate limiting
 
 Toda rota de mutação (`POST`/`PATCH`/`DELETE`) chama `assertTrustedOrigin()` (`server/security/csrf.ts`) antes de qualquer outra coisa, e o limitador apropriado de `server/security/rate-limit.ts` antes de tocar o banco. Ver `docs/adr/ADR-004-csrf-strategy.md` para a decisão completa. O limitador em memória é explicitamente documentado como não seguro para múltiplas instâncias — ver comentário de topo de `rate-limit.ts`.

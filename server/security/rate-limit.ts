@@ -61,3 +61,5 @@ export const loginRateLimiter = new InMemoryRateLimiter(10, 5 * 60 * 1000); // 1
 export const inviteRateLimiter = new InMemoryRateLimiter(20, 60 * 60 * 1000); // 20/hora por treinador
 export const resendInvitationRateLimiter = new InMemoryRateLimiter(5, 60 * 60 * 1000); // 5/hora por convite
 export const activateInvitationRateLimiter = new InMemoryRateLimiter(10, 15 * 60 * 1000); // 10/15min por IP
+export const workoutWriteRateLimiter = new InMemoryRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador
+export const feedbackWriteRateLimiter = new InMemoryRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta

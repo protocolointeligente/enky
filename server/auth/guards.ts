@@ -16,6 +16,11 @@ export interface ActiveOrganization {
   organizationRole: OrganizationRole;
 }
 
+export interface AthleteOrganizationScope {
+  organizationId: string;
+  athleteProfileId: string;
+}
+
 // Role is always read live from the database, never cached in the session
 // token — a demoted/deactivated user loses access on their very next
 // request, not only after the session expires.
@@ -67,6 +72,29 @@ export async function resolveActiveOrganization(userId: string): Promise<ActiveO
   }
 
   return { organizationId: membership.organizationId, organizationRole: membership.role };
+}
+
+// Athletes never get an OrganizationMembership row — only the trainer who
+// owns a personal organization does (ADR-001). An athlete's tenant is
+// instead reached through their CoachAthleteRelationship, so this is the
+// athlete-side equivalent of resolveActiveOrganization(): same MVP
+// single-relationship assumption, same single extension point for when
+// Fase 6 allows an athlete to train with more than one organization.
+export async function resolveAthleteOrganization(userId: string): Promise<AthleteOrganizationScope> {
+  const athleteProfile = await prisma.athleteProfile.findUnique({ where: { userId } });
+  if (!athleteProfile) {
+    throw new AuthorizationError("Usuário não possui perfil de atleta.");
+  }
+
+  const relationship = await prisma.coachAthleteRelationship.findFirst({
+    where: { athleteId: athleteProfile.id, isActive: true },
+    orderBy: { startedAt: "asc" },
+  });
+  if (!relationship) {
+    throw new AuthorizationError("Atleta não pertence a nenhuma organização.");
+  }
+
+  return { organizationId: relationship.organizationId, athleteProfileId: athleteProfile.id };
 }
 
 export async function requireOrganizationMembership(

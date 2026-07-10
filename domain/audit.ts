@@ -10,7 +10,12 @@ export type AuditAction =
   | "RESEND_INVITATION"
   | "REVOKE_INVITATION"
   | "ACTIVATE_INVITATION"
-  | "SESSION_REVOKED";
+  | "SESSION_REVOKED"
+  | "CREATE_WORKOUT_DRAFT"
+  | "UPDATE_WORKOUT_DRAFT"
+  | "PUBLISH_WORKOUT"
+  | "SUBMIT_WORKOUT_FEEDBACK"
+  | "UPDATE_WORKOUT_FEEDBACK";
 
 export interface AuditLogInput {
   action: AuditAction;

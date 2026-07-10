@@ -59,6 +59,18 @@ npm run test:integration # testes de persistência contra o banco real
 
 `npm run test` (unitário) nunca precisa de banco — usa `tests/setup.ts` com valores falsos. `npm run test:integration` sempre precisa de um `DATABASE_URL` real e válido.
 
+## Testes E2E (Playwright)
+
+Navegadores não vêm pré-instalados — rode uma vez por máquina:
+
+```bash
+npx playwright install chromium
+```
+
+`npm run test:e2e` sobe o servidor de dev automaticamente (`webServer` em `playwright.config.ts`, reaproveitado se já estiver rodando) e precisa do mesmo `DATABASE_URL`/`AUTH_SECRET` reais usados pelos testes de integração (`tests/e2e/global-setup.ts` carrega o `.env`).
+
+Specs semeiam estado (ex.: treinador + atleta) com `prisma` direto, não chamando `modules/identity/register-trainer.ts`/`modules/athletes/invite-athlete.ts`. Dois motivos: (1) não existe caixa de e-mail real neste ambiente para receber o link de convite que `DevInvitationMailer` apenas loga no console; (2) esses módulos importam `lib/env.ts`, que importa `server-only` — um pacote cujo comportamento real (no-op no servidor, `throw` no cliente) só funciona através do alias de webpack do Next. O Vitest contorna isso com um alias no próprio `vitest.config.ts`; o Playwright não tem um hook equivalente que não exija tocar o `tsconfig.json` raiz — o que enfraqueceria essa proteção no build de produção inteiro, não só nos testes. Por isso os specs recriam as mesmas linhas via Prisma direto + `bcryptjs`/`node:crypto` (sem dependência de `server-only`), e a partir daí o fluxo é 100% navegador real.
+
 ## Regras para migrations
 
 Seguem a Política de Migrations em Produção do Data Model Specification v1.2.1 §12:
