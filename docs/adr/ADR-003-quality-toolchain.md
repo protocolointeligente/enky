@@ -32,8 +32,19 @@ Avaliado na Fase 01.5 (item 12 do prompt de hardening): o acoplamento é real �
 
 - O projeto hoje tem **zero** variáveis `NEXT_PUBLIC_*` — não existe, ainda, nenhuma variável de ambiente exposta ao cliente. Não há nada para separar em `clientEnv` até que a primeira exista.
 - `DATABASE_URL` e `AUTH_SECRET` são, na prática, requisitos conjuntos de qualquer execução real da aplicação — não há um deploy válido da ENKY sem banco e sem segredo de sessão.
-- Build (`next build`) não depende de `lib/env.ts` graças a `export const dynamic = "force-dynamic"` na rota de health check (decisão da Fase 01, reconfirmada aqui).
 - Testes não dependem de um `.env` real graças a `tests/setup.ts`.
 - Scripts do Prisma (`generate`/`validate`/`format`) leem `DATABASE_URL` diretamente via o carregamento de `.env` do próprio Prisma CLI — nunca importam `lib/env.ts`, portanto não têm nenhum acoplamento com o schema Zod.
 
 **Gatilho para revisitar:** a primeira variável `NEXT_PUBLIC_*` introduzida no projeto deve vir acompanhada da separação em `serverEnv`/`clientEnv` — não antes, para não criar uma abstração sem uso real (violaria o princípio de não antecipar estrutura especulativa).
+
+## 4. Incidente: build quebrado na Vercel por validação eager (corrigido)
+
+**A afirmação original desta ADR — "build não depende de `lib/env.ts` graças a `force-dynamic`" — estava errada**, e só foi descoberta porque os dois Preview Deployments da Fase 02A falharam de verdade na Vercel, não porque os testes locais pegaram o problema.
+
+**Causa raiz:** `next build` executa a etapa "Collecting page data" para **toda** rota, inclusive as marcadas `dynamic = "force-dynamic"` — `force-dynamic` impede a pré-renderização estática (o problema que ele foi desenhado para resolver), mas não impede o Next de carregar/executar o módulo da rota durante essa etapa de build. Como `lib/env.ts` validava o schema inteiro (`envSchema.parse(process.env)`) no escopo do módulo — fora de qualquer função —, a simples importação do arquivo já disparava a validação, e faltando `AUTH_SECRET` na Vercel (nenhuma integração automática o provisiona, diferente de `DATABASE_URL` via integração Neon), o build inteiro quebrava. Reproduzido localmente removendo `.env` e rodando `npm run build`: **toda** rota que importa `lib/env.ts`, mesmo indiretamente via `server/observability/logger.ts` (que também construía o `pino(...)` no escopo do módulo, tocando `env.LOG_LEVEL`/`env.NODE_ENV`), falhava da mesma forma — não só `/api/health`.
+
+**Correção:** `lib/env.ts` agora expõe `env` como um `Proxy` — a validação só roda no primeiro acesso a uma propriedade (`env.AUTH_SECRET`, etc.), não na importação do módulo. `server/observability/logger.ts` segue o mesmo padrão: a instância real do `pino` só é construída na primeira chamada de log, não no escopo do módulo. Resultado, verificado localmente: `npm run build` agora **passa com zero variáveis de ambiente definidas** — o build nunca mais falha por falta de segredo; apenas uma requisição real que efetivamente precise de uma variável ausente falha, e só naquele caminho.
+
+**Isso não elimina a necessidade de configurar `AUTH_SECRET` na Vercel** — sem ele, o build passa, mas qualquer rota que crie sessão (`/api/auth/*`, `/api/athletes/invitations*`) retorna 500 em runtime. Configurar as variáveis de ambiente do projeto na Vercel continua sendo necessário e é responsabilidade de quem administra o projeto lá — nenhuma ferramenta disponível aqui tem acesso para configurá-las.
+
+**Lição de processo:** todo teste de build feito localmente até este incidente rodou com um `.env` real populado — o cenário "build sem nenhuma variável definida" nunca tinha sido testado de fato, só presumido. Verificar precisa incluir o caso adversarial, não só o caso feliz.
