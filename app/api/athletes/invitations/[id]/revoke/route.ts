@@ -8,6 +8,7 @@ import {
 import { apiError, apiSuccess } from "@/server/http/response";
 import { assertTrustedOrigin } from "@/server/security/csrf";
 import { getClientIp } from "@/server/security/ip";
+import { enforceRateLimit, revokeInvitationRateLimiter } from "@/server/security/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const identity = await requireAuthenticatedUser();
     requireGlobalRole(identity, ["TRAINER"]);
     const { organizationId } = await resolveActiveOrganization(identity.userId);
+
+    await enforceRateLimit(revokeInvitationRateLimiter, `revoke:${identity.userId}`);
+
     const { id } = await params;
 
     await revokeInvitation(id, {

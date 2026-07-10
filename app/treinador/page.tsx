@@ -65,7 +65,11 @@ export default function TrainerDashboardPage() {
           <h2 className="font-semibold text-slate-100">Atletas vinculados ({athletes.length})</h2>
           {athletes.length === 0 ? (
             <p className="text-sm text-slate-400">
-              Nenhum atleta vinculado ainda. Convide um atleta para começar a prescrever treinos.
+              Nenhum atleta vinculado ainda.{" "}
+              <Link href="/treinador/atletas" className={uiClasses.link}>
+                Convide um atleta
+              </Link>{" "}
+              para começar a prescrever treinos.
             </p>
           ) : (
             <ul className="flex flex-col gap-1 text-sm text-slate-300">
@@ -94,7 +98,9 @@ export default function TrainerDashboardPage() {
                         {workout.modality} — {workout.plannedDate.slice(0, 10)}
                       </p>
                     </div>
-                    <span className={`${uiClasses.badge} ${statusBadgeClass[workout.status] ?? ""}`}>
+                    <span
+                      className={`${uiClasses.badge} ${statusBadgeClass[workout.status] ?? ""}`}
+                    >
                       {workout.status}
                     </span>
                   </Link>
