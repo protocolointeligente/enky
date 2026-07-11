@@ -1,22 +1,27 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Insight, InsightConfidence, InsightRisk } from "./insight";
+import { computeLoadState, type LoadState } from "./load-state";
 
-// ENKY Intelligence — Fase I, motor de ATENÇÃO.
+// ENKY Intelligence — Fase I/II, motor de ATENÇÃO.
 //
 // A decision engine (docs/ENKY_DECISION_ENGINE.md) encarnada em regras
 // determinísticas sobre os dados que já existem (workouts + feedback). Sem
 // migration, sem LLM: a verbalização é por template prudente. Cada Insight
-// segue o formato de 6 partes (observação, interpretação, dados usados,
-// confiança, limitações, ação) e NUNCA diagnostica (ENKY 11, Regras de Saúde).
+// segue o formato de 6 partes e NUNCA diagnostica (ENKY 11, Regras de Saúde).
+// Agora inclui o estado de carga (CTL/ATL/ACWR/ramp) derivado do sRPE.
 
 export interface IntelligenceActor {
   organizationId: string;
   trainerProfileId: string;
 }
 
-const WINDOW_DAYS = 28;
-const PAIN_THRESHOLD = 4; // dor moderada ou mais
-const HIGH_RPE = 9; // percepção de esforço muito alta
+const RECENCY_DAYS = 28; // janela dos sinais recentes (dor/RPE/perdidos)
+const LOAD_DAYS = 90; // janela para a carga crônica (CTL 42d) fazer sentido
+const PAIN_THRESHOLD = 4;
+const HIGH_RPE = 9;
+const ACWR_HIGH = 1.5;
+const RAMP_HIGH = 0.3; // +30% de CTL na semana
+const MIN_LOAD_DAYS = 10; // mínimo de dias com treino para ler a carga
 const REVIEW_STATUSES = new Set(["COMPLETED", "PARTIAL", "MISSED"]);
 const RISK_ORDER: Record<InsightRisk, number> = {
   urgente: 3,
@@ -25,8 +30,6 @@ const RISK_ORDER: Record<InsightRisk, number> = {
   positivo: 0,
 };
 
-// Confiança escala com a quantidade de dados na janela — dados escassos nunca
-// viram certeza (limite inviolável 2 do ENKY 11).
 function confidenceFromData(feedbackCount: number): InsightConfidence {
   if (feedbackCount <= 1) return "BAIXA";
   if (feedbackCount <= 4) return "MEDIA";
@@ -43,19 +46,35 @@ export interface AthleteBucket {
   missed: number;
   publishedPast: number;
   awaitingReview: number;
+  state: LoadState | null;
 }
 
-/**
- * Varre a carteira do treinador e devolve, por atleta que precisa de atenção,
- * um único Insight (o sinal de maior prioridade), ordenado por risco. Escopo
- * sempre por organização + treinador (tenant isolation), como o resto do sistema.
- */
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+// Série diária contínua (zero nos dias sem treino), do início da janela até hoje.
+function dailySeries(loadByDay: Map<string, number>, since: Date, now: Date): number[] {
+  const out: number[] = [];
+  const cursor = new Date(since);
+  cursor.setHours(0, 0, 0, 0);
+  const end = new Date(now);
+  end.setHours(0, 0, 0, 0);
+  while (cursor <= end) {
+    out.push(loadByDay.get(isoDay(cursor)) ?? 0);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}
+
 export async function analyzeRosterAttention(
   actor: IntelligenceActor,
   now: Date,
 ): Promise<Insight[]> {
-  const since = new Date(now);
-  since.setDate(since.getDate() - WINDOW_DAYS);
+  const loadSince = new Date(now);
+  loadSince.setDate(loadSince.getDate() - LOAD_DAYS);
+  const recencySince = new Date(now);
+  recencySince.setDate(recencySince.getDate() - RECENCY_DAYS);
   const todayMidnight = new Date(now);
   todayMidnight.setHours(0, 0, 0, 0);
 
@@ -63,18 +82,22 @@ export async function analyzeRosterAttention(
     where: {
       organizationId: actor.organizationId,
       trainerId: actor.trainerProfileId,
-      plannedDate: { gte: since },
+      plannedDate: { gte: loadSince },
     },
     select: {
       athleteId: true,
       status: true,
       plannedDate: true,
       athlete: { select: { user: { select: { name: true } } } },
-      feedback: { select: { painLevel: true, painRegion: true, sessionRpe: true } },
+      feedback: {
+        select: { painLevel: true, painRegion: true, sessionRpe: true, sessionRpeLoad: true },
+      },
     },
   });
 
   const buckets = new Map<string, AthleteBucket>();
+  const loadByAthlete = new Map<string, Map<string, number>>();
+
   for (const workout of workouts) {
     let bucket = buckets.get(workout.athleteId);
     if (!bucket) {
@@ -88,25 +111,45 @@ export async function analyzeRosterAttention(
         missed: 0,
         publishedPast: 0,
         awaitingReview: 0,
+        state: null,
       };
       buckets.set(workout.athleteId, bucket);
     }
 
-    if (workout.status === "MISSED") bucket.missed += 1;
-    if (workout.status === "PUBLISHED" && workout.plannedDate < todayMidnight) {
-      bucket.publishedPast += 1;
-    }
-    if (workout.feedback) {
-      bucket.feedbackCount += 1;
-      if (REVIEW_STATUSES.has(workout.status)) bucket.awaitingReview += 1;
-      const pain = workout.feedback.painLevel ?? 0;
-      if (pain > bucket.maxPain) {
-        bucket.maxPain = pain;
-        bucket.painRegion = workout.feedback.painRegion;
+    // Carga interna diária (para CTL/ATL) — janela completa de 90 dias.
+    if (workout.feedback?.sessionRpeLoad != null) {
+      const day = isoDay(workout.plannedDate);
+      let map = loadByAthlete.get(workout.athleteId);
+      if (!map) {
+        map = new Map();
+        loadByAthlete.set(workout.athleteId, map);
       }
-      const rpe = workout.feedback.sessionRpe ?? 0;
-      if (rpe > bucket.maxRpe) bucket.maxRpe = rpe;
+      map.set(day, (map.get(day) ?? 0) + Number(workout.feedback.sessionRpeLoad));
     }
+
+    // Sinais recentes — só nos últimos 28 dias.
+    if (workout.plannedDate >= recencySince) {
+      if (workout.status === "MISSED") bucket.missed += 1;
+      if (workout.status === "PUBLISHED" && workout.plannedDate < todayMidnight) {
+        bucket.publishedPast += 1;
+      }
+      if (workout.feedback) {
+        bucket.feedbackCount += 1;
+        if (REVIEW_STATUSES.has(workout.status)) bucket.awaitingReview += 1;
+        const pain = workout.feedback.painLevel ?? 0;
+        if (pain > bucket.maxPain) {
+          bucket.maxPain = pain;
+          bucket.painRegion = workout.feedback.painRegion;
+        }
+        const rpe = workout.feedback.sessionRpe ?? 0;
+        if (rpe > bucket.maxRpe) bucket.maxRpe = rpe;
+      }
+    }
+  }
+
+  for (const [athleteId, bucket] of buckets) {
+    const map = loadByAthlete.get(athleteId) ?? new Map<string, number>();
+    bucket.state = computeLoadState(dailySeries(map, loadSince, now));
   }
 
   const insights: Insight[] = [];
@@ -120,7 +163,7 @@ export async function analyzeRosterAttention(
 }
 
 // Aplica as regras em ordem de prioridade e devolve o Insight de maior risco.
-// Segurança (dor) primeiro — sobrepõe tudo (ENKY_DECISION_ENGINE §5.1).
+// Segurança (dor) primeiro; depois carga aguda elevada; depois adesão/RPE.
 // Exportada para teste unitário (é a "mente" do motor).
 export function evaluate(b: AthleteBucket): Insight | null {
   const base = {
@@ -141,8 +184,6 @@ export function evaluate(b: AthleteBucket): Insight | null {
         "Considere revisar a próxima sessão intensa deste atleta.",
         "Avalie conversar com o atleta e, se necessário, orientar avaliação profissional.",
       ],
-      // Dor é um fato direto; a confiança na observação é alta, mas a
-      // interpretação permanece prudente. Piso em MÉDIA se houver ao menos 1 dado.
       confianca: base.confianca === "BAIXA" && b.feedbackCount >= 1 ? "MEDIA" : base.confianca,
       limitacoes: "Não é um diagnóstico. Sem dados de sono/HRV para contextualizar.",
       dadosUsados: [
@@ -153,11 +194,41 @@ export function evaluate(b: AthleteBucket): Insight | null {
     };
   }
 
+  // Carga aguda elevada (ACWR ou ramp) — exige histórico mínimo de carga.
+  const s = b.state;
+  if (s && s.dataDays >= MIN_LOAD_DAYS) {
+    const acwrHigh = s.acwr != null && s.acwr >= ACWR_HIGH;
+    const rampHigh = s.rampPct != null && s.rampPct >= RAMP_HIGH;
+    if (acwrHigh || rampHigh) {
+      return {
+        ...base,
+        risk: "revisar",
+        observacao: acwrHigh
+          ? `Carga aguda ${Math.round((s.acwr! - 1) * 100)}% acima da crônica (ACWR ${s.acwr!.toFixed(2)}).`
+          : `Aumento rápido de carga: +${Math.round(s.rampPct! * 100)}% na semana.`,
+        interpretacao:
+          "Um salto agudo de carga em relação à base pode elevar o risco de má adaptação e fadiga.",
+        acoesSugeridas: [
+          "Considere reduzir volume/intensidade da próxima sessão intensa e confirmar recuperação.",
+        ],
+        limitacoes: "ACWR é correlação, não causalidade; sem HRV/sono para confirmar fadiga.",
+        dadosUsados: [
+          ...(s.acwr != null ? [{ label: "ACWR", value: s.acwr.toFixed(2) }] : []),
+          ...(s.rampPct != null
+            ? [{ label: "Ramp", value: `${Math.round(s.rampPct * 100)}%` }]
+            : []),
+          ...(s.monotony != null ? [{ label: "Monotonia", value: s.monotony.toFixed(1) }] : []),
+        ],
+        regras: [acwrHigh ? "carga:acwr-alto" : "carga:ramp-alto"],
+      };
+    }
+  }
+
   if (b.missed >= 2) {
     return {
       ...base,
       risk: "revisar",
-      observacao: `${b.missed} treinos não realizados nos últimos ${WINDOW_DAYS} dias.`,
+      observacao: `${b.missed} treinos não realizados nos últimos ${RECENCY_DAYS} dias.`,
       interpretacao:
         "Sequência de treinos perdidos pode indicar sobrecarga, desmotivação ou agenda.",
       acoesSugeridas: ["Considere verificar o motivo com o atleta e ajustar a próxima semana."],

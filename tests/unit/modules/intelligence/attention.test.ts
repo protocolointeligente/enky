@@ -12,9 +12,21 @@ function bucket(overrides: Partial<AthleteBucket> = {}): AthleteBucket {
     missed: 0,
     publishedPast: 0,
     awaitingReview: 0,
+    state: null,
     ...overrides,
   };
 }
+
+const HIGH_ACWR_STATE = {
+  ctl: 100,
+  atl: 170,
+  tsb: -70,
+  acwr: 1.7,
+  monotony: 1.5,
+  strain: 800,
+  rampPct: 0.1,
+  dataDays: 20,
+};
 
 describe("attention engine — evaluate", () => {
   it("dor moderada+ vira risco urgente e nunca diagnostica", () => {
@@ -28,6 +40,23 @@ describe("attention engine — evaluate", () => {
     const insight = evaluate(bucket({ maxPain: 6, missed: 3, maxRpe: 10 }));
     expect(insight?.risk).toBe("urgente");
     expect(insight?.regras).toContain("seguranca:dor-relatada");
+  });
+
+  it("carga aguda elevada (ACWR alto) vira risco revisar", () => {
+    const i = evaluate(bucket({ state: HIGH_ACWR_STATE }));
+    expect(i?.risk).toBe("revisar");
+    expect(i?.regras).toContain("carga:acwr-alto");
+  });
+
+  it("dor (segurança) sobrepõe a carga aguda elevada", () => {
+    const i = evaluate(bucket({ maxPain: 5, state: HIGH_ACWR_STATE }));
+    expect(i?.risk).toBe("urgente");
+    expect(i?.regras).toContain("seguranca:dor-relatada");
+  });
+
+  it("carga elevada mas histórico insuficiente não gera insight de carga", () => {
+    const i = evaluate(bucket({ state: { ...HIGH_ACWR_STATE, dataDays: 5 } }));
+    expect(i).toBeNull();
   });
 
   it("treinos perdidos viram risco revisar", () => {
