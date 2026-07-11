@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import { useExerciseOptions } from "@/app/_lib/use-exercise-options";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { uiClasses } from "@/app/_lib/ui";
 import {
@@ -23,6 +24,7 @@ export default function NewWorkoutPage() {
   const [athletes, setAthletes] = useState<AthleteOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const exerciseOptions = useExerciseOptions(checked);
 
   useEffect(() => {
     if (!checked) return;
@@ -66,6 +68,7 @@ export default function NewWorkoutPage() {
           submitting={submitting}
           error={error}
           onSubmit={handleSubmit}
+          exerciseOptions={exerciseOptions}
         />
       </div>
     </main>

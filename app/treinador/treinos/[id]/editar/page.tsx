@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import { useExerciseOptions } from "@/app/_lib/use-exercise-options";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { uiClasses } from "@/app/_lib/ui";
 import {
@@ -81,11 +82,13 @@ function toFormValues(dto: WorkoutEditDto): WorkoutPrescriptionFormValues {
       repetitions: String(block.repetitions),
       steps: block.steps.map((step) => ({
         key: Math.random().toString(36).slice(2),
-        stepType: step.stepType as WorkoutPrescriptionFormValues["blocks"][number]["steps"][number]["stepType"],
+        stepType:
+          step.stepType as WorkoutPrescriptionFormValues["blocks"][number]["steps"][number]["stepType"],
         repetitions: step.repetitions?.toString() ?? "",
         durationSeconds: step.durationSeconds?.toString() ?? "",
         distanceMeters: step.distanceMeters?.toString() ?? "",
-        targetType: (step.targetType ?? "") as WorkoutPrescriptionFormValues["blocks"][number]["steps"][number]["targetType"],
+        targetType: (step.targetType ??
+          "") as WorkoutPrescriptionFormValues["blocks"][number]["steps"][number]["targetType"],
         targetMin: step.targetMin ?? "",
         targetMax: step.targetMax ?? "",
         recoverySeconds: step.recoverySeconds?.toString() ?? "",
@@ -117,6 +120,7 @@ export default function EditWorkoutPage({ params }: { params: Promise<{ id: stri
   const [lockVersion, setLockVersion] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const exerciseOptions = useExerciseOptions(checked);
 
   useEffect(() => {
     if (!checked) return;
@@ -180,6 +184,7 @@ export default function EditWorkoutPage({ params }: { params: Promise<{ id: stri
           submitting={submitting}
           error={error}
           onSubmit={handleSubmit}
+          exerciseOptions={exerciseOptions}
         />
       </div>
     </main>
