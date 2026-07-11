@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import { toast } from "@/app/_lib/toast";
 import { useExerciseOptions } from "@/app/_lib/use-exercise-options";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { uiClasses } from "@/app/_lib/ui";
@@ -10,6 +12,7 @@ import {
   AthleteOption,
   buildPrescriptionPayload,
   emptyPrescriptionForm,
+  TemplateOption,
   WorkoutPrescriptionForm,
   WorkoutPrescriptionFormValues,
 } from "@/components/workout-prescription-form";
@@ -22,18 +25,27 @@ export default function NewWorkoutPage() {
   const { checked } = useRequireRole("TRAINER");
   const router = useRouter();
   const [athletes, setAthletes] = useState<AthleteOption[]>([]);
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const exerciseOptions = useExerciseOptions(checked);
 
   useEffect(() => {
     if (!checked) return;
-    apiFetch<{ athletes: AthleteOption[] }>("/api/trainer/athletes")
-      .then((result) => setAthletes(result.athletes))
+    Promise.all([
+      apiFetch<{ athletes: AthleteOption[] }>("/api/trainer/athletes"),
+      apiFetch<{ templates: TemplateOption[] }>("/api/trainer/templates").catch(() => ({
+        templates: [],
+      })),
+    ])
+      .then(([athletesResult, templatesResult]) => {
+        setAthletes(athletesResult.athletes);
+        setTemplates(templatesResult.templates);
+      })
       .catch((err) => setError(err instanceof ApiClientError ? err.message : "Erro inesperado."));
   }, [checked]);
 
-  async function handleSubmit(values: WorkoutPrescriptionFormValues) {
+  async function handleSaveDraft(values: WorkoutPrescriptionFormValues) {
     setError(null);
     setSubmitting(true);
     try {
@@ -42,9 +54,12 @@ export default function NewWorkoutPage() {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      toast.success("Treino salvo como rascunho.");
       router.push(`/treinador/treinos/${result.workoutId}`);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Erro inesperado.");
+      const message = err instanceof ApiClientError ? err.message : "Erro inesperado.";
+      setError(message);
+      toast.error(message);
       setSubmitting(false);
     }
   }
@@ -52,22 +67,29 @@ export default function NewWorkoutPage() {
   if (!checked) {
     return (
       <main className={uiClasses.page}>
-        <p className="text-slate-400">Carregando...</p>
+        <p className="text-muted">Carregando...</p>
       </main>
     );
   }
 
   return (
     <main className={uiClasses.page}>
-      <div className={uiClasses.container}>
-        <h1 className={uiClasses.heading}>Novo treino</h1>
+      <div className={uiClasses.wide}>
+        <div className="flex flex-col gap-1">
+          <Link href="/treinador" className={uiClasses.link}>
+            ← Painel
+          </Link>
+          <h1 className={uiClasses.heading}>Novo treino</h1>
+        </div>
         <WorkoutPrescriptionForm
+          mode="create"
           athletes={athletes}
+          templates={templates}
           initialValues={emptyPrescriptionForm()}
-          submitLabel="Salvar rascunho"
           submitting={submitting}
           error={error}
-          onSubmit={handleSubmit}
+          onSaveDraft={handleSaveDraft}
+          onCancel={() => router.push("/treinador")}
           exerciseOptions={exerciseOptions}
         />
       </div>
