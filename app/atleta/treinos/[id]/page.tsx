@@ -10,6 +10,7 @@ import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { StatusBadge } from "@/components/ui/badge";
 import { WorkoutBlocksView, type BlockView } from "@/components/workout-blocks-view";
+import { WorkoutExecution } from "@/components/workout-execution";
 import {
   buildFeedbackPayload,
   emptyFeedbackForm,
@@ -59,6 +60,11 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
   const [editingFeedback, setEditingFeedback] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Ephemeral execution flow (client-only): view -> executing -> feedback.
+  const [mode, setMode] = useState<"view" | "executing" | "feedback">("view");
+  const [initialCompletion, setInitialCompletion] = useState<"COMPLETED" | "PARTIAL" | "MISSED">(
+    "COMPLETED",
+  );
 
   function reload() {
     return apiFetch<{ workout: WorkoutDetailView }>(`/api/athlete/workouts/${id}`).then((result) =>
@@ -173,13 +179,49 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
           )}
         </div>
 
-        <WorkoutBlocksView blocks={current.blocks} />
+        {mode !== "executing" && <WorkoutBlocksView blocks={current.blocks} />}
 
-        {canSubmitFeedback && (
+        {canSubmitFeedback && mode === "view" && (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              className={`${uiClasses.button} sm:flex-[2]`}
+              onClick={() => setMode("executing")}
+            >
+              Iniciar treino
+            </button>
+            <button
+              type="button"
+              className={`${uiClasses.buttonSecondary} sm:flex-1`}
+              onClick={() => {
+                setInitialCompletion("COMPLETED");
+                setMode("feedback");
+              }}
+            >
+              Registrar feedback
+            </button>
+          </div>
+        )}
+
+        {canSubmitFeedback && mode === "executing" && (
+          <WorkoutExecution
+            blocks={current.blocks}
+            onFinish={(status) => {
+              setInitialCompletion(status);
+              setMode("feedback");
+            }}
+            onAbandon={() => {
+              setInitialCompletion("MISSED");
+              setMode("feedback");
+            }}
+          />
+        )}
+
+        {canSubmitFeedback && mode === "feedback" && (
           <div className="flex flex-col gap-2">
             <h2 className={uiClasses.subheading}>Como foi o treino?</h2>
             <WorkoutFeedbackForm
-              initialValues={emptyFeedbackForm()}
+              initialValues={{ ...emptyFeedbackForm(), completionStatus: initialCompletion }}
               submitLabel="Enviar feedback"
               submitting={submitting}
               error={error}

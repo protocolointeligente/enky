@@ -145,6 +145,9 @@ test("treinador prescreve, publica, atleta responde feedback, treinador revisa",
   });
 
   await test.step("atleta envia feedback e a carga de Session-RPE é calculada", async () => {
+    // 02F: o formulário de feedback fica atrás do fluxo de execução.
+    await page.getByRole("button", { name: "Registrar feedback" }).click();
+
     const durationInput = page.getByLabel("Duração real (min)");
     await expect(durationInput).toBeVisible();
     await durationInput.fill("30");
