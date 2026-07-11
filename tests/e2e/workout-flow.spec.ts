@@ -37,13 +37,16 @@ function uniqueEmail(prefix: string): string {
 
 function hashInvitationToken(token: string): string {
   const authSecret = process.env.AUTH_SECRET;
-  if (!authSecret) throw new Error("AUTH_SECRET não está definido no .env — necessário para o seed do E2E.");
+  if (!authSecret)
+    throw new Error("AUTH_SECRET não está definido no .env — necessário para o seed do E2E.");
   return createHmac("sha256", authSecret).update(token).digest("base64url");
 }
 
 test.describe.configure({ mode: "serial" });
 
-test("treinador prescreve, publica, atleta responde feedback, treinador revisa", async ({ page }) => {
+test("treinador prescreve, publica, atleta responde feedback, treinador revisa", async ({
+  page,
+}) => {
   const trainerEmail = uniqueEmail("e2e-trainer");
   const athleteEmail = uniqueEmail("e2e-athlete");
 
@@ -62,7 +65,11 @@ test("treinador prescreve, publica, atleta responde feedback, treinador revisa",
 
   const athleteProfile = await prisma.athleteProfile.create({ data: {} });
   await prisma.coachAthleteRelationship.create({
-    data: { organizationId: organization.id, trainerId: trainerProfile.id, athleteId: athleteProfile.id },
+    data: {
+      organizationId: organization.id,
+      trainerId: trainerProfile.id,
+      athleteId: athleteProfile.id,
+    },
   });
 
   const rawToken = randomBytes(32).toString("base64url");
@@ -89,7 +96,7 @@ test("treinador prescreve, publica, atleta responde feedback, treinador revisa",
     await page.getByRole("button", { name: "Entrar" }).click();
     await expect(page).toHaveURL(/\/treinador$/);
 
-    await page.getByRole("link", { name: "+ Novo treino" }).click();
+    await page.getByRole("link", { name: "Criar treino" }).click();
     await expect(page).toHaveURL(/\/treinador\/treinos\/novo$/);
 
     await page.locator("#athleteId").selectOption(invitation.athleteProfileId);
@@ -104,12 +111,18 @@ test("treinador prescreve, publica, atleta responde feedback, treinador revisa",
     await expect(page).toHaveURL(/\/treinador\/treinos\/[0-9a-f-]{36}$/);
     workoutId = page.url().split("/").pop() as string;
 
-    await expect(page.getByText("DRAFT")).toBeVisible();
+    await expect(page.getByText("Rascunho")).toBeVisible();
   });
 
-  await test.step("treinador publica o treino", async () => {
+  await test.step("treinador revisa e publica o treino", async () => {
+    // Novo fluxo 02E: Revisar e publicar -> tela de revisão -> modal de confirmação.
+    await page.getByRole("button", { name: "Revisar e publicar" }).click();
+    await expect(page.getByText("Revisão antes de publicar")).toBeVisible();
+    // Botão da tela de revisão abre o modal de confirmação.
     await page.getByRole("button", { name: "Publicar treino" }).click();
-    await expect(page.getByText("PUBLISHED")).toBeVisible();
+    // Botão de confirmação dentro do modal (dialog) efetiva a publicação.
+    await page.getByRole("dialog").getByRole("button", { name: "Publicar treino" }).click();
+    await expect(page.getByText("Publicado")).toBeVisible();
   });
 
   await test.step("atleta ativa o convite e vê o treino publicado", async () => {
@@ -137,10 +150,15 @@ test("treinador prescreve, publica, atleta responde feedback, treinador revisa",
     await page.getByLabel("RPE da sessão (1-10)").fill("6");
 
     const [response] = await Promise.all([
-      page.waitForResponse((res) => res.url().includes("/feedback") && res.request().method() === "POST"),
+      page.waitForResponse(
+        (res) => res.url().includes("/feedback") && res.request().method() === "POST",
+      ),
       page.getByRole("button", { name: "Enviar feedback" }).click(),
     ]);
-    expect(response.ok(), `POST /feedback returned ${response.status()}: ${await response.text()}`).toBe(true);
+    expect(
+      response.ok(),
+      `POST /feedback returned ${response.status()}: ${await response.text()}`,
+    ).toBe(true);
 
     await expect(page.getByText("Seu feedback")).toBeVisible();
     await expect(page.getByText(/180.*COMPLETE/)).toBeVisible();
@@ -159,8 +177,8 @@ test("treinador prescreve, publica, atleta responde feedback, treinador revisa",
     await expect(page).toHaveURL(/\/treinador$/);
 
     await page.goto(`/treinador/treinos/${workoutId}`);
-    await expect(page.getByText("COMPLETED")).toBeVisible();
-    await expect(page.getByText(/180.*COMPLETE/)).toBeVisible();
+    await expect(page.getByText("Concluído")).toBeVisible();
+    await expect(page.getByText(/180.*Completo/)).toBeVisible();
   });
 
   await test.step("limpeza", async () => {
