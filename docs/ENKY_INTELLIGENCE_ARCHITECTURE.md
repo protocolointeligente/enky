@@ -192,14 +192,17 @@ a hipótese sem esperar tudo).
 
 ---
 
-## 11. Decisões arquiteturais abertas (para sua aprovação)
+## 11. Decisões arquiteturais (aprovadas)
 
-1. **Reabrir F2?** Criar tabela `Insight`/`Recommendation` persistida (recomendado a partir da Fase II)
-   ou manter recomendações em `Workout`/`Report` no MVP? *(Recomendação: manter na Fase I, criar na II.)*
-2. **Onde roda o lote?** Cron serverless (Vercel Cron) por organização vs. processamento sob demanda.
-   *(Recomendação: on-demand na Fase I; cron na II.)*
-3. **LLM vs regras puras no MVP?** *(Recomendação: regras decidem, LLM só verbaliza — barato, auditável, sem caixa-preta.)*
-4. **`MetricSample` já na Fase I** ou só quando entrar wearable? *(Recomendação: só na Fase III.)*
+1. **Persistência na Fase I:** ✅ **Reusar `Workout`/`Report`** (recomendações vivem em
+   `generationRationale`/`confidenceLevel`/`Report`) — **sem migration**. A tabela `Insight`
+   dedicada (reabertura da F2) entra só na **Fase II**.
+2. **Motor:** ✅ **Regras determinísticas decidem; o LLM apenas verbaliza** a saída com prudência —
+   auditável, barato, sem caixa-preta (alinhado ao limite inviolável 2 do ENKY 11).
+3. **Estreia no produto:** ✅ **Fase I estreia em 02G**, após o 02F fechar a qualidade do dado
+   "realizado" (feedback). Ver [ENKY_MVP_INTELLIGENCE_REVISION.md](./ENKY_MVP_INTELLIGENCE_REVISION.md) §6.
+4. **Execução do lote:** on-demand na Fase I; cron por organização a partir da Fase II.
+5. **`MetricSample`:** só na **Fase III** (entrada de wearables).
 
 ---
 
