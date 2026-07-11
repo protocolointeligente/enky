@@ -17,6 +17,15 @@
 - `get-trainer-workout.ts` — `getTrainerWorkout()` / `listTrainerAthleteWorkouts()`. Sempre filtra por `organizationId` + `trainerId`; acesso cross-tenant retorna `NotFoundError` (nunca `AuthorizationError`, para não confirmar existência).
 - `get-athlete-workout.ts` — `getAthleteWorkout()` / `listAthleteWorkouts()`. `ATHLETE_VISIBLE_STATUSES` exclui `DRAFT`/`IN_PROGRESS`; usa `select` explícito (nunca `include`) para não vazar campos internos de geração/algoritmo ao atleta.
 
-**Regra crítica (Constitution + Product Spec §13):** nunca criar treino sem `athleteId` e `trainerId`; nenhum treino gerado nasce publicado — confirmado pelos testes de integração da Fase 02C.
+**Fase 02D.2 — calendário, agendamento e duplicação (reutilizam o mesmo schema/guards):**
+- `workout-visibility.ts` — `ATHLETE_VISIBLE_STATUSES` / `isAthleteVisibleStatus`. Fonte única de visibilidade do atleta, compartilhada por `get-athlete-workout.ts` e pelo calendário.
+- `list-calendar-workouts.ts` — `listTrainerCalendarWorkouts()` / `listAthleteCalendarWorkouts()`. Retornam _cards_ leves (sem árvore de blocos) no período; treinador filtra por atleta/modalidade/status dentro de `organizationId`+`trainerId`; atleta vê só os próprios, com status intersectado com `ATHLETE_VISIBLE_STATUSES`.
+- `move-workout.ts` — `moveWorkout()`. Só move `DRAFT`/`PUBLISHED` sem feedback (`MOVABLE_STATUSES`); desloca `plannedStartAt`/`plannedEndAt` pelo delta de dias preservando o horário; transição condicional via `updateMany({where:{status}})`; `AuditLog(MOVE_WORKOUT)`.
+- `duplicate-workout.ts` — `duplicateWorkout()`. Copia título/descrição/modalidade/blocos para um novo `Workout` `DRAFT`/`MANUAL`; **nunca** copia feedback/Session-RPE/status/timestamps; exige `requireTrainerAccessToAthlete` no atleta-alvo; `AuditLog(DUPLICATE_WORKOUT)` com `reason: duplicated_from:<id>`.
+- `change-workout-status.ts` — `cancelWorkout()` (só `DRAFT`/`PUBLISHED` sem feedback → `CANCELLED`) e `archiveWorkout()` (qualquer status ≠ `ARCHIVED` → `ARCHIVED`). Transição condicional + `AuditLog(CANCEL_WORKOUT|ARCHIVE_WORKOUT)`.
+- `workout-content.ts` — `workoutContentInclude` + `workoutBlocksToInput()`: converte blocos persistidos de volta ao `WorkoutBlockInput[]` canônico (Decimal→number). Ponte reutilizada por duplicação e por "salvar como template".
+- `schedule-schema.ts` — schemas Zod de `move`/`duplicate` e `parseCalendarRange` (janela máx. 92 dias) / `parseModalityParam` / `parseStatusParam`.
 
-**Fora de escopo nesta fase (ver relatório final):** periodização automática, marketplace, geração algorítmica, `WorkoutTemplate` (clonagem) e `CalendarEvent`.
+**Regra crítica (Constitution + Product Spec §13):** nunca criar treino sem `athleteId` e `trainerId`; nenhum treino gerado nasce publicado — confirmado pelos testes de integração das Fases 02C e 02D.2.
+
+**Fora de escopo nesta fase (ver relatório final):** periodização automática, marketplace, geração algorítmica e `CalendarEvent` (eventos não-treino). Biblioteca de exercícios e `WorkoutTemplate` passaram a ser implementados em `modules/exercises` e `modules/templates`.
