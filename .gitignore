@@ -56,3 +56,6 @@ logs/
 # prisma
 prisma/*.db
 prisma/*.db-journal
+
+# claude code local session/agent files
+.claude/

@@ -22,6 +22,9 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:format": "prisma format",
+    "seed:dev": "node scripts/seed.cjs dev",
+    "seed:test": "node scripts/seed.cjs test",
+    "seed:preview": "node scripts/seed.cjs preview",
     "postinstall": "prisma generate",
     "validate": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
