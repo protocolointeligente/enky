@@ -10,6 +10,7 @@ import { useRequireRole } from "@/app/_lib/use-session";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
+import { InsightCard, type Insight } from "@/components/insight-card";
 import {
   CalendarIcon,
   CheckIcon,
@@ -73,6 +74,7 @@ export default function TrainerDashboardPage() {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [agenda, setAgenda] = useState<AgendaCard[]>([]);
   const [workouts, setWorkouts] = useState<WorkoutItem[]>([]);
+  const [insights, setInsights] = useState<Insight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,6 +95,11 @@ export default function TrainerDashboardPage() {
       })
       .catch((err) => setError(err instanceof ApiClientError ? err.message : "Erro inesperado."))
       .finally(() => setLoading(false));
+
+    // ENKY Intelligence — atenção da carteira (falha em silêncio; nunca quebra o painel).
+    apiFetch<{ insights: Insight[] }>("/api/trainer/intelligence/attention")
+      .then((r) => setInsights(r.insights))
+      .catch(() => undefined);
   }, [checked, todayIso]);
 
   const activeAthletes = roster.filter((entry) => entry.status === "ACTIVE").length;
@@ -174,6 +181,21 @@ export default function TrainerDashboardPage() {
             tone="turq"
           />
         </section>
+
+        {/* Atenção — ENKY Intelligence */}
+        {insights.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <h2 className={uiClasses.subheading}>Precisam de atenção</h2>
+              <span className="text-xs text-faint">análise da ENKY Intelligence</span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {insights.map((insight) => (
+                <InsightCard key={`${insight.athleteId}-${insight.engine}`} insight={insight} />
+              ))}
+            </div>
+          </section>
+        )}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           {/* Agenda */}

@@ -6,4 +6,9 @@
 
 **Achado F2 resolvido na Fase 01.5:** `AIRecommendation` e `AthleteInsight` foram substituídas — a recomendação vive em `Workout.generationRationale`/`confidenceLevel` e em `Report`, sem tabela própria de IA no MVP. Ver `enky_os_specification.md` §12.
 
-**Status:** fundação apenas. Este módulo só deve ganhar código a partir da Fase 5 do roadmap (ENKY 23 §19), depois que os módulos anteriores estiverem gerando dados reais.
+**Status (02G — Fase I):** motor de **atenção** implementado (`attention.ts`). Regras determinísticas sobre os dados que já existem (workouts + feedback), sem migration e sem LLM — a decisão é feita por regras e a verbalização é por template prudente. Estreia no dashboard do treinador via `InsightCard`. Ver `docs/ENKY_DECISION_ENGINE.md` (a mente) e `docs/ENKY_INTELLIGENCE_ARCHITECTURE.md`.
+
+- `attention.ts` — `analyzeRosterAttention(actor, now)` varre a carteira (escopo org+treinador) e devolve, por atleta que precisa de atenção, um `Insight` (formato de 6 partes) do sinal de maior prioridade: dor (urgente, sobrepõe tudo) → treinos perdidos → RPE alto → aderência baixa → retorno pendente. `evaluate(bucket)` é a função pura das regras (testada em `tests/unit`).
+- **Nunca** diagnostica, **nunca** age sozinha; confiança escala com a quantidade de dados.
+
+Fases seguintes (ver roadmap): recuperação/carga (ACWR, prontidão) na Fase II, com a tabela `Insight` dedicada e questionários; integrações wearable na Fase III.
