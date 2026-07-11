@@ -81,8 +81,11 @@ export default function LoginPage() {
           <button type="submit" className={uiClasses.button} disabled={submitting}>
             {submitting ? "Entrando..." : "Entrar"}
           </button>
+          <Link href="/recuperar-senha" className={`${uiClasses.link} text-center text-sm`}>
+            Esqueci minha senha
+          </Link>
         </form>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           Ainda não tem conta de treinador?{" "}
           <Link href="/registrar" className={uiClasses.link}>
             Cadastre-se
