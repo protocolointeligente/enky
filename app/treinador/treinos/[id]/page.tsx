@@ -11,6 +11,7 @@ import { useRequireRole } from "@/app/_lib/use-session";
 import { StatusBadge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { WorkoutBlocksView, type BlockView } from "@/components/workout-blocks-view";
+import { InsightCard, type Insight } from "@/components/insight-card";
 
 interface FeedbackView {
   id: string;
@@ -74,10 +75,21 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [templateTitle, setTemplateTitle] = useState("");
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [insight, setInsight] = useState<Insight | null>(null);
+
+  function loadInsight() {
+    // ENKY Intelligence — interpreta o feedback (falha em silêncio).
+    apiFetch<{ insight: Insight | null }>(`/api/trainer/workouts/${id}/insight`)
+      .then((r) => setInsight(r.insight))
+      .catch(() => undefined);
+  }
 
   function reload() {
-    return apiFetch<{ workout: WorkoutDetailView }>(`/api/trainer/workouts/${id}`).then((result) =>
-      setWorkout(result.workout),
+    return apiFetch<{ workout: WorkoutDetailView }>(`/api/trainer/workouts/${id}`).then(
+      (result) => {
+        setWorkout(result.workout);
+        if (result.workout.feedback) loadInsight();
+      },
     );
   }
 
@@ -92,6 +104,7 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
       .then(([workoutResult, athletesResult]) => {
         setWorkout(workoutResult.workout);
         setAthletes(athletesResult.athletes);
+        if (workoutResult.workout.feedback) loadInsight();
         if (searchParams.get("revisar") === "1" && workoutResult.workout.status === "DRAFT") {
           setReviewing(true);
         }
@@ -268,6 +281,8 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
         </div>
 
         <WorkoutBlocksView blocks={current.blocks} />
+
+        {current.feedback && insight && <InsightCard insight={insight} />}
 
         <div className={`${uiClasses.card} flex flex-col gap-2`}>
           <h3 className={uiClasses.subheading}>Feedback do atleta</h3>

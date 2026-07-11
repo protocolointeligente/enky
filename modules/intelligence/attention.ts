@@ -1,4 +1,5 @@
 import { prisma } from "@/infrastructure/database/prisma";
+import type { Insight, InsightConfidence, InsightRisk } from "./insight";
 
 // ENKY Intelligence — Fase I, motor de ATENÇÃO.
 //
@@ -7,28 +8,6 @@ import { prisma } from "@/infrastructure/database/prisma";
 // migration, sem LLM: a verbalização é por template prudente. Cada Insight
 // segue o formato de 6 partes (observação, interpretação, dados usados,
 // confiança, limitações, ação) e NUNCA diagnostica (ENKY 11, Regras de Saúde).
-
-export type InsightRisk = "atencao" | "revisar" | "urgente";
-export type InsightConfidence = "BAIXA" | "MEDIA" | "ALTA";
-
-export interface InsightEvidence {
-  label: string;
-  value: string;
-}
-
-export interface Insight {
-  athleteId: string;
-  athleteName: string | null;
-  engine: string;
-  risk: InsightRisk;
-  observacao: string;
-  interpretacao: string;
-  acoesSugeridas: string[];
-  confianca: InsightConfidence;
-  limitacoes: string;
-  dadosUsados: InsightEvidence[];
-  regras: string[];
-}
 
 export interface IntelligenceActor {
   organizationId: string;
@@ -39,7 +18,12 @@ const WINDOW_DAYS = 28;
 const PAIN_THRESHOLD = 4; // dor moderada ou mais
 const HIGH_RPE = 9; // percepção de esforço muito alta
 const REVIEW_STATUSES = new Set(["COMPLETED", "PARTIAL", "MISSED"]);
-const RISK_ORDER: Record<InsightRisk, number> = { urgente: 3, revisar: 2, atencao: 1 };
+const RISK_ORDER: Record<InsightRisk, number> = {
+  urgente: 3,
+  revisar: 2,
+  atencao: 1,
+  positivo: 0,
+};
 
 // Confiança escala com a quantidade de dados na janela — dados escassos nunca
 // viram certeza (limite inviolável 2 do ENKY 11).

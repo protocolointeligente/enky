@@ -2,28 +2,18 @@
 
 import { useState } from "react";
 import type { SVGProps } from "react";
+import type { Insight } from "@/modules/intelligence/insight";
 
 // A superfície única da ENKY Intelligence — aparece em qualquer tela que peça
 // análise. Não é um chatbot: é um cartão que já analisou e explica. Segue o
 // formato de 6 partes e mostra sempre o "por quê" (anti caixa-preta).
-export interface Insight {
-  athleteId: string;
-  athleteName: string | null;
-  engine: string;
-  risk: "atencao" | "revisar" | "urgente";
-  observacao: string;
-  interpretacao: string;
-  acoesSugeridas: string[];
-  confianca: "BAIXA" | "MEDIA" | "ALTA";
-  limitacoes: string;
-  dadosUsados: { label: string; value: string }[];
-  regras: string[];
-}
+export type { Insight };
 
 const RISK_META: Record<Insight["risk"], { label: string; chip: string; accent: string }> = {
   urgente: { label: "Urgente", chip: "bg-danger/15 text-danger", accent: "#e5484d" },
   revisar: { label: "Revisar", chip: "bg-orange/15 text-orange-hi", accent: "#ff6500" },
   atencao: { label: "Atenção", chip: "bg-electric/15 text-electric-hi", accent: "#0066ff" },
+  positivo: { label: "Boa execução", chip: "bg-turq/15 text-turq", accent: "#00d6c3" },
 };
 
 const CONFIDENCE_META: Record<Insight["confianca"], { label: string; cls: string }> = {
