@@ -45,4 +45,28 @@ describe("server/security/csrf", () => {
     process.env.VERCEL_URL = "enky-git-feat-abc123.vercel.app";
     expect(() => assertTrustedOrigin(makeRequest({ origin: "https://evil.example" }))).toThrow();
   });
+
+  it("allows a same-origin request on ANY deployment domain (Origin host == X-Forwarded-Host)", () => {
+    // The production alias / custom domain is not APP_URL nor VERCEL_URL, but a
+    // request whose Origin host matches the host it connected to is same-origin.
+    expect(() =>
+      assertTrustedOrigin(
+        makeRequest({
+          origin: "https://app.enky.com.br",
+          "x-forwarded-host": "app.enky.com.br",
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  it("rejects a cross-site request even when the target Host is present", () => {
+    expect(() =>
+      assertTrustedOrigin(
+        makeRequest({
+          origin: "https://evil.example",
+          "x-forwarded-host": "app.enky.com.br",
+        }),
+      ),
+    ).toThrow();
+  });
 });

@@ -14,26 +14,42 @@ function extractOrigin(headerValue: string | null): string | null {
   }
 }
 
-// Vercel Preview Deployments each get a unique, unpredictable URL
-// (exposed to the running deployment as VERCEL_URL) — APP_URL alone can
-// only ever point at one fixed domain (production), so a preview's own
-// same-origin requests would otherwise fail this check. VERCEL_URL is
-// only ever set by Vercel itself, never user-controlled, so trusting it
-// doesn't weaken the check.
+// Explicitly-trusted origins for the rare cross-origin case: local dev APP_URL
+// and the Vercel-injected deployment/production URLs (never user-controlled).
 function getTrustedOrigins(): string[] {
   const origins = [new URL(env.APP_URL).origin];
-  if (process.env.VERCEL_URL) {
-    origins.push(`https://${process.env.VERCEL_URL}`);
+  if (process.env.VERCEL_URL) origins.push(`https://${process.env.VERCEL_URL}`);
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    origins.push(`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`);
   }
+  if (process.env.VERCEL_BRANCH_URL) origins.push(`https://${process.env.VERCEL_BRANCH_URL}`);
   return origins;
 }
 
 export function assertTrustedOrigin(request: Request): void {
-  const trustedOrigins = getTrustedOrigins();
   const requestOrigin =
     extractOrigin(request.headers.get("origin")) ?? extractOrigin(request.headers.get("referer"));
-
-  if (!requestOrigin || !trustedOrigins.includes(requestOrigin)) {
+  if (!requestOrigin) {
     throw new AuthorizationError("Origem da requisição não confiável.");
   }
+
+  // Primary check: the request is same-origin when the Origin/Referer host
+  // matches the host the browser actually connected to (Host / X-Forwarded-Host).
+  // This is robust across ANY deployment domain — production alias, preview
+  // alias, or custom domain — without enumerating URLs, and a cross-site
+  // request always carries the attacker's Origin against the target's Host.
+  let originHost: string;
+  try {
+    originHost = new URL(requestOrigin).host;
+  } catch {
+    throw new AuthorizationError("Origem da requisição não confiável.");
+  }
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = request.headers.get("host");
+  if (originHost === forwardedHost || originHost === host) return;
+
+  // Fallback: explicitly trusted origins (dev / Vercel env URLs).
+  if (getTrustedOrigins().includes(requestOrigin)) return;
+
+  throw new AuthorizationError("Origem da requisição não confiável.");
 }
