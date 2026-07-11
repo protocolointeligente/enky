@@ -204,14 +204,15 @@ export function evaluate(b: AthleteBucket): Insight | null {
         ...base,
         risk: "revisar",
         observacao: acwrHigh
-          ? `Carga aguda ${Math.round((s.acwr! - 1) * 100)}% acima da crônica (ACWR ${s.acwr!.toFixed(2)}).`
-          : `Aumento rápido de carga: +${Math.round(s.rampPct! * 100)}% na semana.`,
+          ? `A carga aguda está ${Math.round((s.acwr! - 1) * 100)}% acima da carga crônica recente deste atleta (ACWR ${s.acwr!.toFixed(2)}).`
+          : `A carga subiu rápido: +${Math.round(s.rampPct! * 100)}% em relação à semana anterior.`,
         interpretacao:
-          "Um salto agudo de carga em relação à base pode elevar o risco de má adaptação e fadiga.",
+          "Sinal de contexto: a carga recente saltou em relação ao padrão deste atleta. Não é, isoladamente, previsão de lesão — vale revisar antes de manter a progressão planejada.",
         acoesSugeridas: [
-          "Considere reduzir volume/intensidade da próxima sessão intensa e confirmar recuperação.",
+          "Revise o contexto (sono, recuperação, agenda) antes de manter a progressão planejada.",
         ],
-        limitacoes: "ACWR é correlação, não causalidade; sem HRV/sono para confirmar fadiga.",
+        limitacoes:
+          "ACWR, ramp, monotonia e strain são sinais de contexto, não diagnóstico nem previsão isolada de lesão. Sem HRV/sono para confirmar fadiga.",
         dadosUsados: [
           ...(s.acwr != null ? [{ label: "ACWR", value: s.acwr.toFixed(2) }] : []),
           ...(s.rampPct != null
