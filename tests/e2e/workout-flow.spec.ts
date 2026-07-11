@@ -140,7 +140,8 @@ test("treinador prescreve, publica, atleta responde feedback, treinador revisa",
     await expect(page.getByText("Rodagem E2E — 10km")).toBeVisible();
     await page.getByText("Rodagem E2E — 10km").click();
     await expect(page).toHaveURL(new RegExp(`/atleta/treinos/${workoutId}$`));
-    await expect(page.getByText("RODAGEM — 1800s")).toBeVisible();
+    // WorkoutBlocksView renders the step as "Rodagem · 1800s" (PT label).
+    await expect(page.getByText(/Rodagem.*1800s/)).toBeVisible();
   });
 
   await test.step("atleta envia feedback e a carga de Session-RPE é calculada", async () => {

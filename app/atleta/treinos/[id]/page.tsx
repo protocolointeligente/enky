@@ -3,36 +3,19 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import { loadStatusLabel, modalityLabel } from "@/app/_lib/labels";
+import { modalityMeta } from "@/app/_lib/modality";
+import { toast } from "@/app/_lib/toast";
+import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
-import { statusBadgeClass, uiClasses } from "@/app/_lib/ui";
-import { buildFeedbackPayload, emptyFeedbackForm, FeedbackFormValues, WorkoutFeedbackForm } from "@/components/workout-feedback-form";
-
-interface WorkoutStepView {
-  id: string;
-  sequence: number;
-  stepType: string;
-  repetitions: number | null;
-  durationSeconds: number | null;
-  distanceMeters: number | null;
-}
-
-interface WorkoutExerciseView {
-  id: string;
-  sequence: number;
-  sets: number;
-  reps: number | null;
-  loadKg: string | null;
-  exercise: { name: string; category: string };
-}
-
-interface WorkoutBlockView {
-  id: string;
-  sequence: number;
-  name: string | null;
-  repetitions: number;
-  steps: WorkoutStepView[];
-  exercises: WorkoutExerciseView[];
-}
+import { StatusBadge } from "@/components/ui/badge";
+import { WorkoutBlocksView, type BlockView } from "@/components/workout-blocks-view";
+import {
+  buildFeedbackPayload,
+  emptyFeedbackForm,
+  FeedbackFormValues,
+  WorkoutFeedbackForm,
+} from "@/components/workout-feedback-form";
 
 interface FeedbackView {
   id: string;
@@ -57,8 +40,16 @@ interface WorkoutDetailView {
   modality: string;
   status: string;
   plannedDate: string;
-  blocks: WorkoutBlockView[];
+  blocks: BlockView[];
   feedback: FeedbackView | null;
+}
+
+function formatDate(iso: string): string {
+  return new Date(`${iso.slice(0, 10)}T00:00:00`).toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  });
 }
 
 export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -77,7 +68,9 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
 
   useEffect(() => {
     if (!checked) return;
-    reload().catch((err) => setError(err instanceof ApiClientError ? err.message : "Erro inesperado."));
+    reload().catch((err) =>
+      setError(err instanceof ApiClientError ? err.message : "Erro inesperado."),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checked, id]);
 
@@ -89,9 +82,12 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
         method: "POST",
         body: JSON.stringify(buildFeedbackPayload(values)),
       });
+      toast.success("Feedback enviado. Obrigado!");
       await reload();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Erro inesperado.");
+      const message = err instanceof ApiClientError ? err.message : "Erro inesperado.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -104,12 +100,18 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
     try {
       await apiFetch(`/api/athlete/workouts/${id}/feedback`, {
         method: "PATCH",
-        body: JSON.stringify({ ...buildFeedbackPayload(values), knownUpdatedAt: workout.feedback.updatedAt }),
+        body: JSON.stringify({
+          ...buildFeedbackPayload(values),
+          knownUpdatedAt: workout.feedback.updatedAt,
+        }),
       });
+      toast.success("Feedback atualizado.");
       setEditingFeedback(false);
       await reload();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Erro inesperado.");
+      const message = err instanceof ApiClientError ? err.message : "Erro inesperado.";
+      setError(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -118,7 +120,7 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
   if (!checked || (!workout && !error)) {
     return (
       <main className={uiClasses.page}>
-        <p className="text-slate-400">Carregando...</p>
+        <p className="text-muted">Carregando...</p>
       </main>
     );
   }
@@ -126,94 +128,88 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
   if (error && !workout) {
     return (
       <main className={uiClasses.page}>
-        <p className={uiClasses.error}>{error}</p>
+        <div className={uiClasses.container}>
+          <Link href="/atleta" className={uiClasses.link}>
+            ← Meus treinos
+          </Link>
+          <p className={uiClasses.error}>{error}</p>
+        </div>
       </main>
     );
   }
 
   const current = workout as WorkoutDetailView;
-  const canSubmitFeedback = !current.feedback && (current.status === "PUBLISHED" || current.status === "IN_PROGRESS");
+  const meta = modalityMeta(current.modality);
+  const canSubmitFeedback =
+    !current.feedback && (current.status === "PUBLISHED" || current.status === "IN_PROGRESS");
 
   return (
     <main className={uiClasses.page}>
       <div className={uiClasses.container}>
         <Link href="/atleta" className={uiClasses.link}>
-          ← Voltar
+          ← Meus treinos
         </Link>
 
-        <div className={`${uiClasses.card} flex flex-col gap-2`}>
-          <div className="flex items-center justify-between">
-            <h1 className={uiClasses.heading}>{current.title}</h1>
-            <span className={`${uiClasses.badge} ${statusBadgeClass[current.status] ?? ""}`}>{current.status}</span>
+        <div
+          className={`${uiClasses.card} flex flex-col gap-2`}
+          style={{ borderLeft: `4px solid ${meta.accent}` }}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <span
+              className="flex items-center gap-2 text-sm font-medium"
+              style={{ color: meta.accent }}
+            >
+              {meta.icon}
+              {modalityLabel(current.modality)}
+            </span>
+            <StatusBadge status={current.status} />
           </div>
-          <p className="text-sm text-slate-400">
-            {current.modality} — {current.plannedDate.slice(0, 10)}
-          </p>
-          {current.description && <p className="text-sm text-slate-300">{current.description}</p>}
+          <h1 className={uiClasses.heading}>{current.title}</h1>
+          <p className="text-sm capitalize text-muted">{formatDate(current.plannedDate)}</p>
+          {current.description && (
+            <p className="mt-1 rounded-lg bg-surface/60 p-3 text-sm text-muted">
+              {current.description}
+            </p>
+          )}
         </div>
 
-        <div className="flex flex-col gap-4">
-          {current.blocks.map((block) => (
-            <div key={block.id} className={`${uiClasses.card} flex flex-col gap-2`}>
-              <h3 className="font-semibold text-slate-100">
-                Bloco {block.sequence}
-                {block.name ? ` — ${block.name}` : ""} ({block.repetitions}x)
-              </h3>
-              {block.steps.length > 0 && (
-                <ul className="flex flex-col gap-1 text-sm text-slate-300">
-                  {block.steps.map((step) => (
-                    <li key={step.id}>
-                      {step.stepType}
-                      {step.repetitions ? ` × ${step.repetitions}` : ""}
-                      {step.durationSeconds ? ` — ${step.durationSeconds}s` : ""}
-                      {step.distanceMeters ? ` — ${step.distanceMeters}m` : ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {block.exercises.length > 0 && (
-                <ul className="flex flex-col gap-1 text-sm text-slate-300">
-                  {block.exercises.map((exercise) => (
-                    <li key={exercise.id}>
-                      {exercise.exercise.name} — {exercise.sets}x{exercise.reps ?? "-"}
-                      {exercise.loadKg ? ` @ ${exercise.loadKg}kg` : ""}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
-        </div>
+        <WorkoutBlocksView blocks={current.blocks} />
 
         {canSubmitFeedback && (
-          <WorkoutFeedbackForm
-            initialValues={emptyFeedbackForm()}
-            submitLabel="Enviar feedback"
-            submitting={submitting}
-            error={error}
-            onSubmit={handleSubmitFeedback}
-          />
+          <div className="flex flex-col gap-2">
+            <h2 className={uiClasses.subheading}>Como foi o treino?</h2>
+            <WorkoutFeedbackForm
+              initialValues={emptyFeedbackForm()}
+              submitLabel="Enviar feedback"
+              submitting={submitting}
+              error={error}
+              onSubmit={handleSubmitFeedback}
+            />
+          </div>
         )}
 
         {current.feedback && !editingFeedback && (
           <div className={`${uiClasses.card} flex flex-col gap-2`}>
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold text-slate-100">Seu feedback</h3>
-              <button className="text-sm text-[#00e6c3] hover:underline" onClick={() => setEditingFeedback(true)}>
+              <h3 className={uiClasses.subheading}>Seu feedback</h3>
+              <button className={uiClasses.link} onClick={() => setEditingFeedback(true)}>
                 Editar
               </button>
             </div>
-            <dl className="grid grid-cols-2 gap-2 text-sm text-slate-300">
-              <dt className="text-slate-500">Carga (Session-RPE)</dt>
-              <dd>
-                {current.feedback.sessionRpeLoad ?? "—"} ({current.feedback.loadStatus})
+            <dl className="grid grid-cols-2 gap-2 text-sm text-muted">
+              <dt className="text-faint">Carga (Session-RPE)</dt>
+              <dd className="text-ink">
+                {current.feedback.sessionRpeLoad ?? "—"}
+                {current.feedback.sessionRpeLoad
+                  ? ` · ${loadStatusLabel(current.feedback.loadStatus)}`
+                  : ""}
               </dd>
-              <dt className="text-slate-500">Duração real</dt>
-              <dd>{current.feedback.actualDurationMinutes ?? "—"} min</dd>
-              <dt className="text-slate-500">RPE da sessão</dt>
-              <dd>{current.feedback.sessionRpe ?? "—"}</dd>
-              <dt className="text-slate-500">Dor</dt>
-              <dd>{current.feedback.painLevel}</dd>
+              <dt className="text-faint">Duração real</dt>
+              <dd className="text-ink">{current.feedback.actualDurationMinutes ?? "—"} min</dd>
+              <dt className="text-faint">RPE da sessão</dt>
+              <dd className="text-ink">{current.feedback.sessionRpe ?? "—"}</dd>
+              <dt className="text-faint">Dor</dt>
+              <dd className="text-ink">{current.feedback.painLevel}</dd>
             </dl>
           </div>
         )}
@@ -222,11 +218,10 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
           <WorkoutFeedbackForm
             initialValues={{
               ...emptyFeedbackForm(),
-              // completionStatus isn't stored on WorkoutFeedback itself — it
-              // was folded into Workout.status by the original submission,
-              // so that's the closest source of truth when re-editing.
               completionStatus:
-                current.status === "COMPLETED" || current.status === "PARTIAL" || current.status === "MISSED"
+                current.status === "COMPLETED" ||
+                current.status === "PARTIAL" ||
+                current.status === "MISSED"
                   ? current.status
                   : "COMPLETED",
               actualDurationMinutes: current.feedback.actualDurationMinutes?.toString() ?? "",
