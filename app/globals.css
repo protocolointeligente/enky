@@ -1,11 +1,63 @@
 @import "tailwindcss";
 
+/*
+  ENKY design tokens (brand manual v1.0 §5–6). Azul-petróleo estrutura,
+  laranja ativa, azul elétrico informa dados/links, turquesa sinaliza sucesso.
+  Proporção-alvo: ~60% profundo/petróleo, 25% brancos/cinzas, 10% laranja,
+  5% azul elétrico/turquesa. Exposed as Tailwind v4 theme tokens so utilities
+  like bg-petrol / text-orange / border-line / font-display are available.
+*/
+@theme {
+  --color-deep: #04202b; /* azul profundo — fundo da página */
+  --color-petrol: #062a38; /* azul-petróleo — painéis e navegação */
+  --color-surface: #0a3546; /* superfície elevada (cards, inputs hover) */
+  --color-surface-2: #0e4157; /* superfície de destaque / hover */
+  --color-line: #16465b; /* divisórias discretas */
+  --color-line-strong: #1d5a74;
+
+  --color-ink: #f2f6f8; /* texto primário */
+  --color-muted: #a2b7c1; /* texto secundário */
+  --color-faint: #6f8b98; /* texto terciário / placeholder */
+
+  --color-orange: #ff6500; /* CTA / performance */
+  --color-orange-hi: #ff7d2e; /* hover do laranja */
+  --color-electric: #0066ff; /* dados / links */
+  --color-electric-hi: #3d86ff;
+  --color-turq: #00d6c3; /* sucesso / recuperação */
+  --color-danger: #e5484d; /* erro / risco (reservado) */
+  --color-cloud: #e6e8eb;
+
+  --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 }
 
 html,
 body {
   margin: 0;
   padding: 0;
+}
+
+body {
+  background-color: var(--color-deep);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Números tabulares para métricas e tabelas alinharem colunas. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

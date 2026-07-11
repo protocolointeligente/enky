@@ -139,7 +139,9 @@ export function WorkoutFeedbackForm({
               step="0.01"
               className={uiClasses.input}
               value={values.actualDistanceKm}
-              onChange={(event) => setValues((current) => ({ ...current, actualDistanceKm: event.target.value }))}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, actualDistanceKm: event.target.value }))
+              }
             />
           </div>
           <div>
@@ -153,7 +155,9 @@ export function WorkoutFeedbackForm({
               max={10}
               className={uiClasses.input}
               value={values.sessionRpe}
-              onChange={(event) => setValues((current) => ({ ...current, sessionRpe: event.target.value }))}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, sessionRpe: event.target.value }))
+              }
             />
           </div>
           <div>
@@ -167,7 +171,9 @@ export function WorkoutFeedbackForm({
               max={10}
               className={uiClasses.input}
               value={values.fatigueLevel}
-              onChange={(event) => setValues((current) => ({ ...current, fatigueLevel: event.target.value }))}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, fatigueLevel: event.target.value }))
+              }
             />
           </div>
           <div>
@@ -181,7 +187,9 @@ export function WorkoutFeedbackForm({
               max={10}
               className={uiClasses.input}
               value={values.recoveryLevel}
-              onChange={(event) => setValues((current) => ({ ...current, recoveryLevel: event.target.value }))}
+              onChange={(event) =>
+                setValues((current) => ({ ...current, recoveryLevel: event.target.value }))
+              }
             />
           </div>
         </div>
@@ -199,7 +207,9 @@ export function WorkoutFeedbackForm({
             max={10}
             className={uiClasses.input}
             value={values.painLevel}
-            onChange={(event) => setValues((current) => ({ ...current, painLevel: event.target.value }))}
+            onChange={(event) =>
+              setValues((current) => ({ ...current, painLevel: event.target.value }))
+            }
           />
         </div>
         <div>
@@ -210,7 +220,9 @@ export function WorkoutFeedbackForm({
             id="painRegion"
             className={uiClasses.input}
             value={values.painRegion}
-            onChange={(event) => setValues((current) => ({ ...current, painRegion: event.target.value }))}
+            onChange={(event) =>
+              setValues((current) => ({ ...current, painRegion: event.target.value }))
+            }
           />
         </div>
         <div>
@@ -221,7 +233,9 @@ export function WorkoutFeedbackForm({
             id="painLaterality"
             className={uiClasses.input}
             value={values.painLaterality}
-            onChange={(event) => setValues((current) => ({ ...current, painLaterality: event.target.value }))}
+            onChange={(event) =>
+              setValues((current) => ({ ...current, painLaterality: event.target.value }))
+            }
           />
         </div>
       </div>

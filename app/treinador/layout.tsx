@@ -1,4 +1,5 @@
 import { AppHeader } from "@/components/app-header";
+import { Toaster } from "@/app/_lib/toast";
 
 // Nav grows as Fase 02D sections land (Atletas, Calendário, Biblioteca).
 // Every link here must point at a real route so the header never offers a
@@ -16,6 +17,7 @@ export default function TrainerLayout({ children }: { children: React.ReactNode 
     <>
       <AppHeader home="/treinador" links={TRAINER_LINKS} />
       {children}
+      <Toaster />
     </>
   );
 }

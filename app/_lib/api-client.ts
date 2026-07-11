@@ -23,7 +23,10 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   const body = (await response.json()) as ApiEnvelope<T>;
 
   if (!response.ok || !body.ok) {
-    throw new ApiClientError(body.error?.message ?? "Erro inesperado.", body.error?.code ?? "UNKNOWN");
+    throw new ApiClientError(
+      body.error?.message ?? "Erro inesperado.",
+      body.error?.code ?? "UNKNOWN",
+    );
   }
 
   return body.data as T;

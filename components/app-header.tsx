@@ -32,23 +32,26 @@ export function AppHeader({ home, links }: { home: string; links: AppNavLink[] }
   }
 
   return (
-    <header className="border-b border-slate-800 bg-[#0a0f1c]">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-3">
-        <div className="flex items-center gap-6">
-          <Link
-            href={home}
-            className="bg-gradient-to-r from-[#00e6c3] to-[#0066ff] bg-clip-text text-lg font-extrabold tracking-tight text-transparent"
-          >
-            ENKY
+    <header className="sticky top-0 z-30 border-b border-line bg-petrol/95 backdrop-blur">
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-6">
+          <Link href={home} className="flex shrink-0 items-center gap-2" aria-label="ENKY — início">
+            <span className="h-5 w-1.5 rounded-full bg-orange" aria-hidden="true" />
+            <span className="font-display text-lg font-bold tracking-tight text-ink">ENKY</span>
           </Link>
-          <nav className="flex items-center gap-4">
+          <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
             {links.map((link) => {
-              const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
+              const active =
+                link.href === home
+                  ? pathname === home
+                  : pathname === link.href || pathname.startsWith(`${link.href}/`);
               return (
                 <Link
                   key={link.href}
                   href={link.href}
-                  className={`text-sm ${active ? "text-slate-100" : "text-slate-400 hover:text-slate-200"}`}
+                  className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active ? "bg-surface text-ink" : "text-muted hover:bg-surface/60 hover:text-ink"
+                  }`}
                 >
                   {link.label}
                 </Link>
@@ -60,7 +63,7 @@ export function AppHeader({ home, links }: { home: string; links: AppNavLink[] }
           type="button"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="rounded-lg border border-slate-700 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-50"
+          className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-50"
         >
           {loggingOut ? "Saindo..." : "Sair"}
         </button>
