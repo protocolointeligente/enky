@@ -5,7 +5,10 @@ import { AppHeader } from "@/components/app-header";
 // dead link.
 const TRAINER_LINKS = [
   { href: "/treinador", label: "Painel" },
+  { href: "/treinador/calendario", label: "Calendário" },
   { href: "/treinador/atletas", label: "Atletas" },
+  { href: "/treinador/exercicios", label: "Exercícios" },
+  { href: "/treinador/templates", label: "Templates" },
 ];
 
 export default function TrainerLayout({ children }: { children: React.ReactNode }) {
