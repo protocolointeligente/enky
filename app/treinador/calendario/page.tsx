@@ -15,17 +15,18 @@ import {
   WEEKDAY_LABELS,
   weekLabel,
 } from "@/app/_lib/calendar";
+import { modalityLabel, statusLabel } from "@/app/_lib/labels";
+import { MODALITY_ORDER, modalityMeta } from "@/app/_lib/modality";
+import { toast } from "@/app/_lib/toast";
+import { uiClasses } from "@/app/_lib/ui";
+import { useExerciseOptions } from "@/app/_lib/use-exercise-options";
 import { useRequireRole } from "@/app/_lib/use-session";
-import { statusBadgeClass, uiClasses } from "@/app/_lib/ui";
+import { StatusBadge } from "@/components/ui/badge";
+import { Modal } from "@/components/ui/modal";
+import { PlusIcon } from "@/components/ui/icons";
+import { PrescriptionModal } from "@/components/prescription-modal";
+import type { AthleteOption, TemplateOption } from "@/components/workout-prescription-form";
 
-const MODALITIES = [
-  "RUNNING",
-  "STRENGTH",
-  "FUNCTIONAL",
-  "CYCLING",
-  "SWIMMING",
-  "TRIATHLON",
-] as const;
 const FILTER_STATUSES = [
   "DRAFT",
   "PUBLISHED",
@@ -48,12 +49,6 @@ interface CalendarCard {
   hasFeedback: boolean;
 }
 
-interface AthleteOption {
-  athleteProfileId: string;
-  name: string | null;
-  email: string | null;
-}
-
 export default function TrainerCalendarPage() {
   const { checked } = useRequireRole("TRAINER");
   const [view, setView] = useState<"month" | "week">("month");
@@ -62,10 +57,13 @@ export default function TrainerCalendarPage() {
   const [modality, setModality] = useState("");
   const [status, setStatus] = useState("");
   const [athletes, setAthletes] = useState<AthleteOption[]>([]);
+  const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [cards, setCards] = useState<CalendarCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<CalendarCard | null>(null);
+  const [createDate, setCreateDate] = useState<string | null>(null);
+  const exerciseOptions = useExerciseOptions(checked);
 
   const days = useMemo(
     () => (view === "month" ? getMonthMatrix(anchor).flat() : getWeekDays(anchor)),
@@ -93,9 +91,15 @@ export default function TrainerCalendarPage() {
 
   useEffect(() => {
     if (!checked) return;
-    apiFetch<{ athletes: AthleteOption[] }>("/api/trainer/athletes")
-      .then((r) => setAthletes(r.athletes))
-      .catch(() => undefined);
+    Promise.all([
+      apiFetch<{ athletes: AthleteOption[] }>("/api/trainer/athletes"),
+      apiFetch<{ templates: TemplateOption[] }>("/api/trainer/templates").catch(() => ({
+        templates: [],
+      })),
+    ]).then(([a, t]) => {
+      setAthletes(a.athletes);
+      setTemplates(t.templates);
+    });
   }, [checked]);
 
   useEffect(() => {
@@ -123,23 +127,36 @@ export default function TrainerCalendarPage() {
   if (!checked) {
     return (
       <main className={uiClasses.page}>
-        <p className="text-slate-400">Carregando...</p>
+        <p className="text-muted">Carregando...</p>
       </main>
     );
   }
 
   return (
     <main className={uiClasses.page}>
-      <div className="mx-auto flex max-w-5xl flex-col gap-4">
+      <div className={uiClasses.wide}>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className={uiClasses.heading}>Calendário</h1>
-          <Link href="/treinador/treinos/novo" className={uiClasses.button}>
-            + Novo treino
-          </Link>
+          <div className="flex flex-col gap-0.5">
+            <span className={uiClasses.eyebrow}>Núcleo de prescrição</span>
+            <h1 className={uiClasses.heading}>Calendário</h1>
+          </div>
+          <button
+            type="button"
+            className={uiClasses.button}
+            onClick={() => setCreateDate(toISODate(new Date()))}
+          >
+            <PlusIcon />
+            Criar treino
+          </button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" className={uiClasses.buttonSecondary} onClick={() => step(-1)}>
+          <button
+            type="button"
+            className={uiClasses.buttonSecondary}
+            onClick={() => step(-1)}
+            aria-label="Anterior"
+          >
             ‹
           </button>
           <button
@@ -149,10 +166,15 @@ export default function TrainerCalendarPage() {
           >
             Hoje
           </button>
-          <button type="button" className={uiClasses.buttonSecondary} onClick={() => step(1)}>
+          <button
+            type="button"
+            className={uiClasses.buttonSecondary}
+            onClick={() => step(1)}
+            aria-label="Próximo"
+          >
             ›
           </button>
-          <span className="ml-1 font-medium capitalize text-slate-200">
+          <span className="ml-1 font-display font-semibold capitalize text-ink">
             {view === "month" ? monthLabel(anchor) : weekLabel(anchor)}
           </span>
           <div className="ml-auto flex gap-1">
@@ -192,9 +214,9 @@ export default function TrainerCalendarPage() {
             onChange={(e) => setModality(e.target.value)}
           >
             <option value="">Todas as modalidades</option>
-            {MODALITIES.map((m) => (
+            {MODALITY_ORDER.map((m) => (
               <option key={m} value={m}>
-                {m}
+                {modalityLabel(m)}
               </option>
             ))}
           </select>
@@ -206,14 +228,14 @@ export default function TrainerCalendarPage() {
             <option value="">Todos os status</option>
             {FILTER_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {statusLabel(s)}
               </option>
             ))}
           </select>
         </div>
 
         {error && <p className={uiClasses.error}>{error}</p>}
-        {loading && <p className="text-sm text-slate-400">Carregando treinos...</p>}
+        {loading && <p className="text-sm text-muted">Carregando treinos...</p>}
 
         <div
           className={
@@ -222,7 +244,10 @@ export default function TrainerCalendarPage() {
         >
           {view === "month" &&
             WEEKDAY_LABELS.map((label) => (
-              <div key={label} className="py-1 text-center text-xs font-semibold text-slate-500">
+              <div
+                key={label}
+                className="py-1 text-center text-xs font-semibold uppercase tracking-wide text-faint"
+              >
                 {label}
               </div>
             ))}
@@ -233,30 +258,51 @@ export default function TrainerCalendarPage() {
             return (
               <div
                 key={iso}
-                className={`min-h-[92px] rounded-lg border p-1.5 ${
-                  isToday(day) ? "border-[#00e6c3]" : "border-slate-800"
+                className={`group flex min-h-[104px] flex-col rounded-lg border p-1.5 ${
+                  isToday(day) ? "border-electric bg-electric/5" : "border-line"
                 } ${muted ? "opacity-40" : ""}`}
               >
-                <div className="mb-1 text-xs text-slate-400">
-                  {view === "week"
-                    ? day.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })
-                    : day.getDate()}
+                <div className="mb-1 flex items-center justify-between">
+                  <span
+                    className={`text-xs font-semibold ${isToday(day) ? "text-electric-hi" : "text-muted"}`}
+                  >
+                    {view === "week"
+                      ? day.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })
+                      : day.getDate()}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Criar treino em ${iso}`}
+                    onClick={() => setCreateDate(iso)}
+                    className="rounded p-0.5 text-faint opacity-0 transition hover:bg-surface hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    <PlusIcon width={14} height={14} />
+                  </button>
                 </div>
-                <div className="flex flex-col gap-1">
-                  {dayCards.map((card) => (
-                    <button
-                      key={card.id}
-                      type="button"
-                      onClick={() => setSelected(card)}
-                      className="w-full truncate rounded bg-slate-800/70 px-1.5 py-1 text-left text-xs text-slate-100 hover:bg-slate-700"
-                      title={`${card.title} — ${card.athleteName ?? ""}`}
-                    >
-                      <span
-                        className={`mr-1 inline-block h-2 w-2 rounded-full ${statusBadgeClass[card.status] ?? ""}`}
-                      />
-                      {card.title}
-                    </button>
-                  ))}
+                <div className="flex flex-1 flex-col gap-1">
+                  {dayCards.map((card) => {
+                    const meta = modalityMeta(card.modality);
+                    const dim = card.status === "CANCELLED" || card.status === "ARCHIVED";
+                    return (
+                      <button
+                        key={card.id}
+                        type="button"
+                        onClick={() => setSelected(card)}
+                        style={{ borderLeftColor: meta.accent }}
+                        className={`flex w-full items-center gap-1 rounded border-l-2 bg-surface px-1.5 py-1 text-left transition-colors hover:bg-surface-2 ${
+                          dim ? "opacity-50" : ""
+                        }`}
+                        title={`${card.title} — ${card.athleteName ?? ""} · ${statusLabel(card.status)}`}
+                      >
+                        <span className="shrink-0" style={{ color: meta.accent }}>
+                          {meta.icon}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-xs text-ink">
+                          {card.title}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -264,31 +310,50 @@ export default function TrainerCalendarPage() {
         </div>
       </div>
 
-      {selected && (
-        <WorkoutActionPanel
-          card={selected}
-          athletes={athletes}
-          onClose={() => setSelected(null)}
-          onChanged={async () => {
-            setSelected(null);
-            await load();
-          }}
-        />
-      )}
+      <PrescriptionModal
+        open={createDate !== null}
+        onClose={() => setCreateDate(null)}
+        athletes={athletes}
+        exerciseOptions={exerciseOptions}
+        templates={templates}
+        initialDate={createDate ?? undefined}
+        initialAthleteId={athleteId || undefined}
+        onCreated={load}
+      />
+
+      <Modal
+        open={selected !== null}
+        onClose={() => setSelected(null)}
+        title={selected?.title ?? ""}
+        description={
+          selected
+            ? `${selected.athleteName ?? "—"} · ${modalityLabel(selected.modality)} · ${selected.plannedDate}`
+            : undefined
+        }
+      >
+        {selected && (
+          <WorkoutActions
+            card={selected}
+            athletes={athletes}
+            onDone={async () => {
+              setSelected(null);
+              await load();
+            }}
+          />
+        )}
+      </Modal>
     </main>
   );
 }
 
-function WorkoutActionPanel({
+function WorkoutActions({
   card,
   athletes,
-  onClose,
-  onChanged,
+  onDone,
 }: {
   card: CalendarCard;
   athletes: AthleteOption[];
-  onClose: () => void;
-  onChanged: () => void | Promise<void>;
+  onDone: () => void | Promise<void>;
 }) {
   const [moveDate, setMoveDate] = useState(card.plannedDate);
   const [dupDate, setDupDate] = useState(card.plannedDate);
@@ -296,14 +361,17 @@ function WorkoutActionPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function run(fn: () => Promise<unknown>) {
+  async function run(fn: () => Promise<unknown>, successMessage: string) {
     setBusy(true);
     setError(null);
     try {
       await fn();
-      await onChanged();
+      toast.success(successMessage);
+      await onDone();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Erro inesperado.");
+      const message = err instanceof ApiClientError ? err.message : "Erro inesperado.";
+      setError(message);
+      toast.error(message);
       setBusy(false);
     }
   }
@@ -312,144 +380,130 @@ function WorkoutActionPanel({
   const canMove = (card.status === "DRAFT" || card.status === "PUBLISHED") && !card.hasFeedback;
 
   return (
-    <div
-      className="fixed inset-0 z-20 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div className={`${uiClasses.card} w-full max-w-md`} onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-start justify-between gap-2">
-          <div>
-            <p className="font-semibold text-slate-100">{card.title}</p>
-            <p className="text-xs text-slate-400">
-              {card.athleteName ?? "—"} · {card.modality} · {card.plannedDate}
-            </p>
-          </div>
-          <span className={`${uiClasses.badge} ${statusBadgeClass[card.status] ?? ""}`}>
-            {card.status}
-          </span>
-        </div>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <StatusBadge status={card.status} />
+      </div>
 
-        {error && <p className={`${uiClasses.error} mb-3`}>{error}</p>}
+      {error && <p className={uiClasses.error}>{error}</p>}
 
-        <div className="flex flex-col gap-3">
-          <Link href={`/treinador/treinos/${card.id}`} className={uiClasses.buttonSecondary}>
-            Abrir detalhes
-          </Link>
-
-          {isDraft && (
-            <div className="flex gap-2">
-              <Link
-                href={`/treinador/treinos/${card.id}/editar`}
-                className={`${uiClasses.buttonSecondary} flex-1 text-center`}
-              >
-                Editar
-              </Link>
-              <button
-                type="button"
-                className={`${uiClasses.button} flex-1`}
-                disabled={busy}
-                onClick={() =>
-                  run(() =>
-                    apiFetch(`/api/trainer/workouts/${card.id}/publish`, { method: "POST" }),
-                  )
-                }
-              >
-                Publicar
-              </button>
-            </div>
-          )}
-
-          {canMove && (
-            <div className="rounded-lg border border-slate-800 p-2">
-              <p className="mb-1 text-xs font-medium text-slate-400">Mover para</p>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  className={uiClasses.input}
-                  value={moveDate}
-                  onChange={(e) => setMoveDate(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className={uiClasses.buttonSecondary}
-                  disabled={busy}
-                  onClick={() =>
-                    run(() =>
-                      apiFetch(`/api/trainer/workouts/${card.id}/move`, {
-                        method: "POST",
-                        body: JSON.stringify({ plannedDate: moveDate }),
-                      }),
-                    )
-                  }
-                >
-                  Mover
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="rounded-lg border border-slate-800 p-2">
-            <p className="mb-1 text-xs font-medium text-slate-400">Duplicar como rascunho</p>
-            <div className="flex flex-col gap-2">
-              <select
-                className={uiClasses.select}
-                value={dupAthlete}
-                onChange={(e) => setDupAthlete(e.target.value)}
-              >
-                {athletes.map((a) => (
-                  <option key={a.athleteProfileId} value={a.athleteProfileId}>
-                    {a.name ?? a.email ?? a.athleteProfileId}
-                  </option>
-                ))}
-              </select>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  className={uiClasses.input}
-                  value={dupDate}
-                  onChange={(e) => setDupDate(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className={uiClasses.buttonSecondary}
-                  disabled={busy}
-                  onClick={() =>
-                    run(() =>
-                      apiFetch(`/api/trainer/workouts/${card.id}/duplicate`, {
-                        method: "POST",
-                        body: JSON.stringify({ plannedDate: dupDate, athleteId: dupAthlete }),
-                      }),
-                    )
-                  }
-                >
-                  Duplicar
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {canMove && (
+      <div className="flex flex-wrap gap-2">
+        <Link href={`/treinador/treinos/${card.id}`} className={uiClasses.buttonSecondary}>
+          Abrir detalhes
+        </Link>
+        {isDraft && (
+          <>
+            <Link
+              href={`/treinador/treinos/${card.id}/editar`}
+              className={uiClasses.buttonSecondary}
+            >
+              Editar
+            </Link>
             <button
               type="button"
-              className="text-sm text-red-400 hover:underline disabled:opacity-50"
+              className={uiClasses.button}
               disabled={busy}
               onClick={() =>
-                run(() => apiFetch(`/api/trainer/workouts/${card.id}/cancel`, { method: "POST" }))
+                run(
+                  () => apiFetch(`/api/trainer/workouts/${card.id}/publish`, { method: "POST" }),
+                  "Treino publicado.",
+                )
               }
             >
-              Cancelar treino
+              Publicar
             </button>
-          )}
+          </>
+        )}
+      </div>
 
-          <button
-            type="button"
-            className="text-sm text-slate-400 hover:text-slate-200"
-            onClick={onClose}
+      {canMove && (
+        <div className="rounded-lg border border-line p-3">
+          <p className={uiClasses.label}>Mover para</p>
+          <div className="flex gap-2">
+            <input
+              type="date"
+              className={uiClasses.input}
+              value={moveDate}
+              onChange={(e) => setMoveDate(e.target.value)}
+            />
+            <button
+              type="button"
+              className={uiClasses.buttonSecondary}
+              disabled={busy}
+              onClick={() =>
+                run(
+                  () =>
+                    apiFetch(`/api/trainer/workouts/${card.id}/move`, {
+                      method: "POST",
+                      body: JSON.stringify({ plannedDate: moveDate }),
+                    }),
+                  "Treino movido.",
+                )
+              }
+            >
+              Mover
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-lg border border-line p-3">
+        <p className={uiClasses.label}>Duplicar como rascunho</p>
+        <div className="flex flex-col gap-2">
+          <select
+            className={uiClasses.select}
+            value={dupAthlete}
+            onChange={(e) => setDupAthlete(e.target.value)}
           >
-            Fechar
-          </button>
+            {athletes.map((a) => (
+              <option key={a.athleteProfileId} value={a.athleteProfileId}>
+                {a.name ?? a.email ?? a.athleteProfileId}
+              </option>
+            ))}
+          </select>
+          <div className="flex gap-2">
+            <input
+              type="date"
+              className={uiClasses.input}
+              value={dupDate}
+              onChange={(e) => setDupDate(e.target.value)}
+            />
+            <button
+              type="button"
+              className={uiClasses.buttonSecondary}
+              disabled={busy}
+              onClick={() =>
+                run(
+                  () =>
+                    apiFetch(`/api/trainer/workouts/${card.id}/duplicate`, {
+                      method: "POST",
+                      body: JSON.stringify({ plannedDate: dupDate, athleteId: dupAthlete }),
+                    }),
+                  "Treino duplicado.",
+                )
+              }
+            >
+              Duplicar
+            </button>
+          </div>
         </div>
       </div>
+
+      {canMove && (
+        <button
+          type="button"
+          className={uiClasses.buttonDanger}
+          disabled={busy}
+          onClick={() =>
+            run(
+              () => apiFetch(`/api/trainer/workouts/${card.id}/cancel`, { method: "POST" }),
+              "Treino cancelado.",
+            )
+          }
+        >
+          Cancelar treino
+        </button>
+      )}
     </div>
   );
 }
