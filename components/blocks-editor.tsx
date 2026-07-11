@@ -1,11 +1,15 @@
 "use client";
 
+import { stepTypeLabel } from "@/app/_lib/labels";
 import { uiClasses } from "@/app/_lib/ui";
 
 // The single canonical block/step/exercise editor. Reused by the workout
 // prescription form AND the workout-template form so the two never drift.
 // Steps (running/cycling/swimming/triathlon) vs. exercises (strength/functional)
-// are chosen by modality, exactly as the prescription schema expects.
+// are chosen by modality, exactly as the prescription schema expects. Intensity
+// is modality-aware: pace/FC for running, power for cycling, load/RIR/RPE for
+// strength — all mapped onto the existing IntensityTargetType enum (no schema
+// change; VDOT resolves to pace, VO2 would need a new field / migration).
 
 export const MODALITIES = [
   "RUNNING",
@@ -25,11 +29,42 @@ const STEP_TYPES = [
   "PROGRESSIVO",
   "SUBIDA",
 ] as const;
-const TARGET_TYPES = ["PACE", "HEART_RATE_ZONE", "POWER", "CADENCE", "RPE"] as const;
+type TargetType = "PACE" | "HEART_RATE_ZONE" | "POWER" | "CADENCE" | "RPE";
 const STEP_MODALITIES = new Set<Modality>(["RUNNING", "CYCLING", "SWIMMING", "TRIATHLON"]);
+
+// Which intensity targets make sense per endurance modality, and the human
+// label + unit shown for the min/max range.
+const INTENSITY_BY_MODALITY: Record<Modality, TargetType[]> = {
+  RUNNING: ["PACE", "HEART_RATE_ZONE", "RPE"],
+  SWIMMING: ["PACE", "HEART_RATE_ZONE", "RPE"],
+  CYCLING: ["POWER", "HEART_RATE_ZONE", "CADENCE", "RPE"],
+  TRIATHLON: ["PACE", "POWER", "HEART_RATE_ZONE", "CADENCE", "RPE"],
+  STRENGTH: [],
+  FUNCTIONAL: [],
+};
+
+const INTENSITY_LABEL: Record<TargetType, string> = {
+  PACE: "Pace",
+  HEART_RATE_ZONE: "FC / zona",
+  POWER: "Potência",
+  CADENCE: "Cadência",
+  RPE: "RPE",
+};
+
+const INTENSITY_UNIT: Record<TargetType, string> = {
+  PACE: "min/km",
+  HEART_RATE_ZONE: "bpm",
+  POWER: "W",
+  CADENCE: "spm",
+  RPE: "1-10",
+};
 
 export function modalityUsesSteps(modality: Modality): boolean {
   return STEP_MODALITIES.has(modality);
+}
+
+function defaultTargetForModality(modality: Modality): TargetType | "" {
+  return INTENSITY_BY_MODALITY[modality][0] ?? "";
 }
 
 export interface StepFormState {
@@ -38,7 +73,7 @@ export interface StepFormState {
   repetitions: string;
   durationSeconds: string;
   distanceMeters: string;
-  targetType: (typeof TARGET_TYPES)[number] | "";
+  targetType: TargetType | "";
   targetMin: string;
   targetMax: string;
   recoverySeconds: string;
@@ -230,6 +265,9 @@ interface BlocksEditorProps {
   exerciseOptions?: ExerciseOption[];
 }
 
+const fieldLabel = "mb-1 block text-[11px] font-medium text-faint";
+const removeBtn = "text-xs font-medium text-danger hover:underline";
+
 export function BlocksEditor({
   blocks,
   modality,
@@ -237,6 +275,7 @@ export function BlocksEditor({
   exerciseOptions = [],
 }: BlocksEditorProps) {
   const usesSteps = modalityUsesSteps(modality);
+  const intensityOptions = INTENSITY_BY_MODALITY[modality];
   const optionByName = new Map(exerciseOptions.map((o) => [o.name.toLowerCase(), o]));
 
   function updateBlock(index: number, patch: Partial<BlockFormState>) {
@@ -248,7 +287,10 @@ export function BlocksEditor({
     return block;
   }
   function addStep(blockIndex: number) {
-    updateBlock(blockIndex, { steps: [...blockAt(blockIndex).steps, emptyStep()] });
+    // Seed the intensity target with the modality's primary metric so the
+    // trainer starts from pace (running/swim) or power (cycling) etc.
+    const step = { ...emptyStep(), targetType: defaultTargetForModality(modality) };
+    updateBlock(blockIndex, { steps: [...blockAt(blockIndex).steps, step] });
   }
   function updateStep(blockIndex: number, stepIndex: number, patch: Partial<StepFormState>) {
     updateBlock(blockIndex, {
@@ -301,13 +343,13 @@ export function BlocksEditor({
       )}
 
       {blocks.map((block, blockIndex) => (
-        <div key={block.key} className={`${uiClasses.card} flex flex-col gap-4`}>
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-slate-100">Bloco {blockIndex + 1}</h3>
+        <div key={block.key} className="rounded-xl border border-line bg-petrol/60 p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-display text-sm font-semibold text-ink">Bloco {blockIndex + 1}</h3>
             {blocks.length > 1 && (
               <button
                 type="button"
-                className="text-sm text-red-400 hover:underline"
+                className={removeBtn}
                 onClick={() => onChange(blocks.filter((_, i) => i !== blockIndex))}
               >
                 Remover bloco
@@ -315,9 +357,9 @@ export function BlocksEditor({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={uiClasses.label}>Nome do bloco (opcional)</label>
+          <div className="mb-3 grid grid-cols-3 gap-2">
+            <div className="col-span-2">
+              <label className={fieldLabel}>Nome do bloco (opcional)</label>
               <input
                 className={uiClasses.input}
                 value={block.name}
@@ -325,7 +367,7 @@ export function BlocksEditor({
               />
             </div>
             <div>
-              <label className={uiClasses.label}>Repetições do bloco</label>
+              <label className={fieldLabel}>Repetir bloco</label>
               <input
                 type="number"
                 min={1}
@@ -338,116 +380,137 @@ export function BlocksEditor({
 
           {usesSteps ? (
             <div className="flex flex-col gap-3">
-              {block.steps.map((step, stepIndex) => (
-                <div key={step.key} className="rounded-lg border border-slate-800 p-3">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm text-slate-400">Tiro/passo {stepIndex + 1}</span>
-                    <button
-                      type="button"
-                      className="text-xs text-red-400 hover:underline"
-                      onClick={() => removeStep(blockIndex, stepIndex)}
-                    >
-                      Remover
-                    </button>
+              {block.steps.map((step, stepIndex) => {
+                const unit = step.targetType ? INTENSITY_UNIT[step.targetType] : "";
+                return (
+                  <div key={step.key} className="rounded-lg border border-line bg-deep/40 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-semibold text-muted">
+                        Passo {stepIndex + 1}
+                      </span>
+                      <button
+                        type="button"
+                        className={removeBtn}
+                        onClick={() => removeStep(blockIndex, stepIndex)}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div>
+                        <label className={fieldLabel}>Tipo</label>
+                        <select
+                          className={uiClasses.select}
+                          value={step.stepType}
+                          onChange={(e) =>
+                            updateStep(blockIndex, stepIndex, {
+                              stepType: e.target.value as StepFormState["stepType"],
+                            })
+                          }
+                        >
+                          {STEP_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {stepTypeLabel(type)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={fieldLabel}>Repetições</label>
+                        <input
+                          type="number"
+                          className={uiClasses.input}
+                          value={step.repetitions}
+                          onChange={(e) =>
+                            updateStep(blockIndex, stepIndex, { repetitions: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={fieldLabel}>Duração</label>
+                        <input
+                          placeholder="Duração (s)"
+                          type="number"
+                          className={uiClasses.input}
+                          value={step.durationSeconds}
+                          onChange={(e) =>
+                            updateStep(blockIndex, stepIndex, { durationSeconds: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={fieldLabel}>Distância (m)</label>
+                        <input
+                          type="number"
+                          className={uiClasses.input}
+                          value={step.distanceMeters}
+                          onChange={(e) =>
+                            updateStep(blockIndex, stepIndex, { distanceMeters: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    {/* Intensidade — alvos por modalidade */}
+                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      <div>
+                        <label className={fieldLabel}>Intensidade</label>
+                        <select
+                          className={uiClasses.select}
+                          value={step.targetType}
+                          onChange={(e) =>
+                            updateStep(blockIndex, stepIndex, {
+                              targetType: e.target.value as StepFormState["targetType"],
+                            })
+                          }
+                        >
+                          <option value="">Sem alvo</option>
+                          {intensityOptions.map((type) => (
+                            <option key={type} value={type}>
+                              {INTENSITY_LABEL[type]}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={fieldLabel}>Alvo mín. {unit && `(${unit})`}</label>
+                        <input
+                          type="number"
+                          className={uiClasses.input}
+                          value={step.targetMin}
+                          disabled={step.targetType === ""}
+                          onChange={(e) =>
+                            updateStep(blockIndex, stepIndex, { targetMin: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={fieldLabel}>Alvo máx. {unit && `(${unit})`}</label>
+                        <input
+                          type="number"
+                          className={uiClasses.input}
+                          value={step.targetMax}
+                          disabled={step.targetType === ""}
+                          onChange={(e) =>
+                            updateStep(blockIndex, stepIndex, { targetMax: e.target.value })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className={fieldLabel}>Recuperação (s)</label>
+                        <input
+                          type="number"
+                          className={uiClasses.input}
+                          value={step.recoverySeconds}
+                          onChange={(e) =>
+                            updateStep(blockIndex, stepIndex, { recoverySeconds: e.target.value })
+                          }
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <select
-                      className={uiClasses.select}
-                      value={step.stepType}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, {
-                          stepType: e.target.value as StepFormState["stepType"],
-                        })
-                      }
-                    >
-                      {STEP_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      placeholder="Repetições"
-                      type="number"
-                      className={uiClasses.input}
-                      value={step.repetitions}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, { repetitions: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Duração (s)"
-                      type="number"
-                      className={uiClasses.input}
-                      value={step.durationSeconds}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, { durationSeconds: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Distância (m)"
-                      type="number"
-                      className={uiClasses.input}
-                      value={step.distanceMeters}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, { distanceMeters: e.target.value })
-                      }
-                    />
-                    <select
-                      className={uiClasses.select}
-                      value={step.targetType}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, {
-                          targetType: e.target.value as StepFormState["targetType"],
-                        })
-                      }
-                    >
-                      <option value="">Alvo (opcional)</option>
-                      {TARGET_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      placeholder="Alvo mín."
-                      type="number"
-                      className={uiClasses.input}
-                      value={step.targetMin}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, { targetMin: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Alvo máx."
-                      type="number"
-                      className={uiClasses.input}
-                      value={step.targetMax}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, { targetMax: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Recuperação (s)"
-                      type="number"
-                      className={uiClasses.input}
-                      value={step.recoverySeconds}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, { recoverySeconds: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Recuperação (m)"
-                      type="number"
-                      className={uiClasses.input}
-                      value={step.recoveryMeters}
-                      onChange={(e) =>
-                        updateStep(blockIndex, stepIndex, { recoveryMeters: e.target.value })
-                      }
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               <button
                 type="button"
                 className={uiClasses.buttonSecondary}
@@ -459,106 +522,120 @@ export function BlocksEditor({
           ) : (
             <div className="flex flex-col gap-3">
               {block.exercises.map((exercise, exerciseIndex) => (
-                <div key={exercise.key} className="rounded-lg border border-slate-800 p-3">
+                <div key={exercise.key} className="rounded-lg border border-line bg-deep/40 p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm text-slate-400">Exercício {exerciseIndex + 1}</span>
+                    <span className="text-xs font-semibold text-muted">
+                      Exercício {exerciseIndex + 1}
+                    </span>
                     <button
                       type="button"
-                      className="text-xs text-red-400 hover:underline"
+                      className={removeBtn}
                       onClick={() => removeExercise(blockIndex, exerciseIndex)}
                     >
                       Remover
                     </button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="mb-2 grid grid-cols-3 gap-2">
+                    <div className="col-span-2">
+                      <label className={fieldLabel}>Exercício</label>
+                      <input
+                        placeholder="Busque na biblioteca ou digite"
+                        list="exercise-library"
+                        required
+                        className={uiClasses.input}
+                        value={exercise.exerciseName}
+                        onChange={(e) =>
+                          onExerciseNameChange(blockIndex, exerciseIndex, e.target.value)
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className={fieldLabel}>Categoria</label>
+                      <input
+                        className={uiClasses.input}
+                        value={exercise.exerciseCategory}
+                        onChange={(e) =>
+                          updateExercise(blockIndex, exerciseIndex, {
+                            exerciseCategory: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                    <div>
+                      <label className={fieldLabel}>Séries</label>
+                      <input
+                        type="number"
+                        className={uiClasses.input}
+                        value={exercise.sets}
+                        onChange={(e) =>
+                          updateExercise(blockIndex, exerciseIndex, { sets: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className={fieldLabel}>Reps</label>
+                      <input
+                        type="number"
+                        className={uiClasses.input}
+                        value={exercise.reps}
+                        onChange={(e) =>
+                          updateExercise(blockIndex, exerciseIndex, { reps: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className={fieldLabel}>Carga (kg)</label>
+                      <input
+                        type="number"
+                        className={uiClasses.input}
+                        value={exercise.loadKg}
+                        onChange={(e) =>
+                          updateExercise(blockIndex, exerciseIndex, { loadKg: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className={fieldLabel}>RIR</label>
+                      <input
+                        type="number"
+                        className={uiClasses.input}
+                        value={exercise.rir}
+                        onChange={(e) =>
+                          updateExercise(blockIndex, exerciseIndex, { rir: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className={fieldLabel}>RPE</label>
+                      <input
+                        type="number"
+                        className={uiClasses.input}
+                        value={exercise.rpeTarget}
+                        onChange={(e) =>
+                          updateExercise(blockIndex, exerciseIndex, { rpeTarget: e.target.value })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className={fieldLabel}>Descanso (s)</label>
+                      <input
+                        type="number"
+                        className={uiClasses.input}
+                        value={exercise.restSeconds}
+                        onChange={(e) =>
+                          updateExercise(blockIndex, exerciseIndex, { restSeconds: e.target.value })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-2">
+                    <label className={fieldLabel}>Notas / instruções</label>
                     <input
-                      placeholder="Nome do exercício (busque na biblioteca)"
-                      list="exercise-library"
-                      required
-                      className={`${uiClasses.input} col-span-3`}
-                      value={exercise.exerciseName}
-                      onChange={(e) =>
-                        onExerciseNameChange(blockIndex, exerciseIndex, e.target.value)
-                      }
-                    />
-                    <input
-                      placeholder="Categoria"
                       className={uiClasses.input}
-                      value={exercise.exerciseCategory}
-                      onChange={(e) =>
-                        updateExercise(blockIndex, exerciseIndex, {
-                          exerciseCategory: e.target.value,
-                        })
-                      }
-                    />
-                    <input
-                      placeholder="Séries"
-                      type="number"
-                      className={uiClasses.input}
-                      value={exercise.sets}
-                      onChange={(e) =>
-                        updateExercise(blockIndex, exerciseIndex, { sets: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Repetições"
-                      type="number"
-                      className={uiClasses.input}
-                      value={exercise.reps}
-                      onChange={(e) =>
-                        updateExercise(blockIndex, exerciseIndex, { reps: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Duração (s)"
-                      type="number"
-                      className={uiClasses.input}
-                      value={exercise.durationSeconds}
-                      onChange={(e) =>
-                        updateExercise(blockIndex, exerciseIndex, {
-                          durationSeconds: e.target.value,
-                        })
-                      }
-                    />
-                    <input
-                      placeholder="Carga (kg)"
-                      type="number"
-                      className={uiClasses.input}
-                      value={exercise.loadKg}
-                      onChange={(e) =>
-                        updateExercise(blockIndex, exerciseIndex, { loadKg: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="RIR"
-                      type="number"
-                      className={uiClasses.input}
-                      value={exercise.rir}
-                      onChange={(e) =>
-                        updateExercise(blockIndex, exerciseIndex, { rir: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="RPE alvo"
-                      type="number"
-                      className={uiClasses.input}
-                      value={exercise.rpeTarget}
-                      onChange={(e) =>
-                        updateExercise(blockIndex, exerciseIndex, { rpeTarget: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Descanso (s)"
-                      type="number"
-                      className={uiClasses.input}
-                      value={exercise.restSeconds}
-                      onChange={(e) =>
-                        updateExercise(blockIndex, exerciseIndex, { restSeconds: e.target.value })
-                      }
-                    />
-                    <input
-                      placeholder="Notas"
-                      className={`${uiClasses.input} col-span-3`}
                       value={exercise.notes}
                       onChange={(e) =>
                         updateExercise(blockIndex, exerciseIndex, { notes: e.target.value })
