@@ -70,6 +70,8 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
   const [workout, setWorkout] = useState<WorkoutDetailView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   function reload() {
     return apiFetch<{ workout: WorkoutDetailView }>(`/api/trainer/workouts/${id}`).then((result) =>
@@ -79,7 +81,9 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
 
   useEffect(() => {
     if (!checked) return;
-    reload().catch((err) => setError(err instanceof ApiClientError ? err.message : "Erro inesperado."));
+    reload().catch((err) =>
+      setError(err instanceof ApiClientError ? err.message : "Erro inesperado."),
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checked, id]);
 
@@ -93,6 +97,25 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
       setError(err instanceof ApiClientError ? err.message : "Erro inesperado.");
     } finally {
       setPublishing(false);
+    }
+  }
+
+  async function handleSaveAsTemplate() {
+    const title = window.prompt("Nome do template:", workout?.title ?? "");
+    if (!title || title.trim() === "") return;
+    setError(null);
+    setNotice(null);
+    setSavingTemplate(true);
+    try {
+      await apiFetch(`/api/trainer/workouts/${id}/save-as-template`, {
+        method: "POST",
+        body: JSON.stringify({ title: title.trim(), tags: [] }),
+      });
+      setNotice("Treino salvo como template.");
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Erro inesperado.");
+    } finally {
+      setSavingTemplate(false);
     }
   }
 
@@ -122,21 +145,27 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
         </Link>
 
         {error && <p className={uiClasses.error}>{error}</p>}
+        {notice && <p className={uiClasses.success}>{notice}</p>}
 
         <div className={`${uiClasses.card} flex flex-col gap-2`}>
           <div className="flex items-center justify-between">
             <h1 className={uiClasses.heading}>{current.title}</h1>
-            <span className={`${uiClasses.badge} ${statusBadgeClass[current.status] ?? ""}`}>{current.status}</span>
+            <span className={`${uiClasses.badge} ${statusBadgeClass[current.status] ?? ""}`}>
+              {current.status}
+            </span>
           </div>
           <p className="text-sm text-slate-400">
             {current.modality} — {current.plannedDate.slice(0, 10)}
           </p>
           {current.description && <p className="text-sm text-slate-300">{current.description}</p>}
 
-          <div className="mt-2 flex gap-3">
+          <div className="mt-2 flex flex-wrap gap-3">
             {current.status === "DRAFT" && (
               <>
-                <Link href={`/treinador/treinos/${id}/editar`} className={uiClasses.buttonSecondary}>
+                <Link
+                  href={`/treinador/treinos/${id}/editar`}
+                  className={uiClasses.buttonSecondary}
+                >
                   Editar rascunho
                 </Link>
                 <button className={uiClasses.button} onClick={handlePublish} disabled={publishing}>
@@ -144,6 +173,13 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
                 </button>
               </>
             )}
+            <button
+              className={uiClasses.buttonSecondary}
+              onClick={handleSaveAsTemplate}
+              disabled={savingTemplate}
+            >
+              {savingTemplate ? "Salvando..." : "Salvar como template"}
+            </button>
           </div>
         </div>
 
@@ -162,7 +198,9 @@ export default function TrainerWorkoutDetailPage({ params }: { params: Promise<{
                       {step.repetitions ? ` × ${step.repetitions}` : ""}
                       {step.durationSeconds ? ` — ${step.durationSeconds}s` : ""}
                       {step.distanceMeters ? ` — ${step.distanceMeters}m` : ""}
-                      {step.targetType ? ` (${step.targetType} ${step.targetMin ?? ""}-${step.targetMax ?? ""})` : ""}
+                      {step.targetType
+                        ? ` (${step.targetType} ${step.targetMin ?? ""}-${step.targetMax ?? ""})`
+                        : ""}
                     </li>
                   ))}
                 </ul>
