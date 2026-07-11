@@ -51,3 +51,27 @@ export const env: Env = new Proxy({} as Env, {
     return loadEnv()[prop as keyof Env];
   },
 });
+
+const LOCALHOST_DEFAULT = "http://localhost:3000";
+
+// Public, user-facing base URL for links we put in e-mails (invitation
+// activation, etc.). Must resolve to the deployment the recipient can reach —
+// never `localhost`. Priority:
+//   1. An explicit APP_URL (a real custom domain the operator configured).
+//   2. On Vercel Production, the stable production domain.
+//   3. On any other Vercel deployment (Preview), this deployment's URL.
+//   4. Local dev fallback.
+// Vercel injects VERCEL_URL / VERCEL_PROJECT_PRODUCTION_URL automatically, so
+// e-mail links work on Preview and Production even when APP_URL is unset — the
+// bug this fixes was activation links pointing at http://localhost:3000.
+export function getPublicBaseUrl(): string {
+  const explicit = process.env.APP_URL?.trim();
+  if (explicit && explicit !== LOCALHOST_DEFAULT) return explicit.replace(/\/+$/, "");
+
+  if (process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+
+  return env.APP_URL.replace(/\/+$/, "");
+}

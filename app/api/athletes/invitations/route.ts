@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getInvitationMailer } from "@/infrastructure/mail/get-invitation-mailer";
 import { prisma } from "@/infrastructure/database/prisma";
-import { env } from "@/lib/env";
+import { getPublicBaseUrl } from "@/lib/env";
 import { inviteAthlete, inviteAthleteInputSchema } from "@/modules/athletes/invite-athlete";
 import {
   requireAuthenticatedUser,
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       userAgent: request.headers.get("user-agent") ?? undefined,
     });
 
-    const activationUrl = `${env.APP_URL}/convite/ativar?token=${result.rawToken}`;
+    const activationUrl = `${getPublicBaseUrl()}/convite/ativar?token=${result.rawToken}`;
     await getInvitationMailer().sendInvitation({
       to: input.email,
       athleteName: input.athleteName ?? null,
