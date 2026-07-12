@@ -1,0 +1,478 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import { addDays, toISODate } from "@/app/_lib/calendar";
+import { uiClasses } from "@/app/_lib/ui";
+import { useRequireRole } from "@/app/_lib/use-session";
+
+interface RosterEntry {
+  athleteProfileId: string;
+  name: string | null;
+  status: string;
+}
+
+interface PlanSummary {
+  id: string;
+  title: string;
+  goal: string;
+  startDate: string;
+  endDate: string;
+  _count: { phases: number; weeks: number };
+}
+
+interface Phase {
+  id: string;
+  name: string;
+  sequence: number;
+  startDate: string;
+  endDate: string;
+  targetVolumeKm: string | null;
+  targetIntensity: string | null;
+}
+
+interface Week {
+  id: string;
+  sequence: number;
+  startDate: string;
+  endDate: string;
+  phaseId: string | null;
+  isRecoveryWeek: boolean;
+  scheduledCount: number;
+}
+
+interface PlanDetail extends PlanSummary {
+  phases: Phase[];
+  weeks: Week[];
+}
+
+interface PhaseDraft {
+  name: string;
+  startDate: string;
+  endDate: string;
+  targetVolumeKm: string;
+  targetIntensity: string;
+}
+
+function fmtDay(iso: string): string {
+  return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+export default function TrainerPeriodizationPage() {
+  const { checked } = useRequireRole("TRAINER");
+  const [roster, setRoster] = useState<RosterEntry[]>([]);
+  const [athleteId, setAthleteId] = useState("");
+  const [plans, setPlans] = useState<PlanSummary[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<PlanDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [title, setTitle] = useState("");
+  const [goal, setGoal] = useState("");
+  const [start, setStart] = useState(() => toISODate(new Date()));
+  const [end, setEnd] = useState(() => toISODate(addDays(new Date(), 83))); // 12 semanas
+  const [phases, setPhases] = useState<PhaseDraft[]>([]);
+
+  useEffect(() => {
+    if (!checked) return;
+    apiFetch<{ athletes: RosterEntry[] }>("/api/trainer/athletes/roster")
+      .then((r) => {
+        const active = r.athletes.filter((a) => a.status === "ACTIVE");
+        setRoster(active);
+        if (active[0]) setAthleteId(active[0].athleteProfileId);
+      })
+      .catch((err) => setError(err instanceof ApiClientError ? err.message : "Erro inesperado."))
+      .finally(() => setLoading(false));
+  }, [checked]);
+
+  useEffect(() => {
+    setSelectedId(null);
+    setDetail(null);
+    if (!athleteId) {
+      setPlans([]);
+      return;
+    }
+    apiFetch<{ periodizations: PlanSummary[] }>(
+      `/api/trainer/athletes/${athleteId}/periodizations`,
+    )
+      .then((r) => setPlans(r.periodizations))
+      .catch(() => setPlans([]));
+  }, [athleteId]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    apiFetch<{ periodization: PlanDetail }>(`/api/trainer/periodizations/${selectedId}`)
+      .then((r) => setDetail(r.periodization))
+      .catch(() => setDetail(null));
+  }, [selectedId]);
+
+  function addPhase() {
+    setPhases((prev) => [
+      ...prev,
+      { name: "", startDate: start, endDate: end, targetVolumeKm: "", targetIntensity: "" },
+    ]);
+  }
+
+  function updatePhase(index: number, patch: Partial<PhaseDraft>) {
+    setPhases((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)));
+  }
+
+  function removePhase(index: number) {
+    setPhases((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function create() {
+    if (!athleteId || !title.trim() || !goal.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        title,
+        goal,
+        startDate: start,
+        endDate: end,
+        phases: phases
+          .filter((p) => p.name.trim())
+          .map((p) => ({
+            name: p.name.trim(),
+            startDate: p.startDate,
+            endDate: p.endDate,
+            targetVolumeKm: p.targetVolumeKm ? Number(p.targetVolumeKm) : undefined,
+            targetIntensity: p.targetIntensity.trim() || undefined,
+          })),
+      };
+      const result = await apiFetch<{ periodization: { id: string } }>(
+        `/api/trainer/athletes/${athleteId}/periodizations`,
+        { method: "POST", body: JSON.stringify(body) },
+      );
+      // recarrega a lista e abre o plano recém-criado
+      const list = await apiFetch<{ periodizations: PlanSummary[] }>(
+        `/api/trainer/athletes/${athleteId}/periodizations`,
+      );
+      setPlans(list.periodizations);
+      setSelectedId(result.periodization.id);
+      setTitle("");
+      setGoal("");
+      setPhases([]);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Não foi possível criar o plano.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    try {
+      await apiFetch(`/api/trainer/periodizations/${id}`, { method: "DELETE" });
+      setPlans((prev) => prev.filter((p) => p.id !== id));
+      if (selectedId === id) setSelectedId(null);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Não foi possível excluir.");
+    }
+  }
+
+  const phaseName = useMemo(() => {
+    const map = new Map<string, string>();
+    detail?.phases.forEach((p) => map.set(p.id, p.name));
+    return map;
+  }, [detail]);
+
+  if (!checked || loading) {
+    return (
+      <main className={uiClasses.page}>
+        <p className="text-muted">Carregando...</p>
+      </main>
+    );
+  }
+
+  return (
+    <main className={uiClasses.page}>
+      <div className={uiClasses.wide}>
+        <header className="flex flex-col gap-1">
+          <span className={uiClasses.eyebrow}>Periodização</span>
+          <h1 className={uiClasses.heading}>Planejamento estratégico</h1>
+          <p className={uiClasses.hint}>
+            Desenhe o macrociclo do atleta — fases e semanas. As semanas são geradas pela janela do
+            plano e mostram quantos treinos você já agendou em cada uma.
+          </p>
+        </header>
+
+        {error && <p className={uiClasses.error}>{error}</p>}
+
+        {roster.length === 0 ? (
+          <p className="text-muted">Nenhum atleta ativo para planejar.</p>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[1fr_1.4fr]">
+            {/* Coluna esquerda: seleção + criação + lista */}
+            <div className="flex flex-col gap-6">
+              <section className={`${uiClasses.card} flex flex-col gap-4`}>
+                <div>
+                  <label htmlFor="athlete" className={uiClasses.label}>
+                    Atleta
+                  </label>
+                  <select
+                    id="athlete"
+                    className={uiClasses.select}
+                    value={athleteId}
+                    onChange={(e) => setAthleteId(e.target.value)}
+                  >
+                    {roster.map((a) => (
+                      <option key={a.athleteProfileId} value={a.athleteProfileId}>
+                        {a.name ?? "Atleta"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="title" className={uiClasses.label}>
+                    Título do plano
+                  </label>
+                  <input
+                    id="title"
+                    className={uiClasses.input}
+                    placeholder="Ex.: Base para 21k"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="goal" className={uiClasses.label}>
+                    Objetivo
+                  </label>
+                  <input
+                    id="goal"
+                    className={uiClasses.input}
+                    placeholder="Ex.: Concluir meia maratona em 12 semanas"
+                    value={goal}
+                    onChange={(e) => setGoal(e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="start" className={uiClasses.label}>
+                      Início
+                    </label>
+                    <input
+                      id="start"
+                      type="date"
+                      className={uiClasses.input}
+                      value={start}
+                      max={end}
+                      onChange={(e) => setStart(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="end" className={uiClasses.label}>
+                      Fim
+                    </label>
+                    <input
+                      id="end"
+                      type="date"
+                      className={uiClasses.input}
+                      value={end}
+                      min={start}
+                      onChange={(e) => setEnd(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between">
+                    <span className={uiClasses.label}>Fases (opcional)</span>
+                    <button type="button" className={uiClasses.buttonGhost} onClick={addPhase}>
+                      + Adicionar fase
+                    </button>
+                  </div>
+                  {phases.map((p, i) => (
+                    <div key={i} className="flex flex-col gap-2 rounded-lg border border-line p-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          className={uiClasses.input}
+                          placeholder="Nome (base, build, pico, taper…)"
+                          value={p.name}
+                          onChange={(e) => updatePhase(i, { name: e.target.value })}
+                        />
+                        <button
+                          type="button"
+                          className={uiClasses.buttonGhost}
+                          onClick={() => removePhase(i)}
+                          aria-label="Remover fase"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="date"
+                          className={uiClasses.input}
+                          value={p.startDate}
+                          min={start}
+                          max={end}
+                          onChange={(e) => updatePhase(i, { startDate: e.target.value })}
+                        />
+                        <input
+                          type="date"
+                          className={uiClasses.input}
+                          value={p.endDate}
+                          min={start}
+                          max={end}
+                          onChange={(e) => updatePhase(i, { endDate: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          className={uiClasses.input}
+                          placeholder="Volume alvo (km)"
+                          value={p.targetVolumeKm}
+                          onChange={(e) => updatePhase(i, { targetVolumeKm: e.target.value })}
+                        />
+                        <input
+                          className={uiClasses.input}
+                          placeholder="Intensidade alvo"
+                          value={p.targetIntensity}
+                          onChange={(e) => updatePhase(i, { targetIntensity: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  className={uiClasses.button}
+                  onClick={create}
+                  disabled={busy || !title.trim() || !goal.trim()}
+                >
+                  {busy ? "Criando…" : "Criar plano"}
+                </button>
+              </section>
+
+              <section className="flex flex-col gap-2">
+                <h2 className={uiClasses.subheading}>Planos do atleta</h2>
+                {plans.length === 0 ? (
+                  <p className="text-sm text-muted">Nenhum plano ainda.</p>
+                ) : (
+                  plans.map((plan) => (
+                    <button
+                      type="button"
+                      key={plan.id}
+                      onClick={() => setSelectedId(plan.id)}
+                      className={`flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors ${
+                        selectedId === plan.id
+                          ? "border-electric bg-surface"
+                          : "border-line bg-petrol/70 hover:border-line-strong"
+                      }`}
+                    >
+                      <span className="font-semibold text-ink">{plan.title}</span>
+                      <span className="text-xs text-muted">
+                        {fmtDay(plan.startDate)} – {fmtDay(plan.endDate)} · {plan._count.weeks}{" "}
+                        semanas · {plan._count.phases} fases
+                      </span>
+                    </button>
+                  ))
+                )}
+              </section>
+            </div>
+
+            {/* Coluna direita: detalhe do plano */}
+            <section className={uiClasses.panel}>
+              {!detail ? (
+                <div className="p-8 text-center text-sm text-muted">
+                  Selecione ou crie um plano para ver a estrutura.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-5 p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className={uiClasses.subheading}>{detail.title}</h2>
+                      <p className="text-sm text-muted">{detail.goal}</p>
+                      <p className="mt-1 text-xs text-faint">
+                        {fmtDay(detail.startDate)} – {fmtDay(detail.endDate)}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={uiClasses.buttonGhost}
+                      onClick={() => remove(detail.id)}
+                    >
+                      Excluir
+                    </button>
+                  </div>
+
+                  {detail.phases.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      <h3 className="text-sm font-semibold text-ink">Fases</h3>
+                      <div className="flex flex-col gap-2">
+                        {detail.phases.map((p) => (
+                          <div
+                            key={p.id}
+                            className="flex items-center justify-between rounded-lg border border-line px-3 py-2 text-sm"
+                          >
+                            <span className="font-medium text-ink">{p.name}</span>
+                            <span className="text-xs text-muted">
+                              {fmtDay(p.startDate)} – {fmtDay(p.endDate)}
+                              {p.targetVolumeKm ? ` · ${p.targetVolumeKm} km` : ""}
+                              {p.targetIntensity ? ` · ${p.targetIntensity}` : ""}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2">
+                    <h3 className="text-sm font-semibold text-ink">Semanas</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="text-xs uppercase tracking-wider text-faint">
+                            <th className="py-2 pr-3">#</th>
+                            <th className="py-2 pr-3">Período</th>
+                            <th className="py-2 pr-3">Fase</th>
+                            <th className="py-2 pr-3 text-right">Treinos</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-line">
+                          {detail.weeks.map((w) => (
+                            <tr key={w.id}>
+                              <td className="py-2 pr-3 tabular text-muted">{w.sequence}</td>
+                              <td className="py-2 pr-3 text-ink">
+                                {fmtDay(w.startDate)} – {fmtDay(w.endDate)}
+                              </td>
+                              <td className="py-2 pr-3 text-muted">
+                                {w.phaseId ? (phaseName.get(w.phaseId) ?? "—") : "—"}
+                              </td>
+                              <td className="py-2 pr-3 text-right tabular text-ink">
+                                {w.scheduledCount}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
+        <Link href="/treinador" className={uiClasses.link}>
+          ← Voltar ao painel
+        </Link>
+      </div>
+    </main>
+  );
+}

@@ -32,7 +32,9 @@ export type AuditAction =
   | "RESOLVE_INSIGHT"
   | "SUBMIT_READINESS_CHECKIN"
   | "GENERATE_REPORT"
-  | "SHARE_REPORT";
+  | "SHARE_REPORT"
+  | "CREATE_PERIODIZATION"
+  | "DELETE_PERIODIZATION";
 
 export interface AuditLogInput {
   action: AuditAction;
