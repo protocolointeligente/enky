@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { uiClasses } from "@/app/_lib/ui";
-import { VideoPlayer } from "@/components/video-player";
+import { ExerciseDemo } from "@/components/exercise-demo";
 
 interface ExerciseItem {
   id: string;
@@ -42,7 +42,6 @@ export default function TrainerExercisesPage() {
   const [search, setSearch] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
   const [form, setForm] = useState<ExerciseFormValues | null>(null);
-  const [playing, setPlaying] = useState<{ name: string; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -162,7 +161,8 @@ export default function TrainerExercisesPage() {
                   key={item.id}
                   className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 p-3"
                 >
-                  <div className="min-w-0">
+                  {item.videoUrl && <ExerciseDemo name={item.name} url={item.videoUrl} />}
+                  <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-2 font-medium text-slate-100">
                       <span className="truncate">{item.name}</span>
                       <span
@@ -182,15 +182,6 @@ export default function TrainerExercisesPage() {
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    {item.videoUrl && (
-                      <button
-                        type="button"
-                        className="text-xs font-medium text-electric-hi hover:underline"
-                        onClick={() => setPlaying({ name: item.name, url: item.videoUrl! })}
-                      >
-                        ▶ Vídeo
-                      </button>
-                    )}
                     {item.editable && (
                       <>
                         <button
@@ -300,30 +291,6 @@ export default function TrainerExercisesPage() {
               </button>
             </div>
           </form>
-        </div>
-      )}
-
-      {playing && (
-        <div
-          className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setPlaying(null)}
-        >
-          <div
-            className="flex w-full max-w-2xl flex-col gap-3 rounded-2xl border border-line bg-petrol p-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="font-semibold text-ink">{playing.name}</h2>
-              <button
-                type="button"
-                className="text-sm text-muted hover:text-ink"
-                onClick={() => setPlaying(null)}
-              >
-                Fechar
-              </button>
-            </div>
-            <VideoPlayer url={playing.url} />
-          </div>
         </div>
       )}
     </main>

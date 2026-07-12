@@ -43,13 +43,16 @@ async function api(path) {
   return res.json();
 }
 
-// Um exercício ExerciseDB: { name, bodyPart, target, equipment, gifUrl,
-// secondaryMuscles[], instructions[] }.
+// Um exercício ExerciseDB: { id, name, bodyPart, target, equipment,
+// secondaryMuscles[], instructions[] }. A resposta NÃO traz gifUrl — o GIF vem
+// do endpoint /image (exige a key), então apontamos videoUrl para o proxy
+// interno /api/exercise-media/{id}.gif, que busca com a key no servidor.
 function mapExercise(e) {
   const name = asString(e.name);
   const category = asString(e.bodyPart) || asString(e.equipment) || "Geral";
   const targetMuscles = [asString(e.target), ...asStringArray(e.secondaryMuscles)].filter(Boolean);
-  const videoUrl = asString(e.gifUrl);
+  const id = asString(e.id);
+  const videoUrl = id ? `/api/exercise-media/${id}.gif` : null;
   return { name, category, targetMuscles, videoUrl };
 }
 
@@ -59,8 +62,18 @@ async function main() {
 
   console.log(`ExerciseDB import — limite ${LIMIT}${DRY_RUN ? " (DRY RUN)" : ""}`);
 
-  const list = await api(`/exercises?limit=${LIMIT}&offset=0`);
-  const items = (Array.isArray(list) ? list : list.results || []).slice(0, LIMIT);
+  // O tier free devolve no máx. ~10 por chamada, então paginamos por offset
+  // (cada página = 1 chamada de cota) até atingir o LIMIT ou acabar.
+  const PAGE = 10;
+  const items = [];
+  for (let offset = 0; items.length < LIMIT; offset += PAGE) {
+    const list = await api(`/exercises?limit=${PAGE}&offset=${offset}`);
+    const page = Array.isArray(list) ? list : list.results || [];
+    if (page.length === 0) break;
+    items.push(...page);
+    await sleep(200);
+  }
+  items.length = Math.min(items.length, LIMIT);
   console.log(`Recebidos ${items.length} exercícios.`);
 
   let created = 0,

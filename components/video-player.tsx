@@ -26,6 +26,18 @@ export function parseVideoUrl(raw: string): Parsed {
   return { kind: "link", src: url };
 }
 
+// URL de uma imagem-miniatura para a mídia, ou null se não houver uma barata
+// (Drive/MP4 não expõem thumbnail simples). GIF/imagem servem de si mesmos.
+export function thumbnailFor(raw: string): string | null {
+  const p = parseVideoUrl(raw);
+  if (p.kind === "image") return p.src;
+  if (p.kind === "youtube") {
+    const m = p.src.match(/embed\/([A-Za-z0-9_-]{11})/);
+    return m ? `https://img.youtube.com/vi/${m[1]}/mqdefault.jpg` : null;
+  }
+  return null;
+}
+
 export function VideoPlayer({ url }: { url: string }) {
   const { kind, src } = parseVideoUrl(url);
 
