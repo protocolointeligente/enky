@@ -13,7 +13,7 @@ interface SessionResponse {
   user: SessionUser | null;
 }
 
-type HomeState = { kind: "loading" } | { kind: "anonymous" } | { kind: "admin"; name: string };
+type HomeState = { kind: "loading" } | { kind: "anonymous" };
 
 export default function HomePage() {
   const router = useRouter();
@@ -25,13 +25,7 @@ export default function HomePage() {
       .then((session) => {
         if (cancelled) return;
         if (session.authenticated && session.user) {
-          const panel = panelPathForRole(session.user.globalRole);
-          if (panel) {
-            router.replace(panel);
-            return;
-          }
-          // SUPERADMIN / ADMIN — no panel this phase.
-          setState({ kind: "admin", name: session.user.name });
+          router.replace(panelPathForRole(session.user.globalRole));
           return;
         }
         setState({ kind: "anonymous" });
@@ -54,13 +48,6 @@ export default function HomePage() {
       </p>
 
       {state.kind === "loading" && <p className="mt-8 text-sm text-slate-500">Carregando...</p>}
-
-      {state.kind === "admin" && (
-        <p className="mt-8 max-w-sm text-sm text-slate-400">
-          Olá, {state.name}. Sua conta é administrativa — o painel administrativo ainda não está
-          disponível nesta fase.
-        </p>
-      )}
 
       {state.kind === "anonymous" && (
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row">

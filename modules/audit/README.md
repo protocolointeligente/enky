@@ -6,4 +6,4 @@
 
 **Regra crítica:** `AuditLog` nunca sofre hard delete. Em anonimização LGPD, perde a associação nominal direta mas preserva estrutura e hashes.
 
-**Status:** fundação apenas. Nenhum modelo, serviço ou rota implementado nesta fase.
+**Status:** escrita já em uso por toda a plataforma via `domain/audit.ts` (`recordAuditLog` + catálogo `AuditAction`). Leitura (admin básico, Fase 1) em `audit-service.ts`: `getPlatformStats` (contagens cross-tenant) e `listAuditLogs` (trilha recente + ações distintas para filtro). Rotas cross-tenant guardadas por ADMIN/SUPERADMIN: `GET /api/admin/stats`, `GET /api/admin/audit`. UI `/admin`. Sem escopo de organização — o papel é a fronteira.
