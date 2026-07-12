@@ -33,6 +33,7 @@ export default function HomePage() {
       <SiteNav />
       <Hero />
       <MethodologyStrip />
+      <RoleSplit />
       <Pillars />
       <HowItWorks />
       <Pricing />
@@ -226,6 +227,106 @@ function MethodologyStrip() {
         </div>
       </div>
     </section>
+  );
+}
+
+/* -------------------------------------------------------- role split ---- */
+// Clareza de papéis (padrão TrainingPeaks/FinalSurge/Treinus): o que cada lado
+// ganha, lado a lado. Treinador comanda; atleta executa com clareza.
+
+function RoleSplit() {
+  return (
+    <section className="mx-auto max-w-6xl px-5 py-24 sm:px-6">
+      <div className="max-w-2xl">
+        <h2 className="font-display text-3xl font-bold tracking-tight text-ink sm:text-4xl">
+          Feito para os dois lados do treino.
+        </h2>
+        <p className="mt-4 text-lg text-muted">
+          Uma plataforma só — o treinador comanda a operação, o atleta treina com clareza. Cada um
+          na sua tela, conectados pelo mesmo plano.
+        </p>
+      </div>
+
+      <div className="mt-14 grid gap-6 lg:grid-cols-2">
+        <RoleCard
+          eyebrow="Para o treinador"
+          tone="orange"
+          icon={<WhistleGlyph />}
+          title="Comande sua operação"
+          points={[
+            "Cadastre e organize seus atletas",
+            "Prescreva no calendário e publique num toque",
+            "Veja quem precisa de atenção antes de virar problema",
+            "Gere relatórios e compartilhe evolução",
+          ]}
+          cta={{ label: "Criar conta grátis", href: "/registrar" }}
+        />
+        <RoleCard
+          eyebrow="Para o atleta"
+          tone="electric"
+          icon={<RunnerGlyph />}
+          title="Treine com clareza"
+          points={[
+            "O treino do dia, organizado, no celular",
+            "Execute e devolva o feedback na hora",
+            "Registre prontidão e acompanhe sua evolução",
+            "Sem planilha, sem grupo de WhatsApp perdido",
+          ]}
+          note="Seu treinador te convida — a conta do atleta é criada pelo convite."
+        />
+      </div>
+    </section>
+  );
+}
+
+function RoleCard({
+  eyebrow,
+  title,
+  points,
+  icon,
+  tone,
+  cta,
+  note,
+}: {
+  eyebrow: string;
+  title: string;
+  points: string[];
+  icon: React.ReactNode;
+  tone: "orange" | "electric";
+  cta?: { label: string; href: string };
+  note?: string;
+}) {
+  const accent = tone === "orange" ? "text-orange bg-orange/10" : "text-electric-hi bg-electric/10";
+  return (
+    <div className="flex flex-col rounded-2xl border border-line bg-petrol/50 p-8 sm:p-10">
+      <div className="flex items-center gap-3">
+        <span className={`inline-flex h-11 w-11 items-center justify-center rounded-xl ${accent}`}>
+          {icon}
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-faint">{eyebrow}</span>
+      </div>
+      <h3 className="mt-5 font-display text-2xl font-bold tracking-tight text-ink">{title}</h3>
+      <ul className="mt-5 flex flex-1 flex-col gap-3">
+        {points.map((p) => (
+          <li key={p} className="flex items-start gap-3 text-muted">
+            <span className="mt-0.5 shrink-0 text-turq">
+              <CheckGlyph />
+            </span>
+            <span className="text-sm leading-relaxed">{p}</span>
+          </li>
+        ))}
+      </ul>
+      {cta && (
+        <Link
+          href={cta.href}
+          className="mt-7 inline-flex w-fit items-center gap-2 rounded-lg bg-orange px-5 py-2.5 font-semibold text-onbrand transition-colors hover:bg-orange-hi"
+        >
+          {cta.label}
+          <ArrowIcon />
+        </Link>
+      )}
+      {note && <p className="mt-7 text-xs leading-relaxed text-faint">{note}</p>}
+    </div>
   );
 }
 
@@ -585,6 +686,34 @@ function ReportGlyph() {
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" />
       <path d="M8 12v4M12 9v7M16 13v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function WhistleGlyph() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path
+        d="M3 11a5 5 0 0 1 5-5h9l2-2v6a6 6 0 1 1-11-3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="9" cy="13" r="3" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+function RunnerGlyph() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="15" cy="5" r="2" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M5 20l3-4 3 1 1-4-3-2 4-3 2 3h3M8 12l-1-3"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
