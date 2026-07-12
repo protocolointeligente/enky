@@ -165,7 +165,8 @@ test("treinador prescreve, publica, atleta responde feedback, treinador revisa",
     ).toBe(true);
 
     await expect(page.getByText("Seu feedback")).toBeVisible();
-    await expect(page.getByText(/180.*COMPLETE/)).toBeVisible();
+    // A carga aparece com o rótulo pt-BR do loadStatus "COMPLETE" → "Completo".
+    await expect(page.getByText(/180.*Completo/)).toBeVisible();
   });
 
   await test.step("treinador revisa o feedback do atleta", async () => {
