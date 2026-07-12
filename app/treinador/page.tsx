@@ -10,12 +10,13 @@ import { useRequireRole } from "@/app/_lib/use-session";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatCard } from "@/components/ui/stat-card";
-import { InsightCard, type Insight } from "@/components/insight-card";
+import { InsightCard, type InsightCardInsight } from "@/components/insight-card";
 import {
   CalendarIcon,
   CheckIcon,
   ChevronRightIcon,
   ClockIcon,
+  CopyIcon,
   DumbbellIcon,
   LayersIcon,
   PlusIcon,
@@ -55,6 +56,7 @@ const SHORTCUTS = [
   { href: "/treinador/atletas", label: "Atletas", icon: <UsersIcon /> },
   { href: "/treinador/exercicios", label: "Exercícios", icon: <DumbbellIcon /> },
   { href: "/treinador/templates", label: "Templates", icon: <LayersIcon /> },
+  { href: "/treinador/relatorios", label: "Relatórios", icon: <CopyIcon /> },
 ];
 
 function formatDay(iso: string, todayIso: string): string {
@@ -74,7 +76,7 @@ export default function TrainerDashboardPage() {
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [agenda, setAgenda] = useState<AgendaCard[]>([]);
   const [workouts, setWorkouts] = useState<WorkoutItem[]>([]);
-  const [insights, setInsights] = useState<Insight[]>([]);
+  const [insights, setInsights] = useState<InsightCardInsight[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -97,7 +99,7 @@ export default function TrainerDashboardPage() {
       .finally(() => setLoading(false));
 
     // ENKY Intelligence — atenção da carteira (falha em silêncio; nunca quebra o painel).
-    apiFetch<{ insights: Insight[] }>("/api/trainer/intelligence/attention")
+    apiFetch<{ insights: InsightCardInsight[] }>("/api/trainer/intelligence/attention")
       .then((r) => setInsights(r.insights))
       .catch(() => undefined);
   }, [checked, todayIso]);

@@ -212,6 +212,14 @@ enum DerivedMetricStatus {
   INVALID
 }
 
+// Ciclo de vida do Insight persistido (02H): exposto ao treinador (PENDING),
+// aceito ou ignorado. O "resultado" é o campo `outcome`, registrado depois.
+enum InsightStatus {
+  PENDING
+  ACCEPTED
+  IGNORED
+}
+
 // ---------------------------------------------------------------------------
 // 2. IDENTIDADE, TENANT E AUTENTICAÇÃO
 // ---------------------------------------------------------------------------
@@ -233,6 +241,7 @@ model User {
   sessions                   Session[]
   requestedGenerationBatches GenerationBatch[]        @relation("GenerationRequestedBy")
   auditLogs                  AuditLog[]
+  resolvedInsights           Insight[]                @relation("InsightResolvedBy")
 
   @@index([email])
 }
@@ -281,6 +290,8 @@ model Organization {
   testResults          TestResult[]
   derivedMetrics       DerivedMetric[]
   auditLogs            AuditLog[]
+  insights             Insight[]
+  readinessCheckIns    ReadinessCheckIn[]
 }
 
 model OrganizationMembership {
@@ -318,6 +329,7 @@ model TrainerProfile {
   invitations       AthleteInvitation[]
   testResults       TestResult[]
   reports           Report[]
+  insights          Insight[]
 }
 
 model AthleteProfile {
@@ -342,6 +354,8 @@ model AthleteProfile {
   reports           Report[]
   purchases         MarketplacePurchase[]
   invitations       AthleteInvitation[]
+  insights          Insight[]
+  readinessCheckIns ReadinessCheckIn[]
 }
 
 model CoachAthleteRelationship {
@@ -780,6 +794,67 @@ model Report {
   trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, athleteId])
+}
+
+// ENKY Intelligence — Insight persistido (02H). O motor de atenção calcula o
+// Insight on-the-fly (modules/intelligence); esta tabela grava o ciclo
+// detecção→exposição→ação→resultado para calibração. Uma linha por situação
+// estável (fingerprint = athleteId:engine:regras), escopada por org+treinador
+// como o resto do sistema. `content` guarda o Insight de 6 partes exposto.
+model Insight {
+  id             String        @id @default(uuid())
+  organizationId String
+  athleteId      String
+  trainerId      String
+  engine         String
+  risk           String
+  rulesetVersion String        @default("1.0.0")
+  fingerprint    String
+  content        Json
+  status         InsightStatus @default(PENDING)
+  outcome        String?
+  resolvedById   String?
+  resolvedAt     DateTime?     @db.Timestamptz
+  createdAt      DateTime      @default(now()) @db.Timestamptz
+  updatedAt      DateTime      @updatedAt @db.Timestamptz
+  lockVersion    Int           @default(1)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  resolvedBy   User?          @relation("InsightResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, trainerId, fingerprint], map: "uq_insight_scope_fingerprint")
+  @@index([organizationId, trainerId, status])
+}
+
+// Questionário de prontidão/recuperação (Fase II — item 5). Auto-relato diário
+// e AVULSO do atleta (não atado a um treino, diferente de WorkoutFeedback):
+// sono, fadiga, dor muscular, estresse, motivação. Coleta os sinais que faltam
+// para o índice de prontidão (ENKY_METRIC_REGISTRY `readiness`). Campos são
+// opcionais — preenchimento parcial reduz a confiança (classe "insuficiente").
+// Um check-in por atleta por dia (upsert).
+model ReadinessCheckIn {
+  id             String   @id @default(uuid())
+  organizationId String
+  athleteId      String
+  checkInDate    DateTime @db.Date
+  sleepHours     Decimal? @db.Decimal(4, 2)
+  sleepQuality   Int?
+  fatigue        Int?
+  soreness       Int?
+  stress         Int?
+  motivation     Int?
+  notes          String?
+  createdAt      DateTime @default(now()) @db.Timestamptz
+  updatedAt      DateTime @updatedAt @db.Timestamptz
+  lockVersion    Int      @default(1)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([athleteId, checkInDate], map: "uq_readiness_athlete_day")
+  @@index([organizationId, athleteId, checkInDate])
 }
 
 // ---------------------------------------------------------------------------

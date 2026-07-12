@@ -11,4 +11,10 @@
 - `attention.ts` — `analyzeRosterAttention(actor, now)` varre a carteira (escopo org+treinador) e devolve, por atleta que precisa de atenção, um `Insight` (formato de 6 partes) do sinal de maior prioridade: dor (urgente, sobrepõe tudo) → treinos perdidos → RPE alto → aderência baixa → retorno pendente. `evaluate(bucket)` é a função pura das regras (testada em `tests/unit`).
 - **Nunca** diagnostica, **nunca** age sozinha; confiança escala com a quantidade de dados.
 
-Fases seguintes (ver roadmap): recuperação/carga (ACWR, prontidão) na Fase II, com a tabela `Insight` dedicada e questionários; integrações wearable na Fase III.
+**Status (02H — persistência do ciclo):** a tabela `Insight` foi criada (migration `20260712120000_add_insight_lifecycle`) reabrindo a decisão F2, agora com aprovação explícita. O motor continua calculando on-the-fly; o store grava o ciclo **detecção→exposição→ação→resultado**:
+
+- `insight-store.ts` — `upsertExposedInsights(actor, insights)` grava a exposição na leitura da carteira (uma linha por `fingerprintOf` = `athleteId:engine:regras`, idempotente) e devolve cada Insight com `{ id, status, outcome }`. `resolveInsight(id, actor, { status?, outcome? })` registra aceitar/ignorar (a ação) e o resultado, com escopo org+treinador e `AuditLog` (`RESOLVE_INSIGHT`).
+- Rotas: `GET /api/trainer/intelligence/attention` (agora persiste + devolve estado); `POST /api/trainer/intelligence/insights/[id]/decision`.
+- `fingerprintOf` (em `insight.ts`) é puro e testado; o ciclo é coberto por `tests/integration/insight-lifecycle.test.ts`.
+
+Fases seguintes (ver roadmap): questionário de prontidão/recuperação e cron/lote por organização na Fase II; integrações wearable e `MetricSample` na Fase III.

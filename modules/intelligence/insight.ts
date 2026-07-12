@@ -23,3 +23,20 @@ export interface Insight {
   dadosUsados: InsightEvidence[];
   regras: string[];
 }
+
+export type InsightLifecycleStatus = "PENDING" | "ACCEPTED" | "IGNORED";
+
+// Insight calculado + seu estado persistido (02H). `id` é null enquanto a
+// situação nunca foi gravada; status/outcome refletem a decisão do treinador.
+export type PersistedInsight = Insight & {
+  id: string | null;
+  status: InsightLifecycleStatus;
+  outcome: string | null;
+};
+
+// Identidade estável de uma situação: mesmo atleta + mesmo motor + mesmas
+// regras disparadas ⇒ mesma linha, preservando aceito/ignorado entre
+// varreduras. Regras ordenadas para ser determinístico. Puro (testável).
+export function fingerprintOf(insight: Pick<Insight, "athleteId" | "engine" | "regras">): string {
+  return `${insight.athleteId}:${insight.engine}:${[...insight.regras].sort().join("|")}`;
+}

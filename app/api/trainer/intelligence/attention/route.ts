@@ -1,5 +1,6 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { analyzeRosterAttention } from "@/modules/intelligence/attention";
+import { upsertExposedInsights } from "@/modules/intelligence/insight-store";
 import {
   requireAuthenticatedUser,
   requireGlobalRole,
@@ -9,9 +10,10 @@ import { apiError, apiSuccess } from "@/server/http/response";
 
 export const dynamic = "force-dynamic";
 
-// ENKY Intelligence — atenção da carteira. Somente leitura, escopo por
-// organização + treinador. As recomendações vivem em memória (Fase I sem
-// migration): calculadas sob demanda a partir de workouts + feedback.
+// ENKY Intelligence — atenção da carteira. Escopo por organização + treinador.
+// As recomendações são calculadas sob demanda (workouts + feedback); a partir
+// do 02H a exposição é gravada e cada Insight volta com seu estado persistido
+// (id + aceito/ignorado/resultado) para o ciclo de calibração.
 export async function GET() {
   try {
     const identity = await requireAuthenticatedUser();
@@ -21,10 +23,9 @@ export async function GET() {
       where: { userId: identity.userId },
     });
 
-    const insights = await analyzeRosterAttention(
-      { organizationId, trainerProfileId: trainerProfile.id },
-      new Date(),
-    );
+    const actor = { organizationId, trainerProfileId: trainerProfile.id };
+    const computed = await analyzeRosterAttention(actor, new Date());
+    const insights = await upsertExposedInsights(actor, computed);
 
     return apiSuccess({ insights });
   } catch (error) {

@@ -66,3 +66,6 @@ export const passwordResetRateLimiter = new InMemoryRateLimiter(5, 60 * 60 * 100
 export const workoutWriteRateLimiter = new InMemoryRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador
 export const feedbackWriteRateLimiter = new InMemoryRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta
 export const libraryWriteRateLimiter = new InMemoryRateLimiter(120, 60 * 60 * 1000); // 120/hora por treinador (exercícios + templates)
+export const intelligenceWriteRateLimiter = new InMemoryRateLimiter(120, 60 * 60 * 1000); // 120/hora por treinador (aceitar/ignorar insight)
+export const readinessWriteRateLimiter = new InMemoryRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta (check-in de prontidão)
+export const reportWriteRateLimiter = new InMemoryRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (gerar/compartilhar relatório)

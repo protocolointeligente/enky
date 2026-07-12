@@ -2,12 +2,21 @@
 
 import { useState } from "react";
 import type { SVGProps } from "react";
-import type { Insight } from "@/modules/intelligence/insight";
+import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import type { Insight, InsightLifecycleStatus } from "@/modules/intelligence/insight";
 
 // A superfície única da ENKY Intelligence — aparece em qualquer tela que peça
 // análise. Não é um chatbot: é um cartão que já analisou e explica. Segue o
 // formato de 6 partes e mostra sempre o "por quê" (anti caixa-preta).
 export type { Insight };
+
+// Quando o insight vem persistido (02H), traz id + estado do ciclo. Sem id
+// (ex.: insight de sessão on-the-fly), o cartão é só leitura — sem ações.
+export type InsightCardInsight = Insight & {
+  id?: string | null;
+  status?: InsightLifecycleStatus;
+  outcome?: string | null;
+};
 
 const RISK_META: Record<Insight["risk"], { label: string; chip: string; accent: string }> = {
   urgente: { label: "Urgente", chip: "bg-danger/15 text-danger", accent: "#e5484d" },
@@ -37,10 +46,39 @@ function SparkIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-export function InsightCard({ insight, href }: { insight: Insight; href?: string }) {
+const STATUS_META: Record<InsightLifecycleStatus, { label: string; cls: string } | null> = {
+  PENDING: null,
+  ACCEPTED: { label: "Aceito", cls: "text-turq" },
+  IGNORED: { label: "Ignorado", cls: "text-faint" },
+};
+
+export function InsightCard({ insight, href }: { insight: InsightCardInsight; href?: string }) {
   const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<InsightLifecycleStatus>(insight.status ?? "PENDING");
+  const [busy, setBusy] = useState<InsightLifecycleStatus | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const risk = RISK_META[insight.risk];
   const confidence = CONFIDENCE_META[insight.confianca];
+
+  const actionable = insight.id != null;
+  const resolved = STATUS_META[status];
+
+  async function resolve(next: "ACCEPTED" | "IGNORED") {
+    if (!insight.id || busy) return;
+    setBusy(next);
+    setActionError(null);
+    try {
+      await apiFetch(`/api/trainer/intelligence/insights/${insight.id}/decision`, {
+        method: "POST",
+        body: JSON.stringify({ status: next }),
+      });
+      setStatus(next);
+    } catch (err) {
+      setActionError(err instanceof ApiClientError ? err.message : "Não foi possível salvar.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <div
@@ -51,9 +89,14 @@ export function InsightCard({ insight, href }: { insight: Insight; href?: string
         <span className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-electric-hi">
           <SparkIcon /> ENKY Intelligence
         </span>
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${risk.chip}`}>
-          {risk.label}
-        </span>
+        <div className="flex items-center gap-2">
+          {resolved && (
+            <span className={`text-[11px] font-semibold ${resolved.cls}`}>✓ {resolved.label}</span>
+          )}
+          <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${risk.chip}`}>
+            {risk.label}
+          </span>
+        </div>
       </div>
 
       {insight.athleteName && (
@@ -113,6 +156,35 @@ export function InsightCard({ insight, href }: { insight: Insight; href?: string
         <a href={href} className="text-xs font-medium text-electric-hi hover:underline">
           Abrir atleta →
         </a>
+      )}
+
+      {actionable && status === "PENDING" && (
+        <div className="flex items-center gap-2 border-t border-line pt-2">
+          <button
+            type="button"
+            onClick={() => resolve("ACCEPTED")}
+            disabled={busy != null}
+            className="rounded-lg bg-turq/15 px-3 py-1.5 text-xs font-semibold text-turq transition-colors hover:bg-turq/25 disabled:opacity-50"
+          >
+            {busy === "ACCEPTED" ? "Salvando…" : "Aceitar"}
+          </button>
+          <button
+            type="button"
+            onClick={() => resolve("IGNORED")}
+            disabled={busy != null}
+            className="rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
+          >
+            {busy === "IGNORED" ? "Salvando…" : "Ignorar"}
+          </button>
+        </div>
+      )}
+
+      {actionError && <p className="text-xs text-danger">{actionError}</p>}
+      {insight.outcome && (
+        <p className="border-t border-line pt-2 text-xs text-muted">
+          <span className="font-semibold text-faint">Resultado: </span>
+          {insight.outcome}
+        </p>
       )}
     </div>
   );

@@ -9,12 +9,19 @@ Plataforma de inteligência esportiva para treinadores, assessorias e atletas: g
 
 ## Status
 
-**Fase 02B — Identidade, autenticação e convite de atleta.** Schema completo migrado (Fase 02A); cadastro de treinador, login, logout e o pipeline de convite de atleta (convidar/ativar/reenviar/revogar) estão implementados e testados contra PostgreSQL real. Nenhuma tela, dashboard, calendário, marketplace ou motor de geração de treinos foi implementado ainda. Ver `docs/DEVELOPMENT.md` para o que "pronto" significa em cada entrega.
+**Fase 02G — Experiência do atleta (02F) + ENKY Intelligence Fase I (02G).** Sobre a base 02A–02E (identidade/auth, convite de atleta, calendário, biblioteca de exercícios, templates e prescrição de treinos), estão implementados: o portal do atleta (calendário, treinos, feedback/sRPE) e o motor de **atenção** da ENKY Intelligence — regras determinísticas e explicáveis sobre workouts + feedback, expostas ao treinador via `InsightCard`, sem LLM e sem diagnóstico.
+
+Homologado no nível de motor, cálculo, prioridade, confiança, linguagem e UX-código: **143/143** testes unitários + build ok, 10 cenários de homologação controlada. Ver `docs/ENKY_02F_02G_HOMOLOGATION_REPORT.md`.
+
+> **Ainda em branch (`feat/fase-02d-calendar-library`) — sem merge para `main`, sem Production, sem migration.** Falta a homologação visual humana no Preview (recomendada pelo relatório antes do 02H) e a integração/E2E contra banco de teste isolado. A inteligência calcula on-the-fly; a persistência de insights (tabela `Insight`, ciclo aceito/ignorado/resultado) e o questionário de prontidão/recuperação são o **02H**. Marketplace, pagamentos, periodização, relatórios e admin permanecem como fundação/especificação, sem produto funcional.
 
 **Rotas implementadas:**
 
-- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`
-- `POST /api/athletes/invitations`, `POST /api/athletes/invitations/activate`, `POST /api/athletes/invitations/[id]/resend`, `POST /api/athletes/invitations/[id]/revoke`
+- **Auth:** `register`, `login`, `logout`, `session`, `password-reset/request`, `password-reset/confirm`
+- **Convite de atleta:** `athletes/invitations` (criar/ativar/reenviar/revogar)
+- **Treinador:** `trainer/athletes` + `roster`, `trainer/calendar`, `trainer/exercises` (CRUD + arquivar/reativar), `trainer/templates` (CRUD + aplicar/duplicar/arquivar), `trainer/workouts` (CRUD + publicar/mover/cancelar/duplicar/salvar-como-template/feedback/insight)
+- **Atleta:** `athlete/calendar`, `athlete/workouts` + `[id]` + `[id]/feedback`
+- **Intelligence:** `trainer/intelligence/attention`
 
 ## Documentos oficiais (fonte única de verdade)
 
@@ -38,7 +45,7 @@ Decisões de arquitetura tomadas dentro deste repositório (que não vêm direta
 - [Zod](https://zod.dev) para validação de entrada
 - [Tailwind CSS](https://tailwindcss.com)
 - ESLint + Prettier
-- [Vitest](https://vitest.dev) (unitário) + [Playwright](https://playwright.dev) (E2E, preparado)
+- [Vitest](https://vitest.dev) (unitário + integração contra PostgreSQL real) + [Playwright](https://playwright.dev) (E2E, specs escritos — pendente rodar contra banco de teste isolado)
 - Arquitetura de **monólito modular** — sem microserviços
 
 ## Requisitos
