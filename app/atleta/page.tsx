@@ -85,6 +85,30 @@ export default function AthleteHomePage() {
 
         {error && <p className={uiClasses.error}>{error}</p>}
 
+        {/* Check-in de prontidão */}
+        <Link
+          href="/atleta/prontidao"
+          className="flex items-center justify-between rounded-xl border border-line bg-petrol/70 p-4 transition-colors hover:border-line-strong"
+        >
+          <div className="min-w-0">
+            <p className="font-medium text-ink">Check-in de prontidão</p>
+            <p className="truncate text-xs text-muted">Como você está hoje? (sono, fadiga, dor…)</p>
+          </div>
+          <ChevronRightIcon className="shrink-0 text-faint" />
+        </Link>
+
+        {/* Relatórios */}
+        <Link
+          href="/atleta/relatorios"
+          className="flex items-center justify-between rounded-xl border border-line bg-petrol/70 p-4 transition-colors hover:border-line-strong"
+        >
+          <div className="min-w-0">
+            <p className="font-medium text-ink">Relatórios</p>
+            <p className="truncate text-xs text-muted">Resumos que seu treinador compartilhou</p>
+          </div>
+          <ChevronRightIcon className="shrink-0 text-faint" />
+        </Link>
+
         {/* Treino de hoje */}
         <section className="flex flex-col gap-2">
           <h2 className={uiClasses.subheading}>Treino de hoje</h2>
