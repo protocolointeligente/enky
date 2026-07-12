@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { uiClasses } from "@/app/_lib/ui";
+import { VideoPlayer } from "@/components/video-player";
 
 interface ExerciseItem {
   id: string;
@@ -41,6 +42,7 @@ export default function TrainerExercisesPage() {
   const [search, setSearch] = useState("");
   const [includeInactive, setIncludeInactive] = useState(false);
   const [form, setForm] = useState<ExerciseFormValues | null>(null);
+  const [playing, setPlaying] = useState<{ name: string; url: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -179,34 +181,45 @@ export default function TrainerExercisesPage() {
                       {item.targetMuscles.length ? ` · ${item.targetMuscles.join(", ")}` : ""}
                     </p>
                   </div>
-                  {item.editable && (
-                    <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 items-center gap-2">
+                    {item.videoUrl && (
                       <button
                         type="button"
-                        className="text-xs text-[#00e6c3] hover:underline disabled:opacity-50"
-                        disabled={busy}
-                        onClick={() =>
-                          setForm({
-                            id: item.id,
-                            name: item.name,
-                            category: item.category,
-                            targetMuscles: item.targetMuscles.join(", "),
-                            videoUrl: item.videoUrl ?? "",
-                          })
-                        }
+                        className="text-xs font-medium text-electric-hi hover:underline"
+                        onClick={() => setPlaying({ name: item.name, url: item.videoUrl! })}
                       >
-                        Editar
+                        ▶ Vídeo
                       </button>
-                      <button
-                        type="button"
-                        className="text-xs text-slate-400 hover:underline disabled:opacity-50"
-                        disabled={busy}
-                        onClick={() => toggleActive(item)}
-                      >
-                        {item.isActive ? "Arquivar" : "Reativar"}
-                      </button>
-                    </div>
-                  )}
+                    )}
+                    {item.editable && (
+                      <>
+                        <button
+                          type="button"
+                          className="text-xs text-[#00e6c3] hover:underline disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() =>
+                            setForm({
+                              id: item.id,
+                              name: item.name,
+                              category: item.category,
+                              targetMuscles: item.targetMuscles.join(", "),
+                              videoUrl: item.videoUrl ?? "",
+                            })
+                          }
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="text-xs text-slate-400 hover:underline disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() => toggleActive(item)}
+                        >
+                          {item.isActive ? "Arquivar" : "Reativar"}
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -287,6 +300,30 @@ export default function TrainerExercisesPage() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {playing && (
+        <div
+          className="fixed inset-0 z-20 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPlaying(null)}
+        >
+          <div
+            className="flex w-full max-w-2xl flex-col gap-3 rounded-2xl border border-line bg-petrol p-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="font-semibold text-ink">{playing.name}</h2>
+              <button
+                type="button"
+                className="text-sm text-muted hover:text-ink"
+                onClick={() => setPlaying(null)}
+              >
+                Fechar
+              </button>
+            </div>
+            <VideoPlayer url={playing.url} />
+          </div>
         </div>
       )}
     </main>
