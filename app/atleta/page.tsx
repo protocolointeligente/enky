@@ -223,7 +223,7 @@ function WorkoutRow({ workout, cta }: { workout: WorkoutListItem; cta?: string }
         </p>
       </div>
       {cta ? (
-        <span className="shrink-0 rounded-lg bg-orange px-3 py-1.5 text-xs font-semibold text-deep">
+        <span className="shrink-0 rounded-lg bg-orange px-3 py-1.5 text-xs font-semibold text-onbrand">
           {cta}
         </span>
       ) : (

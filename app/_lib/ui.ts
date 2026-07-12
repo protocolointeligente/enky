@@ -25,7 +25,7 @@ export const uiClasses = {
 
   // Primary CTA — laranja performance, texto escuro para contraste AA.
   button:
-    "inline-flex items-center justify-center gap-2 rounded-lg bg-orange px-4 py-2 font-semibold text-deep transition-colors hover:bg-orange-hi focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 rounded-lg bg-orange px-4 py-2 font-semibold text-onbrand transition-colors hover:bg-orange-hi focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange disabled:cursor-not-allowed disabled:opacity-50",
   buttonSecondary:
     "inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface px-4 py-2 font-semibold text-ink transition-colors hover:border-electric hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-electric disabled:cursor-not-allowed disabled:opacity-50",
   buttonGhost:

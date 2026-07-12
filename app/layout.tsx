@@ -18,8 +18,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "ENKY OS",
-  description: "Inteligência para cada decisão — plataforma de performance humana.",
+  title: "ENKY — Inteligência para cada decisão",
+  description:
+    "Plataforma de performance humana para treinadores: prescreva, acompanhe e decida com dados — carga, prontidão e evolução do atleta em um só lugar. Comece grátis com 1 atleta.",
 };
 
 export default function RootLayout({
@@ -28,7 +29,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={`${spaceGrotesk.variable} ${inter.variable}`}>
+    <html lang="pt-BR" className={`${spaceGrotesk.variable} ${inter.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Anti-flash: resolve o tema (system|light|dark) antes da 1ª pintura. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var p=localStorage.getItem('enky-theme')||'system';var d=window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.dataset.theme=(p==='system'?(d?'dark':'light'):p);}catch(e){document.documentElement.dataset.theme='dark';}})();",
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/app/_lib/api-client";
+import { BrandLogo } from "@/components/brand-logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export interface AppNavLink {
   href: string;
@@ -35,9 +37,8 @@ export function AppHeader({ home, links }: { home: string; links: AppNavLink[] }
     <header className="sticky top-0 z-30 border-b border-line bg-petrol/95 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <div className="flex min-w-0 items-center gap-6">
-          <Link href={home} className="flex shrink-0 items-center gap-2" aria-label="ENKY — início">
-            <span className="h-5 w-1.5 rounded-full bg-orange" aria-hidden="true" />
-            <span className="font-display text-lg font-bold tracking-tight text-ink">ENKY</span>
+          <Link href={home} className="shrink-0" aria-label="ENKY — início">
+            <BrandLogo />
           </Link>
           <nav className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
             {links.map((link) => {
@@ -59,14 +60,17 @@ export function AppHeader({ home, links }: { home: string; links: AppNavLink[] }
             })}
           </nav>
         </div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-50"
-        >
-          {loggingOut ? "Saindo..." : "Sair"}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="rounded-lg border border-line px-3 py-1.5 text-sm font-medium text-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-50"
+          >
+            {loggingOut ? "Saindo..." : "Sair"}
+          </button>
+        </div>
       </div>
     </header>
   );

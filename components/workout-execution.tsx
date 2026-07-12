@@ -103,7 +103,7 @@ export function WorkoutExecution({
                   >
                     <span
                       className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
-                        checked ? "border-turq bg-turq text-deep" : "border-line-strong"
+                        checked ? "border-turq bg-turq text-onbrand" : "border-line-strong"
                       }`}
                     >
                       {checked && <CheckIcon width={16} height={16} />}

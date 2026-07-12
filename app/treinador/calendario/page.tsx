@@ -308,14 +308,14 @@ export default function TrainerCalendarPage() {
               <div className="flex overflow-hidden rounded-lg border border-line">
                 <button
                   type="button"
-                  className={`px-4 py-1.5 text-sm font-semibold transition-colors ${view === "week" ? "bg-orange text-deep" : "text-muted hover:bg-surface"}`}
+                  className={`px-4 py-1.5 text-sm font-semibold transition-colors ${view === "week" ? "bg-orange text-onbrand" : "text-muted hover:bg-surface"}`}
                   onClick={() => setView("week")}
                 >
                   Semana
                 </button>
                 <button
                   type="button"
-                  className={`px-4 py-1.5 text-sm font-semibold transition-colors ${view === "month" ? "bg-orange text-deep" : "text-muted hover:bg-surface"}`}
+                  className={`px-4 py-1.5 text-sm font-semibold transition-colors ${view === "month" ? "bg-orange text-onbrand" : "text-muted hover:bg-surface"}`}
                   onClick={() => setView("month")}
                 >
                   Mês
