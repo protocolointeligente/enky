@@ -215,7 +215,7 @@ export default function TrainerDashboardPage() {
                   title="Nenhum treino programado"
                   description="Você não tem treinos nos próximos 30 dias."
                   icon={<CalendarIcon width={28} height={28} />}
-                  action={{ label: "Criar treino", href: "/treinador/treinos/novo" }}
+                  action={{ label: "Criar primeiro treino", href: "/treinador/treinos/novo" }}
                 />
               </div>
             ) : (
