@@ -11,7 +11,13 @@ interface ExerciseItem {
   name: string;
   category: string;
   targetMuscles: string[];
+  modality: string | null;
+  equipment: string | null;
+  level: string | null;
+  description: string | null;
   videoUrl: string | null;
+  videoSource: string | null;
+  videoLicense: string | null;
   isActive: boolean;
   isGlobal: boolean;
   editable: boolean;
@@ -22,7 +28,13 @@ interface ExerciseFormValues {
   name: string;
   category: string;
   targetMuscles: string;
+  modality: string;
+  equipment: string;
+  level: string;
+  description: string;
   videoUrl: string;
+  videoSource: string;
+  videoLicense: string;
 }
 
 const emptyForm: ExerciseFormValues = {
@@ -30,7 +42,49 @@ const emptyForm: ExerciseFormValues = {
   name: "",
   category: "",
   targetMuscles: "",
+  modality: "",
+  equipment: "",
+  level: "",
+  description: "",
   videoUrl: "",
+  videoSource: "",
+  videoLicense: "",
+};
+
+const MODALITIES = [
+  ["RUNNING", "Corrida"],
+  ["STRENGTH", "Força"],
+  ["FUNCTIONAL", "Funcional"],
+  ["CYCLING", "Ciclismo"],
+  ["SWIMMING", "Natação"],
+  ["TRIATHLON", "Triatlo"],
+] as const;
+
+const LEVELS = ["iniciante", "intermediário", "avançado"] as const;
+
+const modalityLabel = (value: string | null) =>
+  MODALITIES.find(([v]) => v === value)?.[1] ?? null;
+
+interface Filters {
+  search: string;
+  category: string;
+  modality: string;
+  muscleGroup: string;
+  equipment: string;
+  level: string;
+  hasVideo: string;
+  includeInactive: boolean;
+}
+
+const emptyFilters: Filters = {
+  search: "",
+  category: "",
+  modality: "",
+  muscleGroup: "",
+  equipment: "",
+  level: "",
+  hasVideo: "",
+  includeInactive: false,
 };
 
 export default function TrainerExercisesPage() {
@@ -39,22 +93,27 @@ export default function TrainerExercisesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [includeInactive, setIncludeInactive] = useState(false);
+  const [filters, setFilters] = useState<Filters>(emptyFilters);
   const [form, setForm] = useState<ExerciseFormValues | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     const params = new URLSearchParams();
-    if (search.trim()) params.set("search", search.trim());
-    if (includeInactive) params.set("includeInactive", "true");
+    if (filters.search.trim()) params.set("search", filters.search.trim());
+    if (filters.category.trim()) params.set("category", filters.category.trim());
+    if (filters.modality) params.set("modality", filters.modality);
+    if (filters.muscleGroup.trim()) params.set("muscleGroup", filters.muscleGroup.trim());
+    if (filters.equipment.trim()) params.set("equipment", filters.equipment.trim());
+    if (filters.level) params.set("level", filters.level);
+    if (filters.hasVideo) params.set("hasVideo", filters.hasVideo);
+    if (filters.includeInactive) params.set("includeInactive", "true");
     return apiFetch<{ exercises: ExerciseItem[] }>(`/api/trainer/exercises?${params.toString()}`)
       .then((r) => {
         setExercises(r.exercises);
         setError(null);
       })
       .catch((err) => setError(err instanceof ApiClientError ? err.message : "Erro inesperado."));
-  }, [search, includeInactive]);
+  }, [filters]);
 
   useEffect(() => {
     if (!checked) return;
@@ -68,6 +127,7 @@ export default function TrainerExercisesPage() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    const optional = (value: string) => (value.trim() === "" ? undefined : value.trim());
     const body = JSON.stringify({
       name: form.name,
       category: form.category,
@@ -75,7 +135,13 @@ export default function TrainerExercisesPage() {
         .split(",")
         .map((m) => m.trim())
         .filter(Boolean),
-      videoUrl: form.videoUrl.trim() === "" ? undefined : form.videoUrl.trim(),
+      modality: optional(form.modality),
+      equipment: optional(form.equipment),
+      level: optional(form.level),
+      description: optional(form.description),
+      videoUrl: optional(form.videoUrl),
+      videoSource: optional(form.videoSource),
+      videoLicense: optional(form.videoLicense),
     });
     try {
       if (form.id) {
@@ -112,16 +178,25 @@ export default function TrainerExercisesPage() {
   if (!checked || loading) {
     return (
       <main className={uiClasses.page}>
-        <p className="text-slate-400">Carregando...</p>
+        <p className="text-muted">Carregando...</p>
       </main>
     );
   }
 
+  const withVideo = exercises.filter((e) => e.videoUrl).length;
+
   return (
     <main className={uiClasses.page}>
-      <div className={uiClasses.container}>
-        <div className="flex items-center justify-between">
-          <h1 className={uiClasses.heading}>Exercícios</h1>
+      <div className={uiClasses.wide}>
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-1">
+            <span className={uiClasses.eyebrow}>Biblioteca</span>
+            <h1 className={uiClasses.heading}>Exercícios</h1>
+            <p className={uiClasses.hint}>
+              {exercises.length} exercício{exercises.length === 1 ? "" : "s"} · {withVideo} com
+              demonstração em vídeo
+            </p>
+          </div>
           <button
             type="button"
             className={uiClasses.button}
@@ -129,93 +204,207 @@ export default function TrainerExercisesPage() {
           >
             + Novo exercício
           </button>
-        </div>
+        </header>
 
         {error && <p className={uiClasses.error}>{error}</p>}
         {notice && <p className={uiClasses.success}>{notice}</p>}
 
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            className={uiClasses.input}
-            placeholder="Buscar por nome..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+        <section className={`${uiClasses.card} flex flex-col gap-3`}>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <input
-              type="checkbox"
-              checked={includeInactive}
-              onChange={(e) => setIncludeInactive(e.target.checked)}
+              className={uiClasses.input}
+              placeholder="Buscar por nome..."
+              aria-label="Buscar por nome"
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             />
-            Incluir inativos
-          </label>
-        </div>
-
-        <section className={`${uiClasses.card} flex flex-col gap-2`}>
-          {exercises.length === 0 ? (
-            <p className="text-sm text-slate-400">Nenhum exercício encontrado.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {exercises.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 p-3"
-                >
-                  {item.videoUrl && <ExerciseDemo name={item.name} url={item.videoUrl} />}
-                  <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 font-medium text-slate-100">
-                      <span className="truncate">{item.name}</span>
-                      <span
-                        className={`${uiClasses.badge} ${item.isGlobal ? "bg-slate-700 text-slate-200" : "bg-blue-900 text-blue-200"}`}
-                      >
-                        {item.isGlobal ? "Global" : "Minha organização"}
-                      </span>
-                      {!item.isActive && (
-                        <span className={`${uiClasses.badge} bg-slate-800 text-slate-400`}>
-                          Inativo
-                        </span>
-                      )}
-                    </p>
-                    <p className="truncate text-xs text-slate-400">
-                      {item.category}
-                      {item.targetMuscles.length ? ` · ${item.targetMuscles.join(", ")}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {item.editable && (
-                      <>
-                        <button
-                          type="button"
-                          className="text-xs text-[#00e6c3] hover:underline disabled:opacity-50"
-                          disabled={busy}
-                          onClick={() =>
-                            setForm({
-                              id: item.id,
-                              name: item.name,
-                              category: item.category,
-                              targetMuscles: item.targetMuscles.join(", "),
-                              videoUrl: item.videoUrl ?? "",
-                            })
-                          }
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          className="text-xs text-slate-400 hover:underline disabled:opacity-50"
-                          disabled={busy}
-                          onClick={() => toggleActive(item)}
-                        >
-                          {item.isActive ? "Arquivar" : "Reativar"}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </li>
+            <select
+              className={uiClasses.select}
+              aria-label="Modalidade"
+              value={filters.modality}
+              onChange={(e) => setFilters({ ...filters, modality: e.target.value })}
+            >
+              <option value="">Modalidade: todas</option>
+              {MODALITIES.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
               ))}
-            </ul>
-          )}
+            </select>
+            <input
+              className={uiClasses.input}
+              placeholder="Categoria"
+              aria-label="Categoria"
+              value={filters.category}
+              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+            />
+            <input
+              className={uiClasses.input}
+              placeholder="Grupo muscular"
+              aria-label="Grupo muscular"
+              value={filters.muscleGroup}
+              onChange={(e) => setFilters({ ...filters, muscleGroup: e.target.value })}
+            />
+            <input
+              className={uiClasses.input}
+              placeholder="Equipamento"
+              aria-label="Equipamento"
+              value={filters.equipment}
+              onChange={(e) => setFilters({ ...filters, equipment: e.target.value })}
+            />
+            <select
+              className={uiClasses.select}
+              aria-label="Nível"
+              value={filters.level}
+              onChange={(e) => setFilters({ ...filters, level: e.target.value })}
+            >
+              <option value="">Nível: todos</option>
+              {LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+            <select
+              className={uiClasses.select}
+              aria-label="Vídeo"
+              value={filters.hasVideo}
+              onChange={(e) => setFilters({ ...filters, hasVideo: e.target.value })}
+            >
+              <option value="">Vídeo: tanto faz</option>
+              <option value="true">Com vídeo</option>
+              <option value="false">Sem vídeo</option>
+            </select>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-orange"
+                checked={filters.includeInactive}
+                onChange={(e) => setFilters({ ...filters, includeInactive: e.target.checked })}
+              />
+              Incluir inativos
+            </label>
+          </div>
+          <button
+            type="button"
+            className="self-start text-xs text-muted transition-colors hover:text-ink"
+            onClick={() => setFilters(emptyFilters)}
+          >
+            Limpar filtros
+          </button>
         </section>
+
+        {exercises.length === 0 ? (
+          <p className="py-10 text-center text-sm text-muted">Nenhum exercício encontrado.</p>
+        ) : (
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {exercises.map((item) => (
+              <li
+                key={item.id}
+                className={`flex flex-col overflow-hidden rounded-xl border border-line bg-petrol/60 transition-colors hover:border-line-strong ${
+                  item.isActive ? "" : "opacity-60"
+                }`}
+              >
+                {item.videoUrl ? (
+                  <ExerciseDemo name={item.name} url={item.videoUrl} size="card" />
+                ) : (
+                  <div className="flex aspect-video w-full items-center justify-center bg-surface">
+                    <span className="text-xs text-faint">Sem vídeo</span>
+                  </div>
+                )}
+
+                <div className="flex flex-1 flex-col gap-2 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <h2 className="font-display text-sm font-semibold leading-tight text-ink">
+                      {item.name}
+                    </h2>
+                    <div className="flex shrink-0 gap-1">
+                      {!item.isActive && (
+                        <span className={`${uiClasses.badge} bg-surface text-faint`}>Inativo</span>
+                      )}
+                      <span
+                        className={`${uiClasses.badge} ${
+                          item.isGlobal ? "bg-surface text-muted" : "bg-electric/15 text-electric-hi"
+                        }`}
+                      >
+                        {item.isGlobal ? "Global" : "Minha org"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      modalityLabel(item.modality),
+                      item.category,
+                      item.equipment,
+                      item.level,
+                    ]
+                      .filter(Boolean)
+                      .map((chip) => (
+                        <span
+                          key={chip as string}
+                          className="rounded-md bg-surface px-2 py-0.5 text-xs text-muted"
+                        >
+                          {chip}
+                        </span>
+                      ))}
+                  </div>
+
+                  {item.targetMuscles.length > 0 && (
+                    <p className="text-xs text-faint">{item.targetMuscles.join(" · ")}</p>
+                  )}
+
+                  {item.description && (
+                    <p className="line-clamp-2 text-xs leading-relaxed text-muted">
+                      {item.description}
+                    </p>
+                  )}
+
+                  {item.videoUrl && (item.videoSource || item.videoLicense) && (
+                    <p className="truncate text-[11px] text-faint">
+                      Vídeo: {[item.videoSource, item.videoLicense].filter(Boolean).join(" — ")}
+                    </p>
+                  )}
+
+                  {item.editable && (
+                    <div className="mt-auto flex items-center gap-3 border-t border-line pt-3">
+                      <button
+                        type="button"
+                        className={`text-xs ${uiClasses.link} disabled:opacity-50`}
+                        disabled={busy}
+                        onClick={() =>
+                          setForm({
+                            id: item.id,
+                            name: item.name,
+                            category: item.category,
+                            targetMuscles: item.targetMuscles.join(", "),
+                            modality: item.modality ?? "",
+                            equipment: item.equipment ?? "",
+                            level: item.level ?? "",
+                            description: item.description ?? "",
+                            videoUrl: item.videoUrl ?? "",
+                            videoSource: item.videoSource ?? "",
+                            videoLicense: item.videoLicense ?? "",
+                          })
+                        }
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-muted transition-colors hover:text-ink disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => toggleActive(item)}
+                      >
+                        {item.isActive ? "Arquivar" : "Reativar"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {form && (
@@ -224,11 +413,11 @@ export default function TrainerExercisesPage() {
           onClick={() => setForm(null)}
         >
           <form
-            className={`${uiClasses.card} w-full max-w-md flex flex-col gap-3`}
+            className={`${uiClasses.card} max-h-[90vh] w-full max-w-md flex flex-col gap-3 overflow-y-auto`}
             onClick={(e) => e.stopPropagation()}
             onSubmit={handleSave}
           >
-            <h2 className="font-semibold text-slate-100">
+            <h2 className="font-display font-semibold text-ink">
               {form.id ? "Editar exercício" : "Novo exercício"}
             </h2>
             <div>
@@ -256,6 +445,24 @@ export default function TrainerExercisesPage() {
               />
             </div>
             <div>
+              <label className={uiClasses.label} htmlFor="ex-modality">
+                Modalidade (opcional)
+              </label>
+              <select
+                id="ex-modality"
+                className={uiClasses.select}
+                value={form.modality}
+                onChange={(e) => setForm({ ...form, modality: e.target.value })}
+              >
+                <option value="">—</option>
+                {MODALITIES.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className={uiClasses.label} htmlFor="ex-muscles">
                 Grupos musculares (separados por vírgula)
               </label>
@@ -264,6 +471,48 @@ export default function TrainerExercisesPage() {
                 className={uiClasses.input}
                 value={form.targetMuscles}
                 onChange={(e) => setForm({ ...form, targetMuscles: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={uiClasses.label} htmlFor="ex-equipment">
+                Equipamento (opcional)
+              </label>
+              <input
+                id="ex-equipment"
+                className={uiClasses.input}
+                placeholder="barra, halter, peso corporal..."
+                value={form.equipment}
+                onChange={(e) => setForm({ ...form, equipment: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={uiClasses.label} htmlFor="ex-level">
+                Nível (opcional)
+              </label>
+              <select
+                id="ex-level"
+                className={uiClasses.select}
+                value={form.level}
+                onChange={(e) => setForm({ ...form, level: e.target.value })}
+              >
+                <option value="">—</option>
+                {LEVELS.map((level) => (
+                  <option key={level} value={level}>
+                    {level}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={uiClasses.label} htmlFor="ex-description">
+                Descrição / execução (opcional)
+              </label>
+              <textarea
+                id="ex-description"
+                rows={3}
+                className={uiClasses.input}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
             </div>
             <div>
@@ -276,6 +525,30 @@ export default function TrainerExercisesPage() {
                 className={uiClasses.input}
                 value={form.videoUrl}
                 onChange={(e) => setForm({ ...form, videoUrl: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={uiClasses.label} htmlFor="ex-video-source">
+                Origem do vídeo (opcional)
+              </label>
+              <input
+                id="ex-video-source"
+                className={uiClasses.input}
+                placeholder="YouTube, gravação própria, MuscleWiki..."
+                value={form.videoSource}
+                onChange={(e) => setForm({ ...form, videoSource: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className={uiClasses.label} htmlFor="ex-video-license">
+                Licença / observação do vídeo (opcional)
+              </label>
+              <input
+                id="ex-video-license"
+                className={uiClasses.input}
+                placeholder="CC BY 4.0, uso autorizado, material próprio..."
+                value={form.videoLicense}
+                onChange={(e) => setForm({ ...form, videoLicense: e.target.value })}
               />
             </div>
             <div className="flex gap-2">
