@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, type Modality } from "@prisma/client";
 import { recordAuditLog } from "@/domain/audit";
 import { AuthorizationError, ConflictError, NotFoundError } from "@/domain/errors";
 import { prisma } from "@/infrastructure/database/prisma";
@@ -16,7 +16,13 @@ export interface ExerciseListItem {
   name: string;
   category: string;
   targetMuscles: string[];
+  modality: string | null;
+  equipment: string | null;
+  level: string | null;
+  description: string | null;
   videoUrl: string | null;
+  videoSource: string | null;
+  videoLicense: string | null;
   isActive: boolean;
   isGlobal: boolean;
   editable: boolean;
@@ -25,6 +31,11 @@ export interface ExerciseListItem {
 export interface ListExercisesFilters {
   search?: string;
   category?: string;
+  modality?: string;
+  muscleGroup?: string;
+  equipment?: string;
+  level?: string;
+  hasVideo?: boolean;
   includeInactive?: boolean;
 }
 
@@ -41,6 +52,13 @@ export async function listExercises(
       OR: [{ organizationId: actor.organizationId }, { organizationId: null }],
       ...(filters.search ? { name: { contains: filters.search.trim(), mode: "insensitive" } } : {}),
       ...(filters.category ? { category: filters.category } : {}),
+      ...(filters.modality ? { modality: filters.modality as Modality } : {}),
+      ...(filters.muscleGroup ? { targetMuscles: { has: filters.muscleGroup.trim() } } : {}),
+      ...(filters.equipment
+        ? { equipment: { contains: filters.equipment.trim(), mode: "insensitive" } }
+        : {}),
+      ...(filters.level ? { level: filters.level } : {}),
+      ...(filters.hasVideo === undefined ? {} : { videoUrl: filters.hasVideo ? { not: null } : null }),
       ...(filters.includeInactive ? {} : { isActive: true }),
     },
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
@@ -49,7 +67,13 @@ export async function listExercises(
       name: true,
       category: true,
       targetMuscles: true,
+      modality: true,
+      equipment: true,
+      level: true,
+      description: true,
       videoUrl: true,
+      videoSource: true,
+      videoLicense: true,
       isActive: true,
       organizationId: true,
     },
@@ -60,7 +84,13 @@ export async function listExercises(
     name: e.name,
     category: e.category,
     targetMuscles: e.targetMuscles,
+    modality: e.modality,
+    equipment: e.equipment,
+    level: e.level,
+    description: e.description,
     videoUrl: e.videoUrl,
+    videoSource: e.videoSource,
+    videoLicense: e.videoLicense,
     isActive: e.isActive,
     isGlobal: e.organizationId === null,
     editable: e.organizationId === actor.organizationId,
@@ -95,7 +125,13 @@ export async function createExercise(input: CreateExerciseInput, actor: Exercise
           name: input.name,
           category: input.category,
           targetMuscles: input.targetMuscles,
+          modality: input.modality,
+          equipment: input.equipment,
+          level: input.level,
+          description: input.description,
           videoUrl: input.videoUrl,
+          videoSource: input.videoSource,
+          videoLicense: input.videoLicense,
         },
       });
       await recordAuditLog(tx, {
@@ -131,7 +167,13 @@ export async function updateExercise(id: string, input: UpdateExerciseInput, act
           name: input.name,
           category: input.category,
           targetMuscles: input.targetMuscles,
+          modality: input.modality ?? null,
+          equipment: input.equipment ?? null,
+          level: input.level ?? null,
+          description: input.description ?? null,
           videoUrl: input.videoUrl ?? null,
+          videoSource: input.videoSource ?? null,
+          videoLicense: input.videoLicense ?? null,
         },
       });
       await recordAuditLog(tx, {

@@ -21,11 +21,17 @@ export async function GET(request: NextRequest) {
     const { organizationId } = await resolveActiveOrganization(identity.userId);
 
     const sp = request.nextUrl.searchParams;
+    const hasVideo = sp.get("hasVideo");
     const exercises = await listExercises(
       { organizationId },
       {
         search: sp.get("search") ?? undefined,
         category: sp.get("category") ?? undefined,
+        modality: sp.get("modality") ?? undefined,
+        muscleGroup: sp.get("muscleGroup") ?? undefined,
+        equipment: sp.get("equipment") ?? undefined,
+        level: sp.get("level") ?? undefined,
+        hasVideo: hasVideo === null ? undefined : hasVideo === "true",
         includeInactive: sp.get("includeInactive") === "true",
       },
     );

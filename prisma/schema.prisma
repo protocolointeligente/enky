@@ -664,7 +664,15 @@ model Exercise {
   name           String
   category       String
   targetMuscles  String[]
+  modality       Modality?
+  equipment      String?
+  level          String?
+  description    String?
   videoUrl       String?
+  // Rastreabilidade de vídeo (Fase 5): de onde o vídeo veio e sob qual
+  // licença/observação — para não republicar mídia de terceiros sem crédito.
+  videoSource    String?
+  videoLicense   String?
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now()) @db.Timestamptz
   updatedAt      DateTime  @updatedAt @db.Timestamptz

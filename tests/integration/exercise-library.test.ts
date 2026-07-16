@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/infrastructure/database/prisma";
 import { registerTrainer } from "@/modules/identity/register-trainer";
+import { createExerciseInputSchema } from "@/modules/exercises/exercise-schema";
 import {
   archiveExercise,
   createExercise,
@@ -49,6 +50,81 @@ describe("Fase 02D.2 — biblioteca de exercícios", () => {
     await expect(
       createExercise({ name: "Agachamento Búlgaro", category: "outra", targetMuscles: [] }, actor),
     ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  // Fase 5 — o índice parcial uq_organization_exercise_name é sobre
+  // LOWER("name"), e o schema colapsa espaços: as duas variantes colidem.
+  it("rejeita duplicata por variação de caixa e de espaço", async () => {
+    const actor = await newTrainerActor("ex-dedup");
+    await createExercise(
+      { name: "Supino Reto", category: "peito", targetMuscles: [] },
+      actor,
+    );
+
+    await expect(
+      createExercise(
+        { name: createExerciseInputSchema.parse({ name: "supino reto", category: "peito" }).name,
+          category: "peito",
+          targetMuscles: [] },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+
+    // "Supino  Reto" (espaço duplo) normaliza para "Supino Reto" → mesma colisão.
+    const spaced = createExerciseInputSchema.parse({ name: "Supino  Reto", category: "peito" });
+    await expect(
+      createExercise({ ...spaced, targetMuscles: [] }, actor),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  it("filtra por modalidade, grupo muscular, equipamento, nível e presença de vídeo", async () => {
+    const actor = await newTrainerActor("ex-filters");
+    const withVideo = await createExercise(
+      {
+        name: "Agachamento Livre",
+        category: "membros inferiores",
+        targetMuscles: ["quadríceps"],
+        modality: "STRENGTH",
+        equipment: "barra",
+        level: "intermediário",
+        videoUrl: "https://exemplo.com/agachamento.mp4",
+        videoSource: "gravação própria",
+        videoLicense: "material próprio",
+      },
+      actor,
+    );
+    const noVideo = await createExercise(
+      {
+        name: "Corrida Contínua",
+        category: "aeróbio",
+        targetMuscles: ["panturrilha"],
+        modality: "RUNNING",
+        equipment: "nenhum",
+        level: "iniciante",
+      },
+      actor,
+    );
+
+    const scope = { organizationId: actor.organizationId };
+    const idsOf = (list: { id: string }[]) => list.map((e) => e.id);
+
+    expect(idsOf(await listExercises(scope, { modality: "STRENGTH" }))).toContain(withVideo.id);
+    expect(idsOf(await listExercises(scope, { modality: "STRENGTH" }))).not.toContain(noVideo.id);
+
+    expect(idsOf(await listExercises(scope, { muscleGroup: "quadríceps" }))).toEqual([
+      withVideo.id,
+    ]);
+    expect(idsOf(await listExercises(scope, { equipment: "BARRA" }))).toEqual([withVideo.id]); // insensitive
+    expect(idsOf(await listExercises(scope, { level: "iniciante" }))).toEqual([noVideo.id]);
+
+    expect(idsOf(await listExercises(scope, { hasVideo: true }))).toContain(withVideo.id);
+    expect(idsOf(await listExercises(scope, { hasVideo: true }))).not.toContain(noVideo.id);
+    expect(idsOf(await listExercises(scope, { hasVideo: false }))).toContain(noVideo.id);
+
+    // Rastreabilidade de vídeo sobrevive à ida-e-volta.
+    const listed = (await listExercises(scope)).find((e) => e.id === withVideo.id);
+    expect(listed?.videoSource).toBe("gravação própria");
+    expect(listed?.videoLicense).toBe("material próprio");
   });
 
   it("lista exercícios da própria org e globais, mas nunca de outra org", async () => {
