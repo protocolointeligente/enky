@@ -16,6 +16,12 @@ const envSchema = z.object({
   // address or the "Nome <endereco@dominio>" form; the domain must be
   // verified in the Resend dashboard.
   EMAIL_FROM: z.string().optional(),
+  // Distributed rate-limit store (Upstash Redis REST). Optional so `next build`
+  // and local dev/test still work — the rate-limit factory
+  // (server/security/rate-limit.ts) uses the in-memory fallback when absent,
+  // but ONLY outside production. Both are required in production.
+  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 });
 
 type Env = z.infer<typeof envSchema>;

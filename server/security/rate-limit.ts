@@ -1,4 +1,4 @@
-import { RateLimitError } from "@/domain/errors";
+import { ExternalServiceError, RateLimitError } from "@/domain/errors";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -17,9 +17,8 @@ interface Bucket {
 // In-memory fixed-window limiter. Safe for local development and
 // single-instance deployments ONLY — state lives in process memory, resets
 // on redeploy, and does not coordinate across multiple server instances.
-// Replace with a shared store (Redis/Upstash) before scaling beyond one
-// process; callers depend only on the RateLimiter interface, so that swap
-// requires no changes outside this file.
+// Production uses UpstashRateLimiter (shared store); this is the dev/test
+// fallback only (see `createRateLimiter`).
 export class InMemoryRateLimiter implements RateLimiter {
   private readonly buckets = new Map<string, Bucket>();
 
@@ -46,6 +45,88 @@ export class InMemoryRateLimiter implements RateLimiter {
   }
 }
 
+// Distributed fixed-window limiter backed by Upstash Redis over its REST API.
+// HTTP-based (no persistent socket) → fits Vercel's serverless runtime, and
+// the count is shared across every instance, so limits hold under horizontal
+// scaling and survive redeploys. Same `RateLimiter` interface — swapping this
+// in for InMemory requires no change in any caller.
+//
+// Fixed window via a single pipelined round-trip:
+//   INCR key                      → hits in the current window (1 on the first)
+//   PEXPIRE key <windowMs> NX     → set the window TTL only on the first hit
+//   PTTL key                      → remaining ms, for retryAfter when blocked
+export class UpstashRateLimiter implements RateLimiter {
+  constructor(
+    private readonly url: string,
+    private readonly token: string,
+    private readonly limit: number,
+    private readonly windowMs: number,
+  ) {}
+
+  async consume(key: string): Promise<RateLimitResult> {
+    const redisKey = `enky:rl:${key}`;
+    let response: Response;
+    try {
+      response = await fetch(`${this.url}/pipeline`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([
+          ["INCR", redisKey],
+          ["PEXPIRE", redisKey, String(this.windowMs), "NX"],
+          ["PTTL", redisKey],
+        ]),
+        cache: "no-store",
+      });
+    } catch (cause) {
+      // Fail-closed: sem contagem confiável não liberamos a requisição — do
+      // contrário uma indisponibilidade do store abriria brute-force livre.
+      throw new ExternalServiceError("Serviço de rate limit indisponível.", cause);
+    }
+
+    if (!response.ok) {
+      throw new ExternalServiceError(`Serviço de rate limit respondeu HTTP ${response.status}.`);
+    }
+
+    const results = (await response.json()) as Array<{ result?: unknown; error?: string }>;
+    const incr = results[0];
+    if (incr?.error) {
+      throw new ExternalServiceError(`Serviço de rate limit retornou erro: ${incr.error}.`);
+    }
+
+    const count = Number(incr?.result ?? 0);
+    const ttl = Number(results[2]?.result ?? this.windowMs);
+
+    if (count > this.limit) {
+      return { allowed: false, retryAfterMs: ttl > 0 ? ttl : this.windowMs };
+    }
+    return { allowed: true, retryAfterMs: 0 };
+  }
+}
+
+// Produção sem store distribuído configurado. Fail-closed no runtime (nunca no
+// import/build): o fallback em memória é permitido só em development/test.
+class UnconfiguredProductionRateLimiter implements RateLimiter {
+  async consume(): Promise<RateLimitResult> {
+    throw new Error(
+      "Rate limiting não configurado em produção. Defina UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN.",
+    );
+  }
+}
+
+// Escolhe o backend uma vez, no carregamento do módulo. Lê `process.env`
+// diretamente (não o proxy `env`) para não disparar a validação completa de
+// ambiente durante o build do Next — mesmo padrão de lib/env.ts.
+export function createRateLimiter(limit: number, windowMs: number): RateLimiter {
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (url && token) return new UpstashRateLimiter(url, token, limit, windowMs);
+  if (process.env.NODE_ENV === "production") return new UnconfiguredProductionRateLimiter();
+  return new InMemoryRateLimiter(limit, windowMs);
+}
+
 export async function enforceRateLimit(limiter: RateLimiter, key: string): Promise<void> {
   const result = await limiter.consume(key);
   if (!result.allowed) {
@@ -53,20 +134,21 @@ export async function enforceRateLimit(limiter: RateLimiter, key: string): Promi
   }
 }
 
-// Pre-configured limiters for the identity/invitation flows. Keyed by the
+// Pre-configured limiters for the identity/invitation/write flows. Keyed by the
 // caller (route handler) using IP for anonymous endpoints and normalized
-// email for account-specific brute-force protection.
-export const registerRateLimiter = new InMemoryRateLimiter(5, 60 * 60 * 1000); // 5/hora por IP
-export const loginRateLimiter = new InMemoryRateLimiter(10, 5 * 60 * 1000); // 10/5min por e-mail
-export const inviteRateLimiter = new InMemoryRateLimiter(20, 60 * 60 * 1000); // 20/hora por treinador
-export const resendInvitationRateLimiter = new InMemoryRateLimiter(5, 60 * 60 * 1000); // 5/hora por convite
-export const revokeInvitationRateLimiter = new InMemoryRateLimiter(30, 60 * 60 * 1000); // 30/hora por treinador
-export const activateInvitationRateLimiter = new InMemoryRateLimiter(10, 15 * 60 * 1000); // 10/15min por IP
-export const passwordResetRateLimiter = new InMemoryRateLimiter(5, 60 * 60 * 1000); // 5/hora por IP
-export const workoutWriteRateLimiter = new InMemoryRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador
-export const feedbackWriteRateLimiter = new InMemoryRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta
-export const libraryWriteRateLimiter = new InMemoryRateLimiter(120, 60 * 60 * 1000); // 120/hora por treinador (exercícios + templates)
-export const intelligenceWriteRateLimiter = new InMemoryRateLimiter(120, 60 * 60 * 1000); // 120/hora por treinador (aceitar/ignorar insight)
-export const readinessWriteRateLimiter = new InMemoryRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta (check-in de prontidão)
-export const reportWriteRateLimiter = new InMemoryRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (gerar/compartilhar relatório)
-export const periodizationWriteRateLimiter = new InMemoryRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (criar/excluir periodização)
+// email / user id for account-specific brute-force protection. Upstash in
+// production, in-memory in development/test (see createRateLimiter).
+export const registerRateLimiter = createRateLimiter(5, 60 * 60 * 1000); // 5/hora por IP
+export const loginRateLimiter = createRateLimiter(10, 5 * 60 * 1000); // 10/5min por e-mail
+export const inviteRateLimiter = createRateLimiter(20, 60 * 60 * 1000); // 20/hora por treinador
+export const resendInvitationRateLimiter = createRateLimiter(5, 60 * 60 * 1000); // 5/hora por convite
+export const revokeInvitationRateLimiter = createRateLimiter(30, 60 * 60 * 1000); // 30/hora por treinador
+export const activateInvitationRateLimiter = createRateLimiter(10, 15 * 60 * 1000); // 10/15min por IP
+export const passwordResetRateLimiter = createRateLimiter(5, 60 * 60 * 1000); // 5/hora por IP
+export const workoutWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador
+export const feedbackWriteRateLimiter = createRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta
+export const libraryWriteRateLimiter = createRateLimiter(120, 60 * 60 * 1000); // 120/hora por treinador (exercícios + templates)
+export const intelligenceWriteRateLimiter = createRateLimiter(120, 60 * 60 * 1000); // 120/hora por treinador (aceitar/ignorar insight)
+export const readinessWriteRateLimiter = createRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta (check-in de prontidão)
+export const reportWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (gerar/compartilhar relatório)
+export const periodizationWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (criar/excluir periodização)
