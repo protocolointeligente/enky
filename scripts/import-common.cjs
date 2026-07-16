@@ -3,9 +3,21 @@
 // (organizationId null), que precisa deduplicar à mão porque
 // @@unique([name, organizationId]) não vale para organizationId NULL no Postgres.
 
+// Atenção ao que este guard realmente cobre: ele olha o AMBIENTE do processo,
+// não o banco de destino. Rodar local (NODE_ENV=development) apontando
+// DATABASE_URL para produção sempre passou por aqui — o guard nunca protegeu
+// contra isso. Quem precisa mesmo escrever em produção (bootstrap) declara a
+// intenção em ENKY_ALLOW_PRODUCTION_WRITE=1, para a autorização ser explícita
+// e auditável em vez de acidental.
 function guardProduction() {
+  if (process.env.ENKY_ALLOW_PRODUCTION_WRITE === "1") {
+    console.warn("⚠  ENKY_ALLOW_PRODUCTION_WRITE=1 — escrita em produção autorizada explicitamente.");
+    return;
+  }
   if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") {
-    throw new Error("Importação BLOQUEADA: não rode contra produção a partir de um script local.");
+    throw new Error(
+      "Importação BLOQUEADA: ambiente de produção. Se é intencional, use scripts/bootstrap-production.cjs.",
+    );
   }
 }
 
