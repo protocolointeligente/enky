@@ -22,7 +22,28 @@ function asStringArray(v) {
   return v.map(asString).filter(Boolean);
 }
 
-// Upsert global idempotente por nome. `ex` = { name, category, targetMuscles[], videoUrl }.
+// Upsert global idempotente por nome. `ex` = { name, category, targetMuscles[],
+// videoUrl } e, opcionalmente, os metadados da Fase 5 (modality, equipment,
+// level, description, videoSource, videoLicense). Só os campos presentes em
+// `ex` são gravados — um importador que não conhece um metadado nunca apaga o
+// que outro preencheu.
+const OPTIONAL_FIELDS = [
+  "modality",
+  "equipment",
+  "level",
+  "description",
+  "videoSource",
+  "videoLicense",
+];
+
+function optionalData(ex) {
+  const data = {};
+  for (const field of OPTIONAL_FIELDS) {
+    if (ex[field] !== undefined) data[field] = ex[field];
+  }
+  return data;
+}
+
 async function upsertGlobalExercise(prisma, ex) {
   const existing = await prisma.exercise.findFirst({
     where: { name: ex.name, organizationId: null },
@@ -30,7 +51,12 @@ async function upsertGlobalExercise(prisma, ex) {
   if (existing) {
     await prisma.exercise.update({
       where: { id: existing.id },
-      data: { category: ex.category, targetMuscles: ex.targetMuscles, videoUrl: ex.videoUrl },
+      data: {
+        category: ex.category,
+        targetMuscles: ex.targetMuscles,
+        videoUrl: ex.videoUrl,
+        ...optionalData(ex),
+      },
     });
     return "updated";
   }
@@ -42,6 +68,7 @@ async function upsertGlobalExercise(prisma, ex) {
       targetMuscles: ex.targetMuscles,
       videoUrl: ex.videoUrl,
       isActive: true,
+      ...optionalData(ex),
     },
   });
   return "created";

@@ -59,3 +59,14 @@ prisma/*.db-journal
 
 # claude code local session/agent files
 .claude/
+
+# Mídia bruta e pipeline de upload do YouTube (catálogo, .MOV, frames, logs).
+# Fica FORA do repo por dois motivos: são centenas de MB de vídeo, e a pasta
+# contém `youtube_token_installed.json` — token OAuth do canal, que nunca pode
+# ser commitado. Os vídeos chegam ao produto pelo YouTube via
+# `scripts/import-enky-videos.cjs`, não como binário versionado.
+/videos Treinamento Funcional/
+
+# credenciais / tokens
+*token*.json
+client_secret*.json
