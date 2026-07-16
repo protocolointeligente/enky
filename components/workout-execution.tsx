@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { stepTypeLabel } from "@/app/_lib/labels";
 import { uiClasses } from "@/app/_lib/ui";
 import { CheckIcon } from "@/components/ui/icons";
+import { ExerciseDemo } from "@/components/exercise-demo";
 import type { BlockView, ExerciseView, StepView } from "@/components/workout-blocks-view";
 
 // Ephemeral "execution mode": the athlete ticks off steps/exercises as they go,
@@ -29,7 +30,9 @@ function exerciseLine(exercise: ExerciseView): string {
 
 interface Group {
   name: string;
-  items: { key: string; label: string }[];
+  // `demo` só existe em item de exercício que tenha vídeo — é durante a
+  // execução que o atleta precisa ver o movimento, não só na leitura do treino.
+  items: { key: string; label: string; demo?: { name: string; url: string } }[];
 }
 
 export function WorkoutExecution({
@@ -47,7 +50,13 @@ export function WorkoutExecution({
         name: block.name || `Bloco ${block.sequence ?? bi + 1}`,
         items: [
           ...block.steps.map((step, i) => ({ key: `${bi}-s-${i}`, label: stepLine(step) })),
-          ...block.exercises.map((ex, i) => ({ key: `${bi}-e-${i}`, label: exerciseLine(ex) })),
+          ...block.exercises.map((ex, i) => ({
+            key: `${bi}-e-${i}`,
+            label: exerciseLine(ex),
+            demo: ex.exercise.videoUrl
+              ? { name: ex.exercise.name, url: ex.exercise.videoUrl }
+              : undefined,
+          })),
         ],
       })),
     [blocks],
@@ -90,15 +99,18 @@ export function WorkoutExecution({
             {group.items.map((item) => {
               const checked = done.has(item.key);
               return (
-                <li key={item.key}>
+                <li
+                  key={item.key}
+                  className={`flex items-center gap-2 rounded-lg border pr-2 transition-colors ${
+                    checked ? "border-turq/40 bg-turq/10" : "border-line bg-surface"
+                  }`}
+                >
                   <button
                     type="button"
                     aria-pressed={checked}
                     onClick={() => toggle(item.key)}
-                    className={`flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
-                      checked
-                        ? "border-turq/40 bg-turq/10 text-muted line-through"
-                        : "border-line bg-surface text-ink hover:bg-surface-2"
+                    className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors ${
+                      checked ? "text-muted line-through" : "text-ink hover:bg-surface-2"
                     }`}
                   >
                     <span
@@ -110,6 +122,7 @@ export function WorkoutExecution({
                     </span>
                     <span className="text-sm">{item.label}</span>
                   </button>
+                  {item.demo && <ExerciseDemo name={item.demo.name} url={item.demo.url} size="sm" />}
                 </li>
               );
             })}
