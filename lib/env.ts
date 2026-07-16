@@ -16,12 +16,13 @@ const envSchema = z.object({
   // address or the "Nome <endereco@dominio>" form; the domain must be
   // verified in the Resend dashboard.
   EMAIL_FROM: z.string().optional(),
-  // Distributed rate-limit store (Upstash Redis REST). Optional so `next build`
-  // and local dev/test still work — the rate-limit factory
-  // (server/security/rate-limit.ts) uses the in-memory fallback when absent,
-  // but ONLY outside production. Both are required in production.
-  UPSTASH_REDIS_REST_URL: z.string().url().optional(),
-  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
+  // UPSTASH_REDIS_REST_URL/TOKEN NÃO entram aqui de propósito. Este schema é
+  // validado inteiro no primeiro acesso a qualquer variável, então declarar uma
+  // config opcional aqui faz um valor malformado derrubar TODA rota que toca
+  // `env` — inclusive /api/health e /api/auth/session, que não têm relação com
+  // rate limit. Foi exatamente o que aconteceu em produção. Quem consome essas
+  // duas é server/security/rate-limit.ts, lendo process.env direto e validando
+  // lá, onde a falha atinge só o rate limit. Documentação delas: .env.example.
 });
 
 type Env = z.infer<typeof envSchema>;

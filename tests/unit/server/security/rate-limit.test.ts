@@ -70,6 +70,28 @@ describe("server/security/rate-limit", () => {
       expect(limiter).toBeInstanceOf(UpstashRateLimiter);
     });
 
+    // Regressão: a URL do Upstash já foi validada no schema global de lib/env,
+    // e um valor malformado derrubou TODA rota que toca `env` em produção
+    // (/api/health e /api/auth/session inclusive). A validação mora aqui agora,
+    // então um valor inválido degrada só o rate limit — nunca o app inteiro.
+    it("trata URL malformada como não-configurada, sem derrubar nada além do rate limit", () => {
+      process.env.UPSTASH_REDIS_REST_TOKEN = "mock-token";
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (process.env as any).NODE_ENV = "test";
+      for (const bad of ["mock-redis.upstash.io", "redis://default:x@y.upstash.io:6379", "  ", "não-é-url"]) {
+        process.env.UPSTASH_REDIS_REST_URL = bad;
+        expect(createRateLimiter(5, 60_000), `URL inválida: ${bad}`).toBeInstanceOf(
+          InMemoryRateLimiter,
+        );
+      }
+    });
+
+    it("aceita a REST URL com barra ou espaços sobrando", () => {
+      process.env.UPSTASH_REDIS_REST_URL = "  https://mock-redis.upstash.io/  ";
+      process.env.UPSTASH_REDIS_REST_TOKEN = "  mock-token  ";
+      expect(createRateLimiter(5, 60_000)).toBeInstanceOf(UpstashRateLimiter);
+    });
+
     it("returns UnconfiguredProductionRateLimiter in production when config is missing", async () => {
       delete process.env.UPSTASH_REDIS_REST_URL;
       delete process.env.UPSTASH_REDIS_REST_TOKEN;

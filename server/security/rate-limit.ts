@@ -119,9 +119,27 @@ class UnconfiguredProductionRateLimiter implements RateLimiter {
 // Escolhe o backend uma vez, no carregamento do módulo. Lê `process.env`
 // diretamente (não o proxy `env`) para não disparar a validação completa de
 // ambiente durante o build do Next — mesmo padrão de lib/env.ts.
+// A URL é validada AQUI, e não no schema de `lib/env`: lá a validação é global
+// e um valor malformado derruba toda rota que toca `env` (foi o que aconteceu
+// — /api/health e /api/auth/session caíram por causa de uma config de rate
+// limit). Aqui o raio da falha é o rate limit, que é de quem o valor é.
+function restUrl(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const value = raw.trim().replace(/\/+$/, "");
+  // Precisa ser a REST URL (https://...upstash.io) do console, não a connection
+  // string redis://: o adapter fala HTTP, não o protocolo do Redis.
+  if (!/^https:\/\//i.test(value)) return null;
+  try {
+    new URL(value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 export function createRateLimiter(limit: number, windowMs: number): RateLimiter {
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = restUrl(process.env.UPSTASH_REDIS_REST_URL);
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
   if (url && token) return new UpstashRateLimiter(url, token, limit, windowMs);
   if (process.env.NODE_ENV === "production") return new UnconfiguredProductionRateLimiter();
   return new InMemoryRateLimiter(limit, windowMs);
