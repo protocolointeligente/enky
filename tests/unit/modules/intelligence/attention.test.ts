@@ -13,6 +13,8 @@ function bucket(overrides: Partial<AthleteBucket> = {}): AthleteBucket {
     publishedPast: 0,
     awaitingReview: 0,
     state: null,
+    readinessCount: 0,
+    readiness: null,
     ...overrides,
   };
 }
@@ -85,5 +87,29 @@ describe("attention engine — evaluate", () => {
     expect(evaluate(bucket({ maxRpe: 9, feedbackCount: 1 }))?.confianca).toBe("BAIXA");
     expect(evaluate(bucket({ maxRpe: 9, feedbackCount: 3 }))?.confianca).toBe("MEDIA");
     expect(evaluate(bucket({ maxRpe: 9, feedbackCount: 6 }))?.confianca).toBe("ALTA");
+  });
+
+  it("declara os sinais ausentes em vez de silenciar a lacuna", () => {
+    // Zero retorno, zero carga, zero prontidão — o pior caso de dado.
+    const i = evaluate(bucket({ missed: 3, feedbackCount: 0 }));
+    expect(i?.sinaisAusentes).toContain("Nenhum retorno do atleta nos últimos 28 dias");
+    expect(i?.sinaisAusentes).toContain("Prontidão diária não respondida pelo atleta");
+    expect(i?.sinaisAusentes.some((s) => s.includes("wearable"))).toBe(true);
+    expect(i?.confianca).toBe("BAIXA"); // sem dados ⇒ nunca conclusão forte
+  });
+
+  it("prontidão respondida vira sinal usado, nunca regra própria", () => {
+    const readiness = { class: "baixa", score: 30, signalsUsed: 5 } as const;
+    // Prontidão baixa sozinha não gera insight — segue experimental.
+    expect(evaluate(bucket({ readinessCount: 4, readiness }))).toBeNull();
+    // Mas aparece como sinal usado quando outra regra dispara.
+    const i = evaluate(bucket({ maxPain: 5, readinessCount: 4, readiness }));
+    expect(i?.dadosUsados).toContainEqual({ label: "Prontidão (auto-relato)", value: "baixa" });
+    expect(i?.sinaisAusentes).not.toContain("Prontidão diária não respondida pelo atleta");
+  });
+
+  it("todo insight declara o período analisado", () => {
+    expect(evaluate(bucket({ maxPain: 5 }))?.janela).toBe("Últimos 28 dias");
+    expect(evaluate(bucket({ state: HIGH_ACWR_STATE }))?.janela).toContain("90 dias");
   });
 });

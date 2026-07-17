@@ -1,14 +1,16 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Insight, InsightConfidence, InsightRisk } from "./insight";
 import { computeLoadState, type LoadState } from "./load-state";
+import { classifyReadiness, type ReadinessResult } from "./readiness";
 
 // ENKY Intelligence — Fase I/II, motor de ATENÇÃO.
 //
 // A decision engine (docs/ENKY_DECISION_ENGINE.md) encarnada em regras
 // determinísticas sobre os dados que já existem (workouts + feedback). Sem
 // migration, sem LLM: a verbalização é por template prudente. Cada Insight
-// segue o formato de 6 partes e NUNCA diagnostica (ENKY 11, Regras de Saúde).
-// Agora inclui o estado de carga (CTL/ATL/ACWR/ramp) derivado do sRPE.
+// explica a própria origem (sinais usados E ausentes, janela, limitação) e
+// NUNCA diagnostica nem estima lesão (ENKY 11, Regras de Saúde).
+// Inclui o estado de carga (CTL/ATL/ACWR/ramp) derivado do sRPE.
 
 export interface IntelligenceActor {
   organizationId: string;
@@ -22,6 +24,8 @@ const HIGH_RPE = 9;
 const ACWR_HIGH = 1.5;
 const RAMP_HIGH = 0.3; // +30% de CTL na semana
 const MIN_LOAD_DAYS = 10; // mínimo de dias com treino para ler a carga
+const RECENCY_WINDOW = `Últimos ${RECENCY_DAYS} dias`;
+const LOAD_WINDOW = `Carga dos últimos ${LOAD_DAYS} dias — aguda (7d) vs. crônica (42d)`;
 const REVIEW_STATUSES = new Set(["COMPLETED", "PARTIAL", "MISSED"]);
 const RISK_ORDER: Record<InsightRisk, number> = {
   urgente: 3,
@@ -47,6 +51,34 @@ export interface AthleteBucket {
   publishedPast: number;
   awaitingReview: number;
   state: LoadState | null;
+  readinessCount: number; // check-ins de prontidão na janela recente
+  readiness: ReadinessResult | null; // classificação do check-in mais recente
+}
+
+// Limitação estrutural, não lacuna deste atleta: vale para todo insight.
+const NO_WEARABLE = "Sono e HRV objetivos (o sistema não recebe dados de wearable)";
+
+// O que o motor NÃO tinha ao concluir. Explicitar a lacuna é parte do insight:
+// o treinador precisa saber o tamanho do ponto cego, não só o sinal que
+// disparou. Puro (só lê o bucket).
+//
+// Dor ausente NÃO entra: o bucket não distingue "sem dor" de "não perguntado"
+// (maxPain colapsa os dois em 0), e afirmar a lacuna errada é pior que omitir.
+export function absentSignals(b: AthleteBucket): string[] {
+  const out: string[] = [];
+  if (b.feedbackCount === 0) out.push(`Nenhum retorno do atleta nos últimos ${RECENCY_DAYS} dias`);
+  else if (b.maxRpe === 0) out.push("Esforço percebido (RPE) não informado nos retornos");
+  if (!b.state || b.state.dataDays < MIN_LOAD_DAYS) {
+    out.push(`Histórico de carga insuficiente (menos de ${MIN_LOAD_DAYS} dias com treino)`);
+  }
+  if (b.readinessCount === 0) out.push("Prontidão diária não respondida pelo atleta");
+  out.push(NO_WEARABLE);
+  return out;
+}
+
+function readinessEvidence(b: AthleteBucket) {
+  if (!b.readiness || b.readiness.class === "insuficiente") return [];
+  return [{ label: "Prontidão (auto-relato)", value: b.readiness.class }];
 }
 
 function isoDay(date: Date): string {
@@ -112,6 +144,8 @@ export async function analyzeRosterAttention(
         publishedPast: 0,
         awaitingReview: 0,
         state: null,
+        readinessCount: 0,
+        readiness: null,
       };
       buckets.set(workout.athleteId, bucket);
     }
@@ -152,6 +186,45 @@ export async function analyzeRosterAttention(
     bucket.state = computeLoadState(dailySeries(map, loadSince, now));
   }
 
+  // Prontidão entra como SINAL (presente/ausente + classe do último check-in),
+  // nunca como regra: a heurística v1 segue experimental e não decide carga
+  // sozinha (ver readiness.ts). Serve para o treinador saber o que o motor viu.
+  if (buckets.size > 0) {
+    const checkIns = await prisma.readinessCheckIn.findMany({
+      where: {
+        organizationId: actor.organizationId,
+        athleteId: { in: [...buckets.keys()] },
+        checkInDate: { gte: recencySince },
+      },
+      orderBy: { checkInDate: "desc" },
+      select: {
+        athleteId: true,
+        sleepHours: true,
+        sleepQuality: true,
+        fatigue: true,
+        soreness: true,
+        stress: true,
+        motivation: true,
+      },
+    });
+    for (const row of checkIns) {
+      const bucket = buckets.get(row.athleteId);
+      if (!bucket) continue;
+      bucket.readinessCount += 1;
+      // Ordenado desc: o primeiro de cada atleta é o mais recente.
+      if (bucket.readiness == null) {
+        bucket.readiness = classifyReadiness({
+          sleepHours: row.sleepHours != null ? Number(row.sleepHours) : null,
+          sleepQuality: row.sleepQuality,
+          fatigue: row.fatigue,
+          soreness: row.soreness,
+          stress: row.stress,
+          motivation: row.motivation,
+        });
+      }
+    }
+  }
+
   const insights: Insight[] = [];
   for (const bucket of buckets.values()) {
     const insight = evaluate(bucket);
@@ -171,6 +244,8 @@ export function evaluate(b: AthleteBucket): Insight | null {
     athleteName: b.athleteName,
     engine: "atencao",
     confianca: confidenceFromData(b.feedbackCount),
+    sinaisAusentes: absentSignals(b),
+    janela: RECENCY_WINDOW,
   };
 
   if (b.maxPain >= PAIN_THRESHOLD) {
@@ -179,16 +254,18 @@ export function evaluate(b: AthleteBucket): Insight | null {
       risk: "urgente",
       observacao: `Dor relatada nível ${b.maxPain}${b.painRegion ? ` (${b.painRegion})` : ""} em feedback recente.`,
       interpretacao:
-        "Dor é um sinal de segurança e se sobrepõe à progressão de carga. Pode indicar necessidade de cautela.",
+        "Dor é um sinal de segurança e se sobrepõe à progressão de carga. É um contexto de cautela, não uma avaliação clínica do atleta.",
       acoesSugeridas: [
         "Considere revisar a próxima sessão intensa deste atleta.",
         "Avalie conversar com o atleta e, se necessário, orientar avaliação profissional.",
       ],
       confianca: base.confianca === "BAIXA" && b.feedbackCount >= 1 ? "MEDIA" : base.confianca,
-      limitacoes: "Não é um diagnóstico. Sem dados de sono/HRV para contextualizar.",
+      limitacoes:
+        "Não é um diagnóstico e não estima lesão. O sistema só sabe o que o atleta relatou; a leitura clínica é sua.",
       dadosUsados: [
         { label: "Dor (máx. recente)", value: String(b.maxPain) },
         ...(b.painRegion ? [{ label: "Região", value: b.painRegion }] : []),
+        ...readinessEvidence(b),
       ],
       regras: ["seguranca:dor-relatada"],
     };
@@ -203,22 +280,25 @@ export function evaluate(b: AthleteBucket): Insight | null {
       return {
         ...base,
         risk: "revisar",
+        janela: LOAD_WINDOW,
         observacao: acwrHigh
-          ? `A carga aguda está ${Math.round((s.acwr! - 1) * 100)}% acima da carga crônica recente deste atleta (ACWR ${s.acwr!.toFixed(2)}).`
-          : `A carga subiu rápido: +${Math.round(s.rampPct! * 100)}% em relação à semana anterior.`,
+          ? `Carga elevada: a carga aguda está ${Math.round((s.acwr! - 1) * 100)}% acima da carga crônica recente deste atleta (ACWR ${s.acwr!.toFixed(2)}).`
+          : `Carga elevada: subiu +${Math.round(s.rampPct! * 100)}% em relação à semana anterior.`,
         interpretacao:
-          "Sinal de contexto: a carga recente saltou em relação ao padrão deste atleta. Não é, isoladamente, previsão de lesão — vale revisar antes de manter a progressão planejada.",
+          "Sinal de contexto: a carga recente saltou em relação ao padrão deste atleta. É um contexto de cautela sobre a progressão, não uma leitura sobre a saúde do atleta.",
         acoesSugeridas: [
           "Revise o contexto (sono, recuperação, agenda) antes de manter a progressão planejada.",
         ],
         limitacoes:
-          "ACWR, ramp, monotonia e strain são sinais de contexto, não diagnóstico nem previsão isolada de lesão. Sem HRV/sono para confirmar fadiga.",
+          "ACWR, ramp, monotonia e strain são sinais de contexto sobre a carga — não diagnosticam nem estimam lesão. A leitura descreve o passado deste atleta, não o que vai acontecer.",
         dadosUsados: [
           ...(s.acwr != null ? [{ label: "ACWR", value: s.acwr.toFixed(2) }] : []),
           ...(s.rampPct != null
             ? [{ label: "Ramp", value: `${Math.round(s.rampPct * 100)}%` }]
             : []),
           ...(s.monotony != null ? [{ label: "Monotonia", value: s.monotony.toFixed(1) }] : []),
+          { label: "Dias com carga", value: `${s.dataDays}/${LOAD_DAYS}` },
+          ...readinessEvidence(b),
         ],
         regras: [acwrHigh ? "carga:acwr-alto" : "carga:ramp-alto"],
       };
@@ -244,12 +324,13 @@ export function evaluate(b: AthleteBucket): Insight | null {
       ...base,
       risk: "revisar",
       observacao: `RPE de sessão muito alto (${b.maxRpe}/10) em treino recente.`,
-      interpretacao: "Esforço percebido muito alto pode sinalizar fadiga acumulada.",
+      interpretacao:
+        "Esforço percebido muito alto pode sinalizar fadiga acumulada. É um sinal de atenção sobre a sessão, não uma conclusão sobre o atleta.",
       acoesSugeridas: [
         "Considere confirmar recuperação/sono e monitorar a próxima sessão intensa.",
       ],
-      limitacoes: "Sinal isolado; sem HRV/sono para confirmar fadiga.",
-      dadosUsados: [{ label: "RPE máx.", value: `${b.maxRpe}/10` }],
+      limitacoes: "Sinal isolado e subjetivo (percepção do atleta); não confirma fadiga.",
+      dadosUsados: [{ label: "RPE máx.", value: `${b.maxRpe}/10` }, ...readinessEvidence(b)],
       regras: ["carga:rpe-alto"],
     };
   }

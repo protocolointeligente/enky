@@ -40,7 +40,10 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     assertTrustedOrigin(request);
     const identity = await requireAuthenticatedUser();

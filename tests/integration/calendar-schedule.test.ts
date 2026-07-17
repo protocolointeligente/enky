@@ -15,7 +15,7 @@ import {
   submitWorkoutFeedback,
   type AthleteActor,
 } from "@/modules/feedback/submit-workout-feedback";
-import { uniqueEmail } from "./helpers";
+import { cleanupSubscriptions, grantUnlimitedPlan, uniqueEmail } from "./helpers";
 
 const createdUserIds: string[] = [];
 const createdOrganizationIds: string[] = [];
@@ -225,6 +225,9 @@ describe("Fase 02D.2 — calendário e agendamento", () => {
 
   it("duplica para outro atleta da mesma organização, mas bloqueia atleta de outra organização", async () => {
     const { trainerActor, athleteActor } = await newTrainerWithAthlete("dup-cross");
+    // Dois atletas na mesma organização exigem plano pago desde a Fase 10 — o
+    // grátis vale 1. Não é o assunto deste teste, é só o pré-requisito dele.
+    await grantUnlimitedPlan(trainerActor.organizationId);
     // second athlete in the SAME org
     const invitation = await inviteAthlete(
       { email: uniqueEmail("dup-second-athlete") },
@@ -279,6 +282,9 @@ describe("Fase 02D.2 — calendário e agendamento", () => {
       await prisma.workout.deleteMany({
         where: { organizationId: { in: createdOrganizationIds } },
       });
+      // Antes de apagar as organizações: Subscription.organization é
+      // ON DELETE RESTRICT e travaria o delete abaixo.
+      await cleanupSubscriptions(createdOrganizationIds);
       await prisma.organization.deleteMany({ where: { id: { in: createdOrganizationIds } } });
     }
     if (createdTrainerProfileIds.length > 0) {

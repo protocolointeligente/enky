@@ -5,6 +5,8 @@ import { inviteAthlete } from "@/modules/athletes/invite-athlete";
 import { registerTrainer } from "@/modules/identity/register-trainer";
 import { createWorkoutDraft } from "@/modules/workouts/create-workout-draft";
 import { updateWorkoutDraft } from "@/modules/workouts/update-workout-draft";
+import { getAthleteWorkout } from "@/modules/workouts/get-athlete-workout";
+import { publishWorkout } from "@/modules/workouts/publish-workout";
 import {
   applyTemplate,
   createTemplate,
@@ -152,6 +154,50 @@ describe("Fase 02D.2 — templates de treino", () => {
       include: { exercises: { include: { exercise: true } } },
     });
     expect(workoutBlocks[0]?.exercises[0]?.exercise.name).toBe("Levantamento Terra");
+  });
+
+  // Critério de aceite da Fase 5, ponta a ponta: treinador cria template →
+  // aplica no atleta/data → publica → o ATLETA vê o treino clonado; editar o
+  // template depois NÃO muda o que o atleta já recebeu.
+  it("atleta recebe o treino clonado ao publicar, e editar o template depois não o altera", async () => {
+    const { actor, athleteProfileId } = await newTrainerWithAthlete("tpl-athlete");
+    const template = await createTemplate(
+      { title: "Full Body", modality: "STRENGTH", content: strengthContent("Agachamento Frontal") },
+      actor,
+    );
+    const workout = await applyTemplate(
+      template.id,
+      { athleteId: athleteProfileId, plannedDate: "2026-08-20" },
+      actor,
+    );
+
+    const athleteScope = {
+      organizationId: actor.organizationId,
+      athleteProfileId,
+    };
+
+    // Enquanto DRAFT, o atleta não enxerga nada.
+    await expect(getAthleteWorkout(workout.id, athleteScope)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+
+    await publishWorkout(workout.id, actor);
+
+    const received = await getAthleteWorkout(workout.id, athleteScope);
+    expect(received.source).toBe("TEMPLATE");
+    expect(received.title).toBe("Full Body");
+    expect(received.blocks[0]?.exercises[0]?.exercise.name).toBe("Agachamento Frontal");
+
+    // O treinador reescreve o template inteiro depois da entrega.
+    await updateTemplate(
+      template.id,
+      { title: "Full Body v2", modality: "STRENGTH", content: strengthContent("Stiff") },
+      actor,
+    );
+
+    const afterTemplateEdit = await getAthleteWorkout(workout.id, athleteScope);
+    expect(afterTemplateEdit.title).toBe("Full Body");
+    expect(afterTemplateEdit.blocks[0]?.exercises[0]?.exercise.name).toBe("Agachamento Frontal");
   });
 
   it("bloqueia aplicar template para atleta de outra organização", async () => {

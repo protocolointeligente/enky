@@ -109,6 +109,20 @@ export default function AthleteHomePage() {
           <ChevronRightIcon className="shrink-0 text-faint" />
         </Link>
 
+        {/* Integrações */}
+        <Link
+          href="/atleta/integracoes"
+          className="flex items-center justify-between rounded-xl border border-line bg-petrol/70 p-4 transition-colors hover:border-line-strong"
+        >
+          <div className="min-w-0">
+            <p className="font-medium text-ink">Conectar Strava</p>
+            <p className="truncate text-xs text-muted">
+              Suas atividades entram sozinhas, sem digitar nada
+            </p>
+          </div>
+          <ChevronRightIcon className="shrink-0 text-faint" />
+        </Link>
+
         {/* Treino de hoje */}
         <section className="flex flex-col gap-2">
           <h2 className={uiClasses.subheading}>Treino de hoje</h2>

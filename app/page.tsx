@@ -397,11 +397,7 @@ function Pillar({
     orange: "text-orange bg-orange/10",
   }[tone];
   return (
-    <article
-      className={`grid gap-8 rounded-2xl border border-line bg-petrol/50 p-8 sm:p-10 lg:grid-cols-2 lg:items-center ${
-        reverse ? "" : ""
-      }`}
-    >
+    <article className="grid gap-8 rounded-2xl border border-line bg-petrol/50 p-8 sm:p-10 lg:grid-cols-2 lg:items-center">
       <div className={reverse ? "lg:order-2" : ""}>
         <span className={`inline-flex h-12 w-12 items-center justify-center rounded-xl ${toneRing}`}>
           {icon}

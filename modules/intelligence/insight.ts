@@ -1,6 +1,10 @@
 // Contrato único de saída da ENKY Intelligence (docs/ENKY_INTELLIGENCE_ARCHITECTURE.md
 // §3). Tipos puros, sem dependências — importável por motores (server) e pela
-// UI (type-only). Todo motor produz este mesmo Insight, no formato de 6 partes.
+// UI (type-only). Todo motor produz este mesmo Insight.
+//
+// O contrato é a garantia de explicabilidade (Fase 7): todo campo abaixo é
+// obrigatório, então um motor novo não consegue expor uma conclusão sem dizer
+// de onde ela veio, o que faltava e o que ela NÃO afirma. O tipo é o guarda.
 
 export type InsightRisk = "positivo" | "atencao" | "revisar" | "urgente";
 export type InsightConfidence = "BAIXA" | "MEDIA" | "ALTA";
@@ -15,12 +19,14 @@ export interface Insight {
   athleteName: string | null;
   engine: string;
   risk: InsightRisk;
-  observacao: string;
+  observacao: string; // motivo principal — por que este atleta apareceu
   interpretacao: string;
-  acoesSugeridas: string[];
+  acoesSugeridas: string[]; // recomendação prudente (nunca prescrição)
   confianca: InsightConfidence;
-  limitacoes: string;
-  dadosUsados: InsightEvidence[];
+  limitacoes: string; // o que este insight NÃO afirma
+  dadosUsados: InsightEvidence[]; // sinais presentes que sustentam o motivo
+  sinaisAusentes: string[]; // sinais que o motor NÃO tinha ao concluir
+  janela: string; // contexto temporal legível da leitura
   regras: string[];
 }
 

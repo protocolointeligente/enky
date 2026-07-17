@@ -20,6 +20,8 @@ function bucket(overrides: Partial<AthleteBucket> = {}): AthleteBucket {
     publishedPast: 0,
     awaitingReview: 0,
     state: null,
+    readinessCount: 0,
+    readiness: null,
     ...overrides,
   };
 }
@@ -28,26 +30,39 @@ function flat(value: number, days: number): number[] {
   return Array.from({ length: days }, () => value);
 }
 
-// Todo insight relevante precisa responder às 4 perguntas + confiança/limitação,
-// e nunca usar linguagem de certeza/diagnóstico ou "previsão de lesão" como afirmação.
+// Todo insight relevante precisa explicar a própria origem: motivo, sinais
+// usados, sinais ausentes, confiança, período, recomendação e limitação.
+// E nunca usar linguagem de certeza, diagnóstico ou previsão de lesão.
 function assertWellFormed(insight: Insight) {
   expect(insight.observacao.length).toBeGreaterThan(0);
   expect(insight.interpretacao.length).toBeGreaterThan(0);
   expect(insight.limitacoes.length).toBeGreaterThan(0);
   expect(insight.acoesSugeridas.length).toBeGreaterThan(0);
   expect(insight.dadosUsados.length).toBeGreaterThan(0);
+  expect(insight.sinaisAusentes.length).toBeGreaterThan(0); // sempre há ponto cego
+  expect(insight.janela.length).toBeGreaterThan(0); // contexto temporal explícito
   expect(["BAIXA", "MEDIA", "ALTA"]).toContain(insight.confianca);
 
-  const claim =
-    `${insight.observacao} ${insight.interpretacao} ${insight.acoesSugeridas.join(" ")}`.toLowerCase();
+  // Vocabulário proibido — a Fase 7 vale para TODO texto exposto ao treinador,
+  // inclusive limitações. "risco de lesão"/"prever lesão" nunca como afirmação;
+  // o vocabulário é "sinal de atenção", "carga elevada", "contexto de cautela".
+  const shown =
+    `${insight.observacao} ${insight.interpretacao} ${insight.acoesSugeridas.join(" ")} ${insight.limitacoes}`.toLowerCase();
   for (const forbidden of [
     "certamente",
     "com certeza",
     "garantid",
     "vai lesionar",
     "está lesionad",
+    "prever lesão",
+    "previsão de lesão",
+    "risco de lesão",
+    "prevê lesão",
+    "predizer lesão",
+    "propenso a lesão",
+    "iminente",
   ]) {
-    expect(claim, `linguagem alarmista: "${forbidden}"`).not.toContain(forbidden);
+    expect(shown, `linguagem proibida: "${forbidden}"`).not.toContain(forbidden);
   }
 }
 
@@ -72,10 +87,11 @@ describe("02G homologação — cenários controlados", () => {
     expect(i?.risk).toBe("revisar");
     expect(i?.regras).toContain("carga:acwr-alto");
     assertWellFormed(i as Insight);
-    // Sinal de CONTEXTO — não previsão de lesão.
-    expect((i as Insight).interpretacao.toLowerCase()).toContain("contexto");
-    expect((i as Insight).interpretacao.toLowerCase()).toContain("não é");
-    expect((i as Insight).limitacoes.toLowerCase()).toContain("não diagnóstico");
+    // Vocabulário da Fase 7: "carga elevada" + "contexto de cautela", jamais
+    // previsão. A limitação precisa negar diagnóstico E estimativa de lesão.
+    expect((i as Insight).observacao.toLowerCase()).toContain("carga elevada");
+    expect((i as Insight).interpretacao.toLowerCase()).toContain("contexto de cautela");
+    expect((i as Insight).limitacoes.toLowerCase()).toContain("não diagnosticam nem estimam lesão");
   });
 
   it("4. rampa semanal ≥ 30% → marcar para revisão", () => {

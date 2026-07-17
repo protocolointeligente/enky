@@ -16,6 +16,8 @@ function insight(overrides: Partial<Insight> = {}): Insight {
     confianca: "MEDIA",
     limitacoes: "lim",
     dadosUsados: [{ label: "ACWR", value: "1.60" }],
+    sinaisAusentes: ["Prontidão diária não respondida pelo atleta"],
+    janela: "Últimos 28 dias",
     regras: ["carga:acwr-alto"],
     ...overrides,
   };
@@ -46,5 +48,13 @@ describe("fingerprintOf", () => {
     const a = fingerprintOf(insight({ observacao: "ACWR 1.60" }));
     const b = fingerprintOf(insight({ observacao: "ACWR 1.72" }));
     expect(a).toBe(b);
+  });
+
+  // O atleta responder a prontidão muda os sinais ausentes, não a situação:
+  // se isso virasse linha nova, o aceito/ignorado do treinador seria perdido.
+  it("não depende dos sinais ausentes ⇒ preserva a decisão do treinador", () => {
+    const semProntidao = fingerprintOf(insight({ sinaisAusentes: ["Prontidão", "Wearable"] }));
+    const comProntidao = fingerprintOf(insight({ sinaisAusentes: ["Wearable"] }));
+    expect(semProntidao).toBe(comProntidao);
   });
 });

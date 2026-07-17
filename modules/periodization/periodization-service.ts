@@ -1,6 +1,7 @@
 import { NotFoundError, ValidationError } from "@/domain/errors";
 import { recordAuditLog } from "@/domain/audit";
 import { prisma } from "@/infrastructure/database/prisma";
+import { requireTrainerAccessToAthlete } from "@/server/auth/guards";
 import type { CreatePeriodizationInput } from "./periodization-schema";
 
 // Produto v1 da periodização: a camada estratégica MANUAL. O treinador desenha
@@ -56,6 +57,11 @@ export async function createPeriodization(
   input: CreatePeriodizationInput,
   actor: PeriodizationActor,
 ) {
+  // Invariante de negócio, não checagem de sessão — reforçada aqui mesmo que a
+  // rota já valide, para o serviço ser seguro a partir de qualquer entry point
+  // futuro (idêntico a createWorkoutDraft/applyTemplate/generateAthleteReport).
+  await requireTrainerAccessToAthlete(actor.organizationId, actor.trainerProfileId, athleteId);
+
   const weeks = deriveWeeks(input.startDate, input.endDate);
   if (weeks.length > MAX_WEEKS) {
     throw new ValidationError(`Janela muito longa: máximo de ${MAX_WEEKS} semanas por plano.`);

@@ -61,6 +61,8 @@ function painInsight(athleteId: string): Insight {
     confianca: "MEDIA",
     limitacoes: "Não é um diagnóstico.",
     dadosUsados: [{ label: "Dor (máx. recente)", value: "5" }],
+    sinaisAusentes: ["Prontidão diária não respondida pelo atleta"],
+    janela: "Últimos 28 dias",
     regras: ["seguranca:dor-relatada"],
   };
 }
