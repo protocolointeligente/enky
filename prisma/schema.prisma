@@ -107,6 +107,12 @@ enum PaymentStatus {
   EXPIRED
 }
 
+enum WebhookEventStatus {
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
 enum SubscriptionStatus {
   INCOMPLETE
   TRIALING
@@ -220,6 +226,31 @@ enum InsightStatus {
   IGNORED
 }
 
+// Fase 11 — Integrações externas. Enum (e não texto livre) porque cada valor
+// exige um adapter escrito: nenhum provedor "aparece" no banco sem código que
+// saiba falar com ele.
+enum ExternalProvider {
+  STRAVA
+}
+
+// Uma conexão nunca é apagada — vira REVOKED. Apagar a linha apagaria a
+// origem das atividades já importadas (que continuam sendo histórico de
+// treino do atleta) e a trilha de que o acesso um dia existiu.
+enum ExternalConnectionStatus {
+  ACTIVE
+  REVOKED
+}
+
+// Resultado do vínculo atividade realizada → treino planejado.
+// AMBIGUOUS é deliberadamente distinto de UNMATCHED: "havia dois candidatos e
+// eu não escolhi" é uma informação diferente de "não havia nenhum", e é a
+// única honesta quando o par não é determinável por data+modalidade.
+enum ActivityMatchStatus {
+  UNMATCHED
+  MATCHED
+  AMBIGUOUS
+}
+
 // ---------------------------------------------------------------------------
 // 2. IDENTIDADE, TENANT E AUTENTICAÇÃO
 // ---------------------------------------------------------------------------
@@ -292,6 +323,8 @@ model Organization {
   auditLogs            AuditLog[]
   insights             Insight[]
   readinessCheckIns    ReadinessCheckIn[]
+  externalConnections  ExternalConnection[]
+  externalActivities   ExternalActivity[]
 }
 
 model OrganizationMembership {
@@ -343,19 +376,21 @@ model AthleteProfile {
   updatedAt   DateTime  @updatedAt @db.Timestamptz
   lockVersion Int       @default(1)
 
-  user              User?                      @relation(fields: [userId], references: [id], onDelete: Restrict)
-  relationships     CoachAthleteRelationship[]
-  periodizations    Periodization[]
-  workouts          Workout[]
-  calendarEvents    CalendarEvent[]
-  generationBatches GenerationBatch[]
-  testResults       TestResult[]
-  derivedMetrics    DerivedMetric[]
-  reports           Report[]
-  purchases         MarketplacePurchase[]
-  invitations       AthleteInvitation[]
-  insights          Insight[]
-  readinessCheckIns ReadinessCheckIn[]
+  user                User?                      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  relationships       CoachAthleteRelationship[]
+  periodizations      Periodization[]
+  workouts            Workout[]
+  calendarEvents      CalendarEvent[]
+  generationBatches   GenerationBatch[]
+  testResults         TestResult[]
+  derivedMetrics      DerivedMetric[]
+  reports             Report[]
+  purchases           MarketplacePurchase[]
+  invitations         AthleteInvitation[]
+  insights            Insight[]
+  readinessCheckIns   ReadinessCheckIn[]
+  externalConnections ExternalConnection[]
+  externalActivities  ExternalActivity[]
 }
 
 model CoachAthleteRelationship {
@@ -566,6 +601,9 @@ model Workout {
   workoutTemplate     WorkoutTemplate?     @relation(fields: [workoutTemplateId], references: [id], onDelete: SetNull)
   blocks              WorkoutBlock[]
   feedback            WorkoutFeedback?
+  // Realizado importado de um provedor externo (Fase 11). Opcional e 1:1 — um
+  // treino planejado nunca recebe duas atividades.
+  externalActivity    ExternalActivity?
 
   @@index([organizationId, athleteId, plannedDate])
   @@index([trainerId])
@@ -933,22 +971,46 @@ model MarketplacePurchase {
   workouts     Workout[]
 }
 
+// Catálogo de planos da plataforma (Fase 10). É a ÚNICA fonte de verdade de
+// preço no checkout — o cliente envia apenas `slug`, nunca valor (Interface
+// Architecture v1.4 §1.D). `featuresLimits` é validado por
+// `modules/subscriptions/plan-limits.ts` na leitura; ver `planLimitsSchema`.
 model SubscriptionPlan {
   id             String       @id @default(uuid())
+  slug           String       @unique
   name           String       @unique
+  description    String?
   price          Decimal      @db.Decimal(12, 2)
+  currency       String       @default("BRL") @db.VarChar(3)
   billingCycle   BillingCycle
   featuresLimits Json
+  // Identificador do preço no gateway (ex.: Stripe `price_...`). Nulo no
+  // plano grátis, que nunca vai a checkout.
+  gatewayPriceId String?
+  sortOrder      Int          @default(0)
   isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+  updatedAt      DateTime     @updatedAt @db.Timestamptz
 
   subscriptions Subscription[]
 }
 
+// Assinatura da plataforma por organização. O índice parcial
+// `uq_active_subscription_per_organization` (migração
+// 20260710104346_add_native_postgres_constraints) garante no máximo uma
+// assinatura não-terminal por organização — linhas CANCELLED/EXPIRED ficam
+// como histórico.
+//
+// REGRA CRÍTICA (Fase 10): `status` só muda por evento de webhook confirmado
+// e verificado — nunca por retorno do browser, nunca otimisticamente no
+// checkout. Ver modules/payments/webhook-service.ts.
 model Subscription {
   id                    String             @id @default(uuid())
   organizationId        String
   subscriptionPlanId    String
   status                SubscriptionStatus @default(INCOMPLETE)
+  provider              String?
+  gatewayCustomerId     String?
   gatewaySubscriptionId String?            @unique
   currentPeriodStart    DateTime?          @db.Timestamptz
   currentPeriodEnd      DateTime?          @db.Timestamptz
@@ -985,8 +1047,138 @@ model PaymentTransaction {
   subscription Subscription?        @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
 }
 
+// Livro-razão de eventos de webhook — a fronteira de idempotência da Fase 10.
+//
+// Por que uma tabela dedicada e não só `PaymentTransaction.webhookEventId`:
+// aquele campo só cobre eventos que produzem uma transação. Eventos de ciclo
+// de vida (assinatura atualizada, cancelada) não criam transação e ficariam
+// sem proteção — um reenvio do gateway os reaplicaria. Aqui TODO evento é
+// registrado antes de ser aplicado, e o `@@unique([provider, eventId])` é a
+// trava: a segunda entrega do mesmo evento colide no INSERT dentro da mesma
+// transação e o efeito é descartado inteiro (nunca parcialmente).
+//
+// `payloadHash` não participa da unicidade de propósito: se o gateway
+// reenviar o MESMO eventId com corpo diferente, queremos ignorar (já
+// processado) e registrar a divergência — não processar de novo.
+model WebhookEvent {
+  id          String             @id @default(uuid())
+  provider    String
+  eventId     String
+  eventType   String
+  payloadHash String
+  status      WebhookEventStatus @default(PROCESSED)
+  error       String?
+  receivedAt  DateTime           @default(now()) @db.Timestamptz
+  processedAt DateTime?          @db.Timestamptz
+
+  @@unique([provider, eventId], map: "uq_webhook_provider_event")
+  @@index([eventType])
+  @@index([receivedAt])
+}
+
 // ---------------------------------------------------------------------------
-// 9. AUDITORIA MINIMIZADA
+// 9. INTEGRAÇÕES EXTERNAS (Fase 11 — Strava v1)
+// ---------------------------------------------------------------------------
+// Importa o REALIZADO de fontes externas para confrontar com o PLANEJADO que a
+// ENKY prescreve. Regra estrutural da fase: a integração é um periférico — se
+// ela cair inteira, o fluxo manual (prescrever, publicar, dar feedback)
+// continua idêntico. Nenhum módulo de treino importa este.
+
+// Conexão OAuth do atleta com um provedor. Um atleta tem no máximo UMA conexão
+// por provedor (`uq_external_connection_athlete_provider`) — reconectar faz
+// upsert desta mesma linha, e não acumula histórico de tokens mortos.
+//
+// SEGURANÇA DOS TOKENS: `accessToken`/`refreshToken` são gravados cifrados
+// (AES-256-GCM, server/security/crypto.ts) e são NULOS quando a conexão está
+// REVOKED. Nunca são selecionados para fora do módulo `integrations`, nunca
+// entram em resposta de API e nunca em log — ver modules/integrations/README.md.
+model ExternalConnection {
+  id                String                   @id @default(uuid())
+  organizationId    String
+  athleteId         String
+  provider          ExternalProvider
+  // Id do atleta no provedor (Strava: `athlete.id`). É por ele que um evento
+  // de webhook (`owner_id`) é resolvido para uma conexão local.
+  providerAthleteId String
+  status            ExternalConnectionStatus @default(ACTIVE)
+  scope             String?
+  accessToken       String?
+  refreshToken      String?
+  tokenExpiresAt    DateTime?                @db.Timestamptz
+  connectedAt       DateTime                 @default(now()) @db.Timestamptz
+  lastSyncedAt      DateTime?                @db.Timestamptz
+  revokedAt         DateTime?                @db.Timestamptz
+  createdAt         DateTime                 @default(now()) @db.Timestamptz
+  updatedAt         DateTime                 @updatedAt @db.Timestamptz
+  lockVersion       Int                      @default(1)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile     @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  activities   ExternalActivity[]
+
+  @@unique([athleteId, provider], map: "uq_external_connection_athlete_provider")
+  @@index([provider, providerAthleteId])
+  @@index([organizationId])
+}
+
+// Atividade realizada, importada de um provedor e normalizada para o
+// vocabulário da ENKY. Os campos normalizados (`distanceMeters`, `movingSeconds`,
+// `paceSecondsPerKm`, ...) são a interface; `rawType` guarda o tipo cru do
+// provedor para não perder o que a normalização descartou.
+//
+// DEDUPLICAÇÃO: `uq_external_activity_provider_activity` é a trava. Importar
+// duas vezes a mesma atividade — pelo webhook e pela importação manual ao
+// mesmo tempo, que é o caso REAL — colide no índice em vez de duplicar. Não é
+// um "SELECT antes do INSERT", que teria janela de corrida entre as duas vias.
+model ExternalActivity {
+  id                  String              @id @default(uuid())
+  organizationId      String
+  athleteId           String
+  connectionId        String
+  provider            ExternalProvider
+  providerActivityId  String
+  name                String?
+  // Tipo cru do provedor (Strava `sport_type`: "Run", "VirtualRide", ...).
+  rawType             String
+  // Nulo quando o tipo do provedor não mapeia para nenhuma Modality nossa —
+  // a atividade é importada mesmo assim (é volume real do atleta), só não
+  // participa do vínculo por modalidade.
+  modality            Modality?
+  startedAt           DateTime            @db.Timestamptz
+  // Data CIVIL no fuso em que a atividade aconteceu — vem do provedor, nunca
+  // derivada do fuso do servidor. É o lado direito do vínculo com
+  // `Workout.plannedDate`, que segue a mesma diretriz temporal (§5).
+  localDate           DateTime            @db.Date
+  timezone            String?
+  distanceMeters      Int?
+  movingSeconds       Int?
+  elapsedSeconds      Int?
+  // "Elevação, se disponível": nem todo dispositivo/atividade reporta.
+  elevationGainMeters Int?
+  // Ritmo médio canônico em s/km para TODA modalidade de distância, natação
+  // inclusive (mesma decisão da Fase 6: o volume é sempre km). A convenção de
+  // exibição — min/km, km/h, min/100m — é da UI, não do banco.
+  paceSecondsPerKm    Int?
+  workoutId           String?             @unique
+  matchStatus         ActivityMatchStatus @default(UNMATCHED)
+  matchedAt           DateTime?           @db.Timestamptz
+  importedAt          DateTime            @default(now()) @db.Timestamptz
+  updatedAt           DateTime            @updatedAt @db.Timestamptz
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile     @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  connection   ExternalConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  // SetNull, não Cascade: apagar/arquivar o treino planejado não pode apagar a
+  // atividade que o atleta de fato executou — ela volta a ser realizado avulso.
+  workout      Workout?           @relation(fields: [workoutId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerActivityId], map: "uq_external_activity_provider_activity")
+  @@index([organizationId, athleteId, localDate])
+  @@index([connectionId])
+}
+
+// ---------------------------------------------------------------------------
+// 10. AUDITORIA MINIMIZADA
 // ---------------------------------------------------------------------------
 
 model AuditLog {

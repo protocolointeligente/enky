@@ -65,6 +65,21 @@ Toda rota protegida chama esses guards no início do handler, nunca espalha a pr
 
 **Exceção documentada (Fase 02C):** `requireTrainerAccessToAthlete()` também é chamado de dentro de `modules/workouts/create-workout-draft.ts` e `update-workout-draft.ts`, não só da rota — porque o vínculo treinador-atleta é um invariante de negócio do próprio caso de uso (nunca prescrever para um atleta sem vínculo ativo), não apenas um controle de acesso HTTP. Isso mantém o serviço seguro mesmo se chamado de um futuro ponto de entrada (calendário, aplicação de template) que esqueça de revalidar o vínculo na rota.
 
+## Pagamentos e assinatura (Fase 10)
+
+Gateway: **Asaas**. Ele fica atrás de `PaymentProvider` (`modules/payments/payment-provider.ts`) — nenhuma regra de negócio conhece o gateway, e o `FakePaymentProvider` de development/test é a prova de que a fronteira é real. `getPaymentProvider()` é o único ponto de decisão e **nunca** cai para o provedor falso fora de development/test (ver `modules/payments/README.md`).
+
+Invariantes que atravessam camadas:
+
+- **Preço nunca vem do cliente.** O corpo do checkout é `{ planSlug, taxId }` — não existe campo de dinheiro. O servidor lê `SubscriptionPlan.price` do banco.
+- **`Subscription.status` só muda por evento de webhook verificado**, em `modules/payments/webhook-service.ts`. O checkout deixa `INCOMPLETE`; o cancelamento grava só a intenção (`cancelAtPeriodEnd`).
+- **Idempotência é do banco**, não de checagem em código: `WebhookEvent @@unique([provider, eventId])`, com o INSERT como primeira escrita da transação que aplica o efeito.
+- **Inadimplência degrada, nunca apaga** — ver `modules/subscriptions/README.md`.
+
+**Exceção documentada (Fase 10):** `app/api/webhooks/payment-provider/route.ts` é a única rota de mutação que **não** chama `assertTrustedOrigin()` nem `requireAuthenticatedUser()`. Quem chama é um servidor do gateway: sem Origin, sem cookie de sessão, cross-origin por definição — o CSRF de origem rejeitaria 100% dos eventos legítimos e não protege nada aqui (não há sessão a montar). A autenticação é o segredo compartilhado verificado dentro do adapter, e as escritas resultantes são auditadas como `SYSTEM`.
+
+**Exceção documentada (Fase 10):** `assertCanAddAthlete()` é chamado de dentro de `modules/athletes/invite-athlete.ts`, não só da rota — o limite do plano é invariante de negócio, mesmo racional da exceção de Fase 02C. É um teto **suave**: ver a nota sobre corrida em `entitlements.ts` — teto comercial não é fronteira de segurança.
+
 ## CSRF e rate limiting
 
 Toda rota de mutação (`POST`/`PATCH`/`DELETE`) chama `assertTrustedOrigin()` (`server/security/csrf.ts`) antes de qualquer outra coisa, e o limitador apropriado de `server/security/rate-limit.ts` antes de tocar o banco. Ver `docs/adr/ADR-004-csrf-strategy.md` para a decisão completa. O limitador em memória é explicitamente documentado como não seguro para múltiplas instâncias — ver comentário de topo de `rate-limit.ts`.

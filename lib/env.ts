@@ -16,6 +16,39 @@ const envSchema = z.object({
   // address or the "Nome <endereco@dominio>" form; the domain must be
   // verified in the Resend dashboard.
   EMAIL_FROM: z.string().optional(),
+  // Gateway de pagamento (Asaas) — Fase 10. Opcionais pelo mesmo motivo das
+  // credenciais de e-mail: `next build` e o dev local sem gateway precisam
+  // funcionar. A fábrica (modules/payments/get-payment-provider.ts) é o único
+  // lugar que decide o que fazer na ausência delas, e se recusa a cair para o
+  // provedor falso fora de development/test.
+  //   - PAYMENT_PROVIDER_SECRET_KEY: API key do Asaas. O prefixo `$aact_hmlg_`
+  //     seleciona sandbox automaticamente.
+  //   - PAYMENT_PROVIDER_WEBHOOK_SECRET: segredo compartilhado que o Asaas
+  //     devolve no header `asaas-access-token`. NUNCA pode ser a API key.
+  // São strings opacas (sem formato validável como URL), então validá-las aqui
+  // não corre o risco descrito no comentário de UPSTASH_* abaixo.
+  PAYMENT_PROVIDER_SECRET_KEY: z.string().optional(),
+  PAYMENT_PROVIDER_WEBHOOK_SECRET: z.string().optional(),
+  // Integração Strava (Fase 11). Opcionais pelo mesmo motivo das anteriores —
+  // e aqui a regra é mais forte que "o build precisa passar": a integração é um
+  // PERIFÉRICO. Uma instalação sem credencial do Strava é uma instalação
+  // válida, com todo o fluxo manual intacto; só as rotas de integração
+  // recusam, com erro explícito (modules/integrations/get-strava-provider.ts é
+  // o único ponto que decide isso).
+  //   - STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET: credenciais da aplicação
+  //     registrada em https://www.strava.com/settings/api.
+  //   - STRAVA_WEBHOOK_VERIFY_TOKEN: segredo NOSSO, escolhido por nós e
+  //     devolvido pelo Strava no handshake GET de criação da inscrição. É a
+  //     única prova que o endpoint tem de que quem assinou fomos nós; não
+  //     autentica os POSTs de evento (o Strava não os assina — ver
+  //     modules/integrations/strava-webhook-service.ts).
+  //   - STRAVA_WEBHOOK_SUBSCRIPTION_ID: id da inscrição devolvido pelo Strava
+  //     na criação. Opcional; quando presente, eventos de outra inscrição são
+  //     descartados.
+  STRAVA_CLIENT_ID: z.string().optional(),
+  STRAVA_CLIENT_SECRET: z.string().optional(),
+  STRAVA_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
+  STRAVA_WEBHOOK_SUBSCRIPTION_ID: z.string().optional(),
   // UPSTASH_REDIS_REST_URL/TOKEN NÃO entram aqui de propósito. Este schema é
   // validado inteiro no primeiro acesso a qualquer variável, então declarar uma
   // config opcional aqui faz um valor malformado derrubar TODA rota que toca
