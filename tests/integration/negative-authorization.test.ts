@@ -446,6 +446,8 @@ describe("Fase 2 — Testes Negativos de Autorização", () => {
         {
           title: "Macro",
           goal: "BASE",
+          autoGenerate: false,
+          isDraft: false,
           startDate: "2026-08-01",
           endDate: "2026-08-28",
           phases: [],
@@ -463,7 +465,7 @@ describe("Fase 2 — Testes Negativos de Autorização", () => {
 
     const periodization = await createPeriodization(
       athleteA.athleteProfileId,
-      { title: "Macro A", goal: "BASE", startDate: "2026-08-01", endDate: "2026-08-28", phases: [] },
+      { title: "Macro A", goal: "BASE", autoGenerate: false, isDraft: false, startDate: "2026-08-01", endDate: "2026-08-28", phases: [] },
       { userId: trainerA.userId, organizationId: trainerA.organizationId, trainerProfileId: trainerA.trainerProfileId },
     );
     createdPeriodizationIds.push(periodization.id);

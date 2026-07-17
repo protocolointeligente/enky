@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
-import { addDays, toISODate } from "@/app/_lib/calendar";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
+import { PeriodizationCreateModal } from "@/components/periodization-create-modal";
 import { WeekGenerationModal, type GenerationTarget } from "@/components/week-generation-modal";
 
 interface RosterEntry {
@@ -48,14 +48,6 @@ interface PlanDetail extends PlanSummary {
   weeks: Week[];
 }
 
-interface PhaseDraft {
-  name: string;
-  startDate: string;
-  endDate: string;
-  targetVolumeKm: string;
-  targetIntensity: string;
-}
-
 function fmtDay(iso: string): string {
   return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -71,15 +63,9 @@ export default function TrainerPeriodizationPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<PlanDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState<GenerationTarget | null>(null);
-
-  const [title, setTitle] = useState("");
-  const [goal, setGoal] = useState("");
-  const [start, setStart] = useState(() => toISODate(new Date()));
-  const [end, setEnd] = useState(() => toISODate(addDays(new Date(), 83))); // 12 semanas
-  const [phases, setPhases] = useState<PhaseDraft[]>([]);
+  const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     if (!checked) return;
@@ -124,58 +110,18 @@ export default function TrainerPeriodizationPage() {
     void loadDetail();
   }, [loadDetail]);
 
-  function addPhase() {
-    setPhases((prev) => [
-      ...prev,
-      { name: "", startDate: start, endDate: end, targetVolumeKm: "", targetIntensity: "" },
-    ]);
-  }
-
-  function updatePhase(index: number, patch: Partial<PhaseDraft>) {
-    setPhases((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)));
-  }
-
-  function removePhase(index: number) {
-    setPhases((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  async function create() {
-    if (!athleteId || !title.trim() || !goal.trim()) return;
-    setBusy(true);
-    setError(null);
+  // Recarrega a lista do atleta e seleciona o plano recém-criado (o modal cuida
+  // do formulário e da chamada; aqui só sincronizamos a tela).
+  async function onCreated(aid: string, id: string) {
+    setAthleteId(aid);
     try {
-      const body = {
-        title,
-        goal,
-        startDate: start,
-        endDate: end,
-        phases: phases
-          .filter((p) => p.name.trim())
-          .map((p) => ({
-            name: p.name.trim(),
-            startDate: p.startDate,
-            endDate: p.endDate,
-            targetVolumeKm: p.targetVolumeKm ? Number(p.targetVolumeKm) : undefined,
-            targetIntensity: p.targetIntensity.trim() || undefined,
-          })),
-      };
-      const result = await apiFetch<{ periodization: { id: string } }>(
-        `/api/trainer/athletes/${athleteId}/periodizations`,
-        { method: "POST", body: JSON.stringify(body) },
-      );
-      // recarrega a lista e abre o plano recém-criado
       const list = await apiFetch<{ periodizations: PlanSummary[] }>(
-        `/api/trainer/athletes/${athleteId}/periodizations`,
+        `/api/trainer/athletes/${aid}/periodizations`,
       );
       setPlans(list.periodizations);
-      setSelectedId(result.periodization.id);
-      setTitle("");
-      setGoal("");
-      setPhases([]);
+      setSelectedId(id);
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Não foi possível criar o plano.");
-    } finally {
-      setBusy(false);
+      setError(err instanceof ApiClientError ? err.message : "Plano criado, mas a lista não recarregou.");
     }
   }
 
@@ -242,129 +188,13 @@ export default function TrainerPeriodizationPage() {
                   </select>
                 </div>
 
-                <div>
-                  <label htmlFor="title" className={uiClasses.label}>
-                    Título do plano
-                  </label>
-                  <input
-                    id="title"
-                    className={uiClasses.input}
-                    placeholder="Ex.: Base para 21k"
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                  />
-                </div>
-                <div>
-                  <label htmlFor="goal" className={uiClasses.label}>
-                    Objetivo
-                  </label>
-                  <input
-                    id="goal"
-                    className={uiClasses.input}
-                    placeholder="Ex.: Concluir meia maratona em 12 semanas"
-                    value={goal}
-                    onChange={(e) => setGoal(e.target.value)}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label htmlFor="start" className={uiClasses.label}>
-                      Início
-                    </label>
-                    <input
-                      id="start"
-                      type="date"
-                      className={uiClasses.input}
-                      value={start}
-                      max={end}
-                      onChange={(e) => setStart(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="end" className={uiClasses.label}>
-                      Fim
-                    </label>
-                    <input
-                      id="end"
-                      type="date"
-                      className={uiClasses.input}
-                      value={end}
-                      min={start}
-                      onChange={(e) => setEnd(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className={uiClasses.label}>Fases (opcional)</span>
-                    <button type="button" className={uiClasses.buttonGhost} onClick={addPhase}>
-                      + Adicionar fase
-                    </button>
-                  </div>
-                  {phases.map((p, i) => (
-                    <div key={i} className="flex flex-col gap-2 rounded-lg border border-line p-3">
-                      <div className="flex items-center gap-2">
-                        <input
-                          className={uiClasses.input}
-                          placeholder="Nome (base, build, pico, taper…)"
-                          value={p.name}
-                          onChange={(e) => updatePhase(i, { name: e.target.value })}
-                        />
-                        <button
-                          type="button"
-                          className={uiClasses.buttonGhost}
-                          onClick={() => removePhase(i)}
-                          aria-label="Remover fase"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="date"
-                          className={uiClasses.input}
-                          value={p.startDate}
-                          min={start}
-                          max={end}
-                          onChange={(e) => updatePhase(i, { startDate: e.target.value })}
-                        />
-                        <input
-                          type="date"
-                          className={uiClasses.input}
-                          value={p.endDate}
-                          min={start}
-                          max={end}
-                          onChange={(e) => updatePhase(i, { endDate: e.target.value })}
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          className={uiClasses.input}
-                          placeholder="Volume alvo (km)"
-                          value={p.targetVolumeKm}
-                          onChange={(e) => updatePhase(i, { targetVolumeKm: e.target.value })}
-                        />
-                        <input
-                          className={uiClasses.input}
-                          placeholder="Intensidade alvo"
-                          value={p.targetIntensity}
-                          onChange={(e) => updatePhase(i, { targetIntensity: e.target.value })}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
                 <button
                   type="button"
                   className={uiClasses.button}
-                  onClick={create}
-                  disabled={busy || !title.trim() || !goal.trim()}
+                  onClick={() => setShowCreate(true)}
+                  disabled={!athleteId}
                 >
-                  {busy ? "Criando…" : "Criar plano"}
+                  + Criar periodização
                 </button>
               </section>
 
@@ -539,6 +369,14 @@ export default function TrainerPeriodizationPage() {
           target={generating}
           onClose={() => setGenerating(null)}
           onGenerated={loadDetail}
+        />
+
+        <PeriodizationCreateModal
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          athletes={roster}
+          defaultAthleteId={athleteId}
+          onCreated={onCreated}
         />
 
         <Link href="/treinador" className={uiClasses.link}>

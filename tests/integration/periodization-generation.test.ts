@@ -60,6 +60,8 @@ async function newActiveAthlete(trainer: {
 const PLAN = {
   title: "Maratona de Berlim",
   goal: "Sub 3h30 na maratona",
+  autoGenerate: false,
+  isDraft: false,
   startDate: "2026-03-02",
   endDate: "2026-03-29",
   phases: [

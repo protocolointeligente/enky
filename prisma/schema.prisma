@@ -451,17 +451,36 @@ model AthleteInvitation {
 // ---------------------------------------------------------------------------
 
 model Periodization {
-  id             String   @id @default(uuid())
-  organizationId String
-  athleteId      String
-  trainerId      String
-  title          String
-  goal           String
-  startDate      DateTime @db.Date
-  endDate        DateTime @db.Date
-  createdAt      DateTime @default(now()) @db.Timestamptz
-  updatedAt      DateTime @updatedAt @db.Timestamptz
-  lockVersion    Int      @default(1)
+  id                     String    @id @default(uuid())
+  organizationId         String
+  athleteId              String
+  trainerId              String
+  title                  String
+  goal                   String
+  startDate              DateTime  @db.Date
+  endDate                DateTime  @db.Date
+  // Fase 04 — camada estratégica rica. Campos nullable (aditivo; planos antigos
+  // seguem válidos). `parameters` guarda os parâmetros por modalidade (VDOT/pace
+  // na corrida, FTP/TSS no ciclismo, CSS na natação, séries/RIR/tonelagem na
+  // musculação, padrão de movimento no funcional) — JSON validado por Zod na
+  // escrita (`periodizationParametersSchema`), nunca lido cru.
+  modality               Modality?
+  targetEvent            String?
+  level                  String?
+  loadControlMethod      String?
+  mainUnit               String?
+  totalVolume            Decimal?  @db.Decimal(12, 2)
+  mesocycleCount         Int?
+  microcycleCount        Int?
+  recoveryStrategy       String?
+  difficultyDistribution String?
+  autoGenerate           Boolean   @default(false)
+  isDraft                Boolean   @default(false)
+  notes                  String?
+  parameters             Json?
+  createdAt              DateTime  @default(now()) @db.Timestamptz
+  updatedAt              DateTime  @updatedAt @db.Timestamptz
+  lockVersion            Int       @default(1)
 
   organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   athlete           AthleteProfile       @relation(fields: [athleteId], references: [id], onDelete: Restrict)
