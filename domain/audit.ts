@@ -38,6 +38,7 @@ export type AuditAction =
   | "CREATE_PERIODIZATION"
   | "DELETE_PERIODIZATION"
   | "GENERATE_WEEK"
+  | "GENERATE_CYCLE"
   // Fase 9 — Admin Operacional. Toda ação do ADMIN/SUPERADMIN é cross-tenant
   // e por isso sempre auditada, inclusive a LEITURA de detalhes de uma
   // organização: quem inspecionou os dados de qual tenant é exatamente o que
@@ -58,7 +59,15 @@ export type AuditAction =
   | "SUBSCRIPTION_ACTIVATED"
   | "SUBSCRIPTION_RENEWED"
   | "SUBSCRIPTION_PAYMENT_FAILED"
-  | "SUBSCRIPTION_CANCELLED";
+  | "SUBSCRIPTION_CANCELLED"
+  // Fase 11 — Integração Strava. Conectar e desconectar são atos do ATLETA
+  // (`USER`): é ele quem autoriza um terceiro a ler seus dados e quem revoga,
+  // e a trilha precisa mostrar quando o consentimento começou e terminou.
+  // A importação é `SYSTEM` — ela também chega por webhook, sem sessão, e a
+  // trilha não pode depender de qual via trouxe a atividade.
+  | "CONNECT_EXTERNAL_PROVIDER"
+  | "DISCONNECT_EXTERNAL_PROVIDER"
+  | "IMPORT_EXTERNAL_ACTIVITY";
 
 export interface AuditLogInput {
   action: AuditAction;

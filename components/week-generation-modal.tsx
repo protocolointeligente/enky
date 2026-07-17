@@ -7,12 +7,13 @@ import { MODALITY_META, MODALITY_ORDER } from "@/app/_lib/modality";
 import { uiClasses } from "@/app/_lib/ui";
 import { Modal } from "@/components/ui/modal";
 
-// Geração assistida de UMA semana da periodização (Fase 6).
+// Geração assistida da periodização (Fase 6) — uma semana ou o ciclo inteiro.
 //
 // A tela é deliberadamente honesta sobre o que o motor sabe: mostra a
 // confiança, o que faltou de dado e a regra aplicada em cada decisão. O botão
 // final é "revisar", nunca "publicar" — o motor entrega rascunho, quem publica
-// é o treinador, um treino de cada vez.
+// é o treinador, um treino de cada vez. Isso vale para os DOIS modos: o
+// "automático" decide os parâmetros, não decide o que o atleta enxerga.
 
 interface GeneratedWorkout {
   id: string;
@@ -36,27 +37,42 @@ interface Rationale {
   caveats: string[];
 }
 
+type Confidence = "LOW" | "MODERATE" | "HIGH";
+
+interface WeekOutcome {
+  weekId: string;
+  sequence: number;
+  confidence: Confidence;
+  workoutCount: number;
+}
+
 interface GenerateResult {
   batchId: string;
+  scope: "SINGLE_WEEK" | "FULL_CYCLE";
+  mode: "ASSISTED" | "AUTOMATIC";
   workouts: GeneratedWorkout[];
-  confidence: "LOW" | "MODERATE" | "HIGH";
-  rationale: Rationale;
+  confidence: Confidence;
+  rationale: Rationale | null;
+  weeks: WeekOutcome[];
   replacedDrafts: number;
 }
 
-export interface WeekTarget {
+export interface GenerationTarget {
+  kind: "week" | "cycle";
   periodizationId: string;
-  weekId: string;
-  sequence: number;
+  /** null quando o alvo é o ciclo inteiro. */
+  weekId: string | null;
+  sequence: number | null;
   startDate: string;
   endDate: string;
   phaseName: string | null;
   isRecoveryWeek: boolean;
-  scheduledCount: number;
+  /** Semanas do plano — só usado no alvo "cycle". */
+  weekCount: number;
 }
 
 interface Props {
-  week: WeekTarget | null;
+  target: GenerationTarget | null;
   onClose: () => void;
   onGenerated: () => void | Promise<void>;
 }
@@ -79,7 +95,7 @@ const WEEKDAYS = [
   { iso: 7, label: "Dom" },
 ] as const;
 
-const CONFIDENCE_META: Record<GenerateResult["confidence"], { label: string; chip: string }> = {
+const CONFIDENCE_META: Record<Confidence, { label: string; chip: string }> = {
   HIGH: { label: "Confiança alta", chip: "bg-turq/15 text-turq" },
   MODERATE: { label: "Confiança moderada", chip: "bg-orange/15 text-orange-hi" },
   LOW: { label: "Confiança baixa", chip: "bg-danger/15 text-danger" },
@@ -89,6 +105,8 @@ const MISSING_LABEL: Record<string, string> = {
   targetVolume: "volume alvo",
   level: "nível do atleta",
   phaseName: "fase do ciclo",
+  modality: "modalidade (deduzida)",
+  availableWeekdays: "dias disponíveis (deduzidos)",
 };
 
 function fmtDay(iso: string): string {
@@ -98,7 +116,8 @@ function fmtDay(iso: string): string {
   });
 }
 
-export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
+export function WeekGenerationModal({ target, onClose, onGenerated }: Props) {
+  const [mode, setMode] = useState<"ASSISTED" | "AUTOMATIC">("ASSISTED");
   const [modality, setModality] = useState<string>("RUNNING");
   const [level, setLevel] = useState<string>("INTERMEDIATE");
   const [weekdays, setWeekdays] = useState<number[]>([2, 4, 6]);
@@ -123,31 +142,36 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
   }
 
   async function generate(replaceExisting: boolean) {
-    if (!week || weekdays.length === 0) return;
+    if (!target) return;
     setBusy(true);
     setError(null);
     try {
-      const generated = await apiFetch<GenerateResult>(
-        `/api/trainer/periodizations/${week.periodizationId}/weeks/${week.weekId}/generate`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            modality,
-            level: level || undefined,
-            availableWeekdays: weekdays,
-            includeStrength,
-            replaceExisting,
-          }),
-        },
-      );
+      const path =
+        target.kind === "cycle"
+          ? `/api/trainer/periodizations/${target.periodizationId}/generate`
+          : `/api/trainer/periodizations/${target.periodizationId}/weeks/${target.weekId}/generate`;
+
+      const generated = await apiFetch<GenerateResult>(path, {
+        method: "POST",
+        body: JSON.stringify({
+          mode,
+          // No automático o motor deduz; mandar os defaults do formulário
+          // faria a dedução parecer escolha do treinador.
+          modality: mode === "ASSISTED" ? modality : undefined,
+          availableWeekdays: mode === "ASSISTED" ? weekdays : undefined,
+          level: level || undefined,
+          includeStrength,
+          replaceExisting,
+        }),
+      });
       setResult(generated);
       setConflict(false);
       await onGenerated();
     } catch (err) {
-      const message = err instanceof ApiClientError ? err.message : "Não foi possível gerar.";
-      setError(message);
-      // 409 do serviço: a semana já tem rascunhos gerados.
-      setConflict(/já tem/i.test(message));
+      setError(err instanceof ApiClientError ? err.message : "Não foi possível gerar.");
+      // Pelo CÓDIGO, não pela frase: o texto do erro é conteúdo de produto e
+      // muda; o contrato é o code do ConflictError (409).
+      setConflict(err instanceof ApiClientError && err.code === "CONFLICT");
     } finally {
       setBusy(false);
     }
@@ -158,19 +182,25 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
     onClose();
   }
 
-  if (!week) return null;
+  if (!target) return null;
 
+  const isCycle = target.kind === "cycle";
   const confidence = result ? CONFIDENCE_META[result.confidence] : null;
+  const canSubmit = mode === "AUTOMATIC" || weekdays.length > 0;
 
   return (
     <Modal
       open
       onClose={close}
       size="lg"
-      title={`Gerar semana ${week.sequence}`}
-      description={`${fmtDay(week.startDate)} – ${fmtDay(week.endDate)}${
-        week.phaseName ? ` · ${week.phaseName}` : " · sem fase definida"
-      }${week.isRecoveryWeek ? " · semana regenerativa" : ""}`}
+      title={isCycle ? "Gerar ciclo inteiro" : `Gerar semana ${target.sequence}`}
+      description={
+        isCycle
+          ? `${target.weekCount} semanas · ${fmtDay(target.startDate)} – ${fmtDay(target.endDate)}`
+          : `${fmtDay(target.startDate)} – ${fmtDay(target.endDate)}${
+              target.phaseName ? ` · ${target.phaseName}` : " · sem fase definida"
+            }${target.isRecoveryWeek ? " · semana regenerativa" : ""}`
+      }
     >
       {result ? (
         <div className="flex flex-col gap-4">
@@ -178,6 +208,7 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
             <span className={`${uiClasses.badge} ${confidence!.chip}`}>{confidence!.label}</span>
             <span className="text-sm text-muted">
               {result.workouts.length} rascunho(s) criado(s)
+              {result.weeks.length > 1 ? ` em ${result.weeks.length} semanas` : ""}
               {result.replacedDrafts > 0 ? ` · ${result.replacedDrafts} substituído(s)` : ""}
             </span>
           </div>
@@ -188,26 +219,64 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
             depois que você revisar e publicar cada treino.
           </p>
 
-          <div className="flex flex-col gap-2">
-            {result.workouts.map((w) => {
-              const meta = MODALITY_META[w.modality];
-              return (
-                <Link
-                  key={w.id}
-                  href={`/treinador/treinos/${w.id}`}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2 text-sm transition-colors hover:border-electric"
-                >
-                  <span className="flex items-center gap-2">
-                    {meta?.icon}
-                    <span className="font-medium text-ink">{w.title}</span>
-                  </span>
-                  <span className="text-xs text-muted">{fmtDay(w.plannedDate)}</span>
-                </Link>
-              );
-            })}
-          </div>
+          {result.weeks.length > 1 && (
+            <p className="text-xs text-faint">
+              A confiança do lote é a da pior semana — um ciclo não é mais confiável que a semana
+              com menos dados.
+            </p>
+          )}
 
-          {result.rationale.missingData.length > 0 && (
+          {isCycle ? (
+            // 60 links seriam ruído. No ciclo o treinador quer o mapa das
+            // semanas; a revisão sessão a sessão acontece no calendário.
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="text-xs uppercase tracking-wider text-faint">
+                    <th className="py-2 pr-3">Semana</th>
+                    <th className="py-2 pr-3">Confiança</th>
+                    <th className="py-2 text-right">Treinos</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {result.weeks.map((w) => (
+                    <tr key={w.weekId}>
+                      <td className="py-2 pr-3 tabular text-ink">{w.sequence}</td>
+                      <td className="py-2 pr-3">
+                        <span
+                          className={`${uiClasses.badge} ${CONFIDENCE_META[w.confidence].chip}`}
+                        >
+                          {CONFIDENCE_META[w.confidence].label}
+                        </span>
+                      </td>
+                      <td className="py-2 text-right tabular text-ink">{w.workoutCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {result.workouts.map((w) => {
+                const meta = MODALITY_META[w.modality];
+                return (
+                  <Link
+                    key={w.id}
+                    href={`/treinador/treinos/${w.id}`}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-line px-3 py-2 text-sm transition-colors hover:border-electric"
+                  >
+                    <span className="flex items-center gap-2">
+                      {meta?.icon}
+                      <span className="font-medium text-ink">{w.title}</span>
+                    </span>
+                    <span className="text-xs text-muted">{fmtDay(w.plannedDate)}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {result.rationale && result.rationale.missingData.length > 0 && (
             <div className={uiClasses.error}>
               <strong>Faltou dado:</strong>{" "}
               {result.rationale.missingData.map((d) => MISSING_LABEL[d] ?? d).join(", ")}. A
@@ -216,32 +285,34 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
             </div>
           )}
 
-          <details className="rounded-lg border border-line p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-ink">
-              Por que o motor decidiu assim ({result.rationale.rules.length} regras ·{" "}
-              {result.rationale.algorithmVersion})
-            </summary>
-            <ul className="mt-3 flex flex-col gap-2">
-              {result.rationale.rules.map((rule) => (
-                <li key={rule.id} className="text-xs text-muted">
-                  <span className="font-mono text-faint">
-                    {rule.id}@{rule.version}
-                  </span>
-                  <br />
-                  {rule.explanation}
-                </li>
-              ))}
-            </ul>
-            {result.rationale.caveats.length > 0 && (
-              <ul className="mt-3 flex list-disc flex-col gap-1 pl-4">
-                {result.rationale.caveats.map((caveat) => (
-                  <li key={caveat} className="text-xs text-faint">
-                    {caveat}
+          {result.rationale && (
+            <details className="rounded-lg border border-line p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-ink">
+                Por que o motor decidiu assim ({result.rationale.rules.length} regras ·{" "}
+                {result.rationale.algorithmVersion})
+              </summary>
+              <ul className="mt-3 flex flex-col gap-2">
+                {result.rationale.rules.map((rule) => (
+                  <li key={rule.id} className="text-xs text-muted">
+                    <span className="font-mono text-faint">
+                      {rule.id}@{rule.version}
+                    </span>
+                    <br />
+                    {rule.explanation}
                   </li>
                 ))}
               </ul>
-            )}
-          </details>
+              {result.rationale.caveats.length > 0 && (
+                <ul className="mt-3 flex list-disc flex-col gap-1 pl-4">
+                  {result.rationale.caveats.map((caveat) => (
+                    <li key={caveat} className="text-xs text-faint">
+                      {caveat}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </details>
+          )}
 
           <div className="flex justify-end gap-2">
             <button type="button" className={uiClasses.buttonGhost} onClick={reset}>
@@ -256,29 +327,92 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
         <div className="flex flex-col gap-4">
           {error && <p className={uiClasses.error}>{error}</p>}
 
-          <div>
-            <label htmlFor="gen-modality" className={uiClasses.label}>
-              Modalidade
-            </label>
-            <select
-              id="gen-modality"
-              className={uiClasses.select}
-              value={modality}
-              onChange={(e) => setModality(e.target.value)}
-            >
-              {MODALITY_ORDER.map((m) => (
-                <option key={m} value={m}>
-                  {MODALITY_META[m]?.label ?? m}
-                </option>
+          <fieldset>
+            <legend className={uiClasses.label}>Quem escolhe os parâmetros</legend>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { value: "ASSISTED", label: "Eu informo" },
+                  { value: "AUTOMATIC", label: "Deduzir do histórico" },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={mode === option.value}
+                  onClick={() => setMode(option.value)}
+                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    mode === option.value
+                      ? "border-electric bg-electric/15 text-electric-hi"
+                      : "border-line text-muted hover:border-line-strong hover:text-ink"
+                  }`}
+                >
+                  {option.label}
+                </button>
               ))}
-            </select>
-            {modality === "TRIATHLON" && (
-              <p className="mt-1 text-xs text-faint">
-                Gera sessões separadas de natação, ciclismo e corrida. O volume em km é dividido
-                entre as disciplinas por uma proporção de referência — revise cada sessão.
-              </p>
-            )}
-          </div>
+            </div>
+            <p className="mt-1 text-xs text-faint">
+              {mode === "AUTOMATIC"
+                ? "O motor deduz a modalidade e os dias a partir dos treinos dos últimos 60 dias. Cada dedução rebaixa a confiança — e nenhum modo publica sozinho."
+                : "Você define a modalidade e os dias; o motor só monta a semana."}
+            </p>
+          </fieldset>
+
+          {mode === "ASSISTED" && (
+            <>
+              <div>
+                <label htmlFor="gen-modality" className={uiClasses.label}>
+                  Modalidade
+                </label>
+                <select
+                  id="gen-modality"
+                  className={uiClasses.select}
+                  value={modality}
+                  onChange={(e) => setModality(e.target.value)}
+                >
+                  {MODALITY_ORDER.map((m) => (
+                    <option key={m} value={m}>
+                      {MODALITY_META[m]?.label ?? m}
+                    </option>
+                  ))}
+                </select>
+                {modality === "TRIATHLON" && (
+                  <p className="mt-1 text-xs text-faint">
+                    Gera sessões separadas de natação, ciclismo e corrida. O volume em km é dividido
+                    entre as disciplinas por uma proporção de referência — revise cada sessão.
+                  </p>
+                )}
+              </div>
+
+              <fieldset>
+                <legend className={uiClasses.label}>Dias disponíveis na semana</legend>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKDAYS.map((d) => {
+                    const on = weekdays.includes(d.iso);
+                    return (
+                      <button
+                        key={d.iso}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => toggleDay(d.iso)}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                          on
+                            ? "border-electric bg-electric/15 text-electric-hi"
+                            : "border-line text-muted hover:border-line-strong hover:text-ink"
+                        }`}
+                      >
+                        {d.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-xs text-faint">
+                  O motor nunca agenda mais sessões do que o nível suporta, mesmo com a agenda
+                  cheia.
+                </p>
+              </fieldset>
+            </>
+          )}
 
           <div>
             <label htmlFor="gen-level" className={uiClasses.label}>
@@ -296,39 +430,12 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
                 </option>
               ))}
             </select>
-            {!level && (
-              <p className="mt-1 text-xs text-faint">
-                Sem o nível, o motor assume intermediário e rebaixa a confiança.
-              </p>
-            )}
-          </div>
-
-          <fieldset>
-            <legend className={uiClasses.label}>Dias disponíveis na semana</legend>
-            <div className="flex flex-wrap gap-2">
-              {WEEKDAYS.map((d) => {
-                const on = weekdays.includes(d.iso);
-                return (
-                  <button
-                    key={d.iso}
-                    type="button"
-                    aria-pressed={on}
-                    onClick={() => toggleDay(d.iso)}
-                    className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                      on
-                        ? "border-electric bg-electric/15 text-electric-hi"
-                        : "border-line text-muted hover:border-line-strong hover:text-ink"
-                    }`}
-                  >
-                    {d.label}
-                  </button>
-                );
-              })}
-            </div>
             <p className="mt-1 text-xs text-faint">
-              O motor nunca agenda mais sessões do que o nível suporta, mesmo com a agenda cheia.
+              {level
+                ? "Nível nunca é deduzido do histórico: frequência não é nível."
+                : "Sem o nível, o motor assume intermediário e rebaixa a confiança."}
             </p>
-          </fieldset>
+          </div>
 
           <label className="flex items-center gap-2 text-sm text-ink">
             <input
@@ -339,9 +446,9 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
             Incluir força complementar
           </label>
 
-          {week.scheduledCount > 0 && !conflict && (
+          {isCycle && !conflict && (
             <p className={uiClasses.hint}>
-              Esta semana já tem {week.scheduledCount} treino(s) agendado(s).
+              Gera as {target.weekCount} semanas de uma vez, cada uma com a regra da sua fase.
             </p>
           )}
 
@@ -367,14 +474,14 @@ export function WeekGenerationModal({ week, onClose, onGenerated }: Props) {
               type="button"
               className={uiClasses.button}
               onClick={() => generate(false)}
-              disabled={busy || weekdays.length === 0}
+              disabled={busy || !canSubmit}
             >
               {busy ? "Gerando…" : "Gerar rascunhos"}
             </button>
           )}
 
           <p className="text-xs text-faint">
-            O motor propõe, você dispõe: nada é publicado automaticamente.
+            O motor propõe, você dispõe: nada é publicado automaticamente, em nenhum modo.
           </p>
         </div>
       )}

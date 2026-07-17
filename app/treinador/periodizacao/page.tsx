@@ -6,7 +6,7 @@ import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { addDays, toISODate } from "@/app/_lib/calendar";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
-import { WeekGenerationModal, type WeekTarget } from "@/components/week-generation-modal";
+import { WeekGenerationModal, type GenerationTarget } from "@/components/week-generation-modal";
 
 interface RosterEntry {
   athleteProfileId: string;
@@ -73,7 +73,7 @@ export default function TrainerPeriodizationPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [generating, setGenerating] = useState<WeekTarget | null>(null);
+  const [generating, setGenerating] = useState<GenerationTarget | null>(null);
 
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
@@ -442,10 +442,31 @@ export default function TrainerPeriodizationPage() {
                   )}
 
                   <div className="flex flex-col gap-2">
-                    <h3 className="text-sm font-semibold text-ink">Semanas</h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-ink">Semanas</h3>
+                      <button
+                        type="button"
+                        className={uiClasses.buttonSecondary}
+                        onClick={() =>
+                          setGenerating({
+                            kind: "cycle",
+                            periodizationId: detail.id,
+                            weekId: null,
+                            sequence: null,
+                            startDate: detail.startDate,
+                            endDate: detail.endDate,
+                            phaseName: null,
+                            isRecoveryWeek: false,
+                            weekCount: detail.weeks.length,
+                          })
+                        }
+                      >
+                        Gerar ciclo inteiro
+                      </button>
+                    </div>
                     <p className={uiClasses.hint}>
-                      Gere as sessões de uma semana a partir da fase, do volume alvo e da
-                      disponibilidade. Tudo sai como rascunho para você revisar.
+                      Gere as sessões a partir da fase, do volume alvo e da disponibilidade — uma
+                      semana por vez ou o ciclo inteiro. Tudo sai como rascunho para você revisar.
                     </p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm">
@@ -482,6 +503,7 @@ export default function TrainerPeriodizationPage() {
                                   className={uiClasses.buttonGhost}
                                   onClick={() =>
                                     setGenerating({
+                                      kind: "week",
                                       periodizationId: detail.id,
                                       weekId: w.id,
                                       sequence: w.sequence,
@@ -491,7 +513,7 @@ export default function TrainerPeriodizationPage() {
                                         ? (phaseName.get(w.phaseId) ?? null)
                                         : null,
                                       isRecoveryWeek: w.isRecoveryWeek,
-                                      scheduledCount: w.scheduledCount,
+                                      weekCount: detail.weeks.length,
                                     })
                                   }
                                 >
@@ -511,7 +533,7 @@ export default function TrainerPeriodizationPage() {
         )}
 
         <WeekGenerationModal
-          week={generating}
+          target={generating}
           onClose={() => setGenerating(null)}
           onGenerated={loadDetail}
         />

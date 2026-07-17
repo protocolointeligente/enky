@@ -75,7 +75,7 @@ test("treinador cria periodização, gera a semana em rascunho e vê a regra apl
   });
 
   await test.step("gera a primeira semana e recebe rascunhos explicados", async () => {
-    await page.getByRole("button", { name: "Gerar" }).first().click();
+    await page.getByRole("button", { name: "Gerar", exact: true }).first().click();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Base aeróbica")).toBeVisible();
@@ -119,16 +119,36 @@ test("treinador cria periodização, gera a semana em rascunho e vê a regra apl
   });
 
   await test.step("regerar a mesma semana exige decisão explícita de substituir", async () => {
-    await page.getByRole("button", { name: "Gerar" }).first().click();
+    await page.getByRole("button", { name: "Gerar", exact: true }).first().click();
     const dialog = page.getByRole("dialog");
     await dialog.getByRole("button", { name: "Gerar rascunhos" }).click();
 
-    await expect(dialog.getByText(/já tem 3 rascunho/i)).toBeVisible();
+    await expect(dialog.getByText(/já existem 3 rascunho/i)).toBeVisible();
     // Só depois da recusa aparece a substituição — e ela avisa o que preserva.
     await expect(
       dialog.getByRole("button", { name: "Substituir rascunhos e gerar" }),
     ).toBeVisible();
     await expect(dialog.getByText(/não.*serão tocados/i)).toBeVisible();
+    await dialog.getByRole("button", { name: "Fechar" }).click();
+  });
+
+  await test.step("o modo automático deduz do histórico, e nao publica sozinho", async () => {
+    await page.getByRole("button", { name: "Gerar ciclo inteiro" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Gerar ciclo inteiro" })).toBeVisible();
+    // O plano usa a janela padrão do formulário — o número de semanas vem
+    // dela, então asserimos a forma, não um número mágico. .first(): a
+    // contagem aparece no subtítulo e no corpo do modal.
+    await expect(dialog.getByText(/\d+ semanas/).first()).toBeVisible();
+
+    await dialog.getByRole("button", { name: "Deduzir do histórico" }).click();
+    // No automático o formulário de parâmetros some: quem escolhe é o motor.
+    await expect(dialog.locator("#gen-modality")).toHaveCount(0);
+    await expect(dialog.getByText(/nenhum modo publica sozinho/i)).toBeVisible();
+
+    // Este atleta não tem histórico — o motor pede o dado em vez de adivinhar.
+    await dialog.getByRole("button", { name: "Gerar rascunhos" }).click();
+    await expect(dialog.getByText(/histórico/i).first()).toBeVisible({ timeout: 60_000 });
   });
 
   // Limpeza: workouts e batches caem antes do plano por causa do Restrict.

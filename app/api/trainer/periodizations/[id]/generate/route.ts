@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
-import { generateWeekDrafts } from "@/modules/periodization/generate-week";
+import { generateCycleDrafts } from "@/modules/periodization/generate-week";
 import { generateInputSchema } from "@/modules/periodization/generation-schema";
 import {
   requireAuthenticatedUser,
@@ -21,13 +21,9 @@ async function trainerActor(userId: string) {
   return { organizationId, trainerProfileId: trainerProfile.id };
 }
 
-// Gera os rascunhos de UMA semana da periodização. Nunca publica: a resposta
-// devolve os treinos em DRAFT para o treinador revisar, editar e publicar pelos
-// endpoints de treino já existentes.
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; weekId: string }> },
-) {
+// Gera os rascunhos do CICLO INTEIRO (scope FULL_CYCLE) — todas as semanas do
+// plano de uma vez. Como a rota de semana, não publica nada: devolve DRAFTs.
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     assertTrustedOrigin(request);
     const identity = await requireAuthenticatedUser();
@@ -35,10 +31,10 @@ export async function POST(
     await enforceRateLimit(periodizationWriteRateLimiter, `periodization-write:${identity.userId}`);
 
     const { organizationId, trainerProfileId } = await trainerActor(identity.userId);
-    const { id, weekId } = await params;
+    const { id } = await params;
 
     const input = await parseJsonBody(request, generateInputSchema);
-    const result = await generateWeekDrafts({ periodizationId: id, weekId }, input, {
+    const result = await generateCycleDrafts(id, input, {
       userId: identity.userId,
       organizationId,
       trainerProfileId,

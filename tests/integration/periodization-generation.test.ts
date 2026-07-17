@@ -3,7 +3,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import { activateAthleteInvitation } from "@/modules/athletes/activate-invitation";
 import { inviteAthlete } from "@/modules/athletes/invite-athlete";
 import { registerTrainer } from "@/modules/identity/register-trainer";
-import { generateWeekDrafts } from "@/modules/periodization/generate-week";
+import { generateCycleDrafts, generateWeekDrafts } from "@/modules/periodization/generate-week";
 import { createPeriodization } from "@/modules/periodization/periodization-service";
 import { getAthleteWorkout, listAthleteWorkouts } from "@/modules/workouts/get-athlete-workout";
 import { publishWorkout } from "@/modules/workouts/publish-workout";
@@ -83,7 +83,37 @@ async function setupPlan(prefix: string) {
   return { trainer, athleteId, periodization, week };
 }
 
+async function firstWeek(periodizationId: string) {
+  return prisma.trainingWeek.findFirstOrThrow({ where: { periodizationId, sequence: 1 } });
+}
+
+// Histórico que o modo AUTOMATIC lê para deduzir. Status COMPLETED de
+// propósito: rascunho gerado pelo próprio motor não conta como evidência de
+// rotina — o motor não pode aprender com o próprio chute.
+async function seedHistory(
+  trainer: { organizationId: string; trainerProfileId: string },
+  athleteId: string,
+  modality: "RUNNING" | "CYCLING" | "SWIMMING",
+  dates: string[],
+) {
+  for (const [i, date] of dates.entries()) {
+    await prisma.workout.create({
+      data: {
+        organizationId: trainer.organizationId,
+        athleteId,
+        trainerId: trainer.trainerProfileId,
+        title: `Histórico ${i + 1}`,
+        modality,
+        status: "COMPLETED",
+        source: "MANUAL",
+        plannedDate: new Date(`${date}T00:00:00.000Z`),
+      },
+    });
+  }
+}
+
 const REQUEST = {
+  mode: "ASSISTED" as const,
   modality: "RUNNING" as const,
   level: "INTERMEDIATE" as const,
   availableWeekdays: [2, 4, 6],
@@ -140,9 +170,13 @@ describe("Fase 6 — geração assistida por semana", () => {
     expect(batch.status).toBe("COMPLETED");
     expect(batch.scope).toBe("SINGLE_WEEK");
     expect(batch.generationVersion).toBe(1);
+    // O snapshot congela a ENTRADA que o motor viu, semana a semana.
     const snapshot = batch.contextSnapshot as Record<string, unknown>;
-    expect((snapshot.context as Record<string, unknown>).targetVolumeKm).toBe(45);
-    expect((snapshot.context as Record<string, unknown>).goal).toBe(PLAN.goal);
+    expect(snapshot.mode).toBe("ASSISTED");
+    const snapWeeks = snapshot.weeks as { context: Record<string, unknown> }[];
+    expect(snapWeeks).toHaveLength(1);
+    expect(snapWeeks[0]!.context.targetVolumeKm).toBe(45);
+    expect(snapWeeks[0]!.context.goal).toBe(PLAN.goal);
 
     // 6) Enquanto é rascunho, o atleta não enxerga nada.
     const athleteScope = { organizationId: trainer.organizationId, athleteProfileId: athleteId };
@@ -209,7 +243,7 @@ describe("Fase 6 — geração assistida por semana", () => {
     // Sem replaceExisting, regerar é conflito — nunca duplica silenciosamente.
     await expect(
       generateWeekDrafts({ periodizationId: periodization.id, weekId: week.id }, REQUEST, trainer),
-    ).rejects.toThrow(/já tem/i);
+    ).rejects.toThrow(/já existem/i);
 
     // O treinador publica um e edita outro; ambos viram trabalho a preservar.
     await publishWorkout(first.workouts[0]!.id, trainer);
@@ -271,7 +305,7 @@ describe("Fase 6 — geração assistida por semana", () => {
 
     expect(result.workouts.length).toBeGreaterThan(0);
     expect(result.confidence).toBe("LOW");
-    expect(result.rationale.missingData).toEqual(
+    expect(result.rationale?.missingData).toEqual(
       expect.arrayContaining(["phaseName", "level", "targetVolume"]),
     );
     const workout = await prisma.workout.findUniqueOrThrow({
@@ -291,8 +325,8 @@ describe("Fase 6 — geração assistida por semana", () => {
       REQUEST,
       trainer,
     );
-    expect(result.rationale.weekVolumeKm).toBe(45);
-    expect(result.rationale.missingData).not.toContain("targetVolume");
+    expect(result.rationale?.weekVolumeKm).toBe(45);
+    expect(result.rationale?.missingData).not.toContain("targetVolume");
   });
 
   it("aplica a semana regenerativa marcada na estrutura do plano", async () => {
@@ -308,7 +342,7 @@ describe("Fase 6 — geração assistida por semana", () => {
       trainer,
     );
 
-    expect(result.rationale.weekVolumeKm).toBeCloseTo(45 * 0.6, 5);
+    expect(result.rationale?.weekVolumeKm).toBeCloseTo(45 * 0.6, 5);
     const workouts = await prisma.workout.findMany({
       where: { id: { in: result.workouts.map((w) => w.id) } },
     });
@@ -403,6 +437,164 @@ describe("Fase 6 — geração por modalidade", () => {
     );
     expect(names).toContain("Agachamento livre");
   }, 40_000);
+});
+
+describe("Fase 6 — ciclo inteiro (FULL_CYCLE)", () => {
+  it("gera todas as semanas do plano num único lote, sempre em rascunho", async () => {
+    const { trainer, periodization } = await setupPlan("gen-cycle");
+
+    const result = await generateCycleDrafts(periodization.id, REQUEST, trainer);
+
+    // Plano de 2026-03-02 a 2026-03-29 => 4 semanas × 3 dias.
+    expect(result.scope).toBe("FULL_CYCLE");
+    expect(result.weeks).toHaveLength(4);
+    expect(result.workouts).toHaveLength(12);
+
+    const workouts = await prisma.workout.findMany({
+      where: { id: { in: result.workouts.map((w) => w.id) } },
+      include: { blocks: { include: { steps: true } } },
+    });
+    expect(workouts.every((w) => w.status === "DRAFT")).toBe(true);
+    expect(workouts.every((w) => w.generationMode === "ASSISTED")).toBe(true);
+    expect(workouts.every((w) => w.blocks.some((b) => b.steps.length > 0))).toBe(true);
+    // Cada treino ficou amarrado à SUA semana, não todos à primeira.
+    expect(new Set(workouts.map((w) => w.trainingWeekId)).size).toBe(4);
+
+    const batch = await prisma.generationBatch.findUniqueOrThrow({ where: { id: result.batchId } });
+    expect(batch.scope).toBe("FULL_CYCLE");
+    expect(batch.status).toBe("COMPLETED");
+
+    const log = await prisma.auditLog.findFirst({
+      where: { action: "GENERATE_CYCLE", entityId: result.batchId },
+    });
+    expect(log?.reason).toMatch(/FULL_CYCLE:ASSISTED:4_semana/);
+  }, 90_000);
+
+  it("a confiança do lote é a da pior semana, não a da melhor", async () => {
+    const { trainer, periodization } = await setupPlan("gen-cycle-conf");
+    // A fase cobre o plano inteiro, então todas as semanas teriam HIGH.
+    // Tirar a fase da semana 1 deixa-a sem fase E sem volume alvo => LOW.
+    const first = await prisma.trainingWeek.findFirstOrThrow({
+      where: { periodizationId: periodization.id, sequence: 1 },
+    });
+    await prisma.trainingWeek.update({ where: { id: first.id }, data: { phaseId: null } });
+
+    const result = await generateCycleDrafts(periodization.id, REQUEST, trainer);
+
+    const week1 = result.weeks.find((w) => w.sequence === 1);
+    const week2 = result.weeks.find((w) => w.sequence === 2);
+    expect(week1?.confidence).toBe("LOW");
+    expect(week2?.confidence).toBe("HIGH");
+    // Um ciclo não é mais confiável que a sua semana mais malservida de dados.
+    expect(result.confidence).toBe("LOW");
+    // E o rationale devolvido é o da semana que puxou para baixo.
+    expect(result.rationale?.missingData).toContain("targetVolume");
+  }, 90_000);
+
+  it("recusa regerar o ciclo e, ao substituir, preserva o que o treinador tocou", async () => {
+    const { trainer, periodization } = await setupPlan("gen-cycle-replace");
+    const first = await generateCycleDrafts(periodization.id, REQUEST, trainer);
+
+    await expect(generateCycleDrafts(periodization.id, REQUEST, trainer)).rejects.toThrow(
+      /já existem/i,
+    );
+
+    await publishWorkout(first.workouts[0]!.id, trainer);
+    const regenerated = await generateCycleDrafts(
+      periodization.id,
+      { ...REQUEST, replaceExisting: true },
+      trainer,
+    );
+
+    // 12 gerados, 1 publicado => 11 rascunhos intactos foram refeitos.
+    expect(regenerated.replacedDrafts).toBe(11);
+    const survivor = await prisma.workout.findUnique({ where: { id: first.workouts[0]!.id } });
+    expect(survivor?.status).toBe("PUBLISHED");
+  }, 120_000);
+});
+
+describe("Fase 6 — modo AUTOMATIC", () => {
+  it("deduz modalidade e dias do histórico, rebaixa a confiança e continua em rascunho", async () => {
+    const { trainer, athleteId, periodization } = await setupPlan("gen-auto");
+
+    // Histórico real do atleta: ciclismo às segundas e quartas, repetido — é
+    // o que o motor precisa ver para tratar o dia como rotina.
+    await seedHistory(trainer, athleteId, "CYCLING", [
+      "2026-07-06", // segunda
+      "2026-07-08", // quarta
+      "2026-07-13", // segunda
+      "2026-07-15", // quarta
+    ]);
+
+    const result = await generateWeekDrafts(
+      { periodizationId: periodization.id, weekId: (await firstWeek(periodization.id)).id },
+      { mode: "AUTOMATIC", level: "INTERMEDIATE", includeStrength: false, replaceExisting: false },
+      trainer,
+    );
+
+    // Deduziu ciclismo, e não a corrida que o formulário assumiria por padrão.
+    const workouts = await prisma.workout.findMany({
+      where: { id: { in: result.workouts.map((w) => w.id) } },
+    });
+    expect(workouts.every((w) => w.modality === "CYCLING")).toBe(true);
+    expect(workouts.every((w) => w.generationMode === "AUTOMATIC")).toBe(true);
+
+    // AUTOMATIC não publica: o modo diz quem escolheu os parâmetros, não quem
+    // decide o que o atleta enxerga.
+    expect(workouts.every((w) => w.status === "DRAFT")).toBe(true);
+
+    // Deduzir é palpite: nunca chega a HIGH e o rationale diz o que deduziu.
+    expect(result.confidence).not.toBe("HIGH");
+    expect(result.rationale?.missingData).toEqual(
+      expect.arrayContaining(["modality", "availableWeekdays"]),
+    );
+    expect(result.rationale?.rules.map((r) => r.id)).toContain("automatic-inference");
+
+    const batch = await prisma.generationBatch.findUniqueOrThrow({ where: { id: result.batchId } });
+    expect(batch.generationMode).toBe("AUTOMATIC");
+  }, 90_000);
+
+  it("pede o dado em vez de adivinhar quando não há histórico", async () => {
+    const { trainer, periodization } = await setupPlan("gen-auto-empty");
+
+    await expect(
+      generateWeekDrafts(
+        { periodizationId: periodization.id, weekId: (await firstWeek(periodization.id)).id },
+        { mode: "AUTOMATIC", includeStrength: false, replaceExisting: false },
+        trainer,
+      ),
+    ).rejects.toThrow(/histórico/i);
+  }, 60_000);
+
+  it("o que o treinador informa vence a dedução", async () => {
+    const { trainer, athleteId, periodization } = await setupPlan("gen-auto-override");
+
+    await seedHistory(trainer, athleteId, "CYCLING", [
+      "2026-07-06",
+      "2026-07-08",
+      "2026-07-13",
+      "2026-07-15",
+    ]);
+
+    const result = await generateWeekDrafts(
+      { periodizationId: periodization.id, weekId: (await firstWeek(periodization.id)).id },
+      {
+        mode: "AUTOMATIC",
+        modality: "SWIMMING", // contraria o histórico de ciclismo
+        level: "INTERMEDIATE",
+        includeStrength: false,
+        replaceExisting: false,
+      },
+      trainer,
+    );
+
+    const workouts = await prisma.workout.findMany({
+      where: { id: { in: result.workouts.map((w) => w.id) } },
+    });
+    expect(workouts.every((w) => w.modality === "SWIMMING")).toBe(true);
+    // Modalidade veio do treinador => não entra como deduzida.
+    expect(result.rationale?.missingData).not.toContain("modality");
+  }, 90_000);
 });
 
 afterAll(async () => {
