@@ -86,7 +86,7 @@ export default function RegisterPage() {
             {submitting ? "Criando conta..." : "Criar conta"}
           </button>
         </form>
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           Já tem conta?{" "}
           <Link href="/login" className={uiClasses.link}>
             Entrar

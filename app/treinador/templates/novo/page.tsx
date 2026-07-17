@@ -38,7 +38,7 @@ export default function NewTemplatePage() {
   if (!checked) {
     return (
       <main className={uiClasses.page}>
-        <p className="text-slate-400">Carregando...</p>
+        <p className="text-muted">Carregando...</p>
       </main>
     );
   }

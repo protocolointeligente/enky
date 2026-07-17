@@ -468,6 +468,9 @@ export default function TrainerPeriodizationPage() {
                       Gere as sessões a partir da fase, do volume alvo e da disponibilidade — uma
                       semana por vez ou o ciclo inteiro. Tudo sai como rascunho para você revisar.
                     </p>
+                    {detail.weeks.length > 0 && (
+                      <WeekLoadChart weeks={detail.weeks} phases={detail.phases} />
+                    )}
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm">
                         <thead>
@@ -543,5 +546,78 @@ export default function TrainerPeriodizationPage() {
         </Link>
       </div>
     </main>
+  );
+}
+
+// Carga planejada do macrociclo: uma barra por microciclo (altura = treinos
+// agendados). Fases alternam electric/laranja para o treinador enxergar os
+// blocos; semana regenerativa em turquesa. Sem lib de gráfico — barras CSS.
+function WeekLoadChart({ weeks, phases }: { weeks: Week[]; phases: Phase[] }) {
+  const phaseIndex = new Map<string, number>();
+  [...phases]
+    .sort((a, b) => a.sequence - b.sequence)
+    .forEach((p, i) => phaseIndex.set(p.id, i));
+
+  const maxCount = Math.max(1, ...weeks.map((w) => w.scheduledCount));
+  const phaseColor = (i: number) =>
+    i % 2 === 0 ? "var(--color-electric)" : "var(--color-orange)";
+  const barColor = (w: Week) => {
+    if (w.isRecoveryWeek) return "var(--color-turq)";
+    if (!w.phaseId) return "var(--color-line-strong)";
+    return phaseColor(phaseIndex.get(w.phaseId) ?? 0);
+  };
+
+  return (
+    <div className="rounded-lg border border-line bg-deep/40 p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs font-medium text-muted">Treinos por microciclo</span>
+        <span className="text-[11px] tabular text-faint">pico: {maxCount}</span>
+      </div>
+      <div className="flex h-36 items-end gap-1 overflow-x-auto">
+        {weeks.map((w) => (
+          <div
+            key={w.id}
+            className="flex h-full min-w-[12px] flex-1 flex-col justify-end"
+            title={`Semana ${w.sequence} · ${fmtDay(w.startDate)} – ${fmtDay(w.endDate)} · ${w.scheduledCount} treino${w.scheduledCount === 1 ? "" : "s"}`}
+          >
+            <span
+              className="w-full rounded-t transition-[height]"
+              style={{
+                height: `${(w.scheduledCount / maxCount) * 100}%`,
+                minHeight: w.scheduledCount > 0 ? 4 : 2,
+                backgroundColor: w.scheduledCount > 0 ? barColor(w) : "var(--color-line)",
+              }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex gap-1">
+        {weeks.map((w) => (
+          <span
+            key={w.id}
+            className="min-w-[12px] flex-1 text-center text-[10px] tabular text-faint"
+          >
+            {w.sequence}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+        {[...phases]
+          .sort((a, b) => a.sequence - b.sequence)
+          .map((p, i) => (
+            <span key={p.id} className="flex items-center gap-1.5">
+              <span
+                className="h-2 w-2 rounded-sm"
+                style={{ backgroundColor: phaseColor(i) }}
+              />
+              {p.name}
+            </span>
+          ))}
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: "var(--color-turq)" }} />
+          regenerativa
+        </span>
+      </div>
+    </div>
   );
 }

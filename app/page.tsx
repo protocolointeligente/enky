@@ -358,7 +358,11 @@ function Pillars() {
           title="ENKY Intelligence"
           reverse
           body="A leitura de carga (CTL/ATL/TSB, ACWR), a prontidão diária e a lista de atletas que precisam de atenção — traduzidas em linguagem de contexto para apoiar a sua decisão, com a sua palavra final sempre."
-          points={["Estado de carga e risco", "Prontidão e recuperação", "Atenção da carteira"]}
+          points={[
+            "Estado de carga e sinais de atenção",
+            "Prontidão e recuperação",
+            "Atenção da carteira",
+          ]}
         />
         <Pillar
           icon={<ReportGlyph />}
@@ -472,52 +476,63 @@ function Pricing() {
           Comece grátis. Cresça quando fizer sentido.
         </h2>
         <p className="mt-4 text-lg text-muted">
-          Um atleta é de graça, para sempre. Os planos maiores chegam em breve — e você ajuda a
-          moldá-los.
+          Comece simples e evolua conforme sua carteira de atletas, equipe e necessidade de gestão.
         </p>
       </div>
 
-      <div className="mt-14 grid items-stretch gap-6 lg:grid-cols-3">
+      <div className="mt-14 grid items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <PlanCard
           name="Grátis"
           price="R$ 0"
-          cadence="para sempre"
-          highlight
-          description="Tudo que você precisa para treinar 1 atleta com método."
+          cadence="/mês"
+          description="Para testar a plataforma com um atleta e sentir o fluxo completo."
           features={[
-            "1 atleta ativo",
-            "Calendário e prescrição",
-            "Feedback pós-treino",
-            "Leitura de carga e prontidão",
-            "Relatório de período",
+            "1 atleta",
+            "Calendário básico",
+            "Prescrição simples",
+            "App do atleta",
           ]}
-          cta={{ label: "Começar grátis", href: "/registrar", primary: true }}
+          cta={{ label: "Começar com Grátis", href: "/registrar", primary: false }}
+        />
+        <PlanCard
+          name="Starter"
+          price="R$ 97"
+          cadence="/mês"
+          description="Para treinadores iniciando a gestão digital dos atletas."
+          features={[
+            "Calendário e prescrição",
+            "Biblioteca de treinos",
+            "Alertas essenciais",
+            "App do atleta",
+          ]}
+          cta={{ label: "Começar com Starter", href: "/registrar", primary: false }}
         />
         <PlanCard
           name="Pro"
-          price="Em breve"
-          cadence="para quem tem carteira"
-          description="Para o treinador que gerencia vários atletas e quer a Intelligence completa."
+          price="R$ 197"
+          cadence="/mês"
+          highlight
+          description="Para treinadores que querem escalar a rotina com mais controle."
           features={[
-            "Vários atletas",
-            "ENKY Intelligence completa",
-            "Periodização e templates",
-            "Relatórios avançados",
+            "Periodização Intelligence",
+            "Modelos por modalidade",
+            "Gestão de grupos",
+            "Relatórios e evolução",
           ]}
-          cta={{ label: "Quero ser avisado", href: "/registrar", primary: false }}
+          cta={{ label: "Começar com Pro", href: "/registrar", primary: true }}
         />
         <PlanCard
           name="Assessoria"
-          price="Em breve"
-          cadence="para equipes"
-          description="Para assessorias com múltiplos treinadores e operação em escala."
+          price="R$ 397"
+          cadence="/mês"
+          description="Para equipes com operação, carteira de atletas e planos ativos."
           features={[
-            "Múltiplos treinadores",
-            "Grupos de atletas",
-            "Gestão da equipe",
-            "Marketplace de planos",
+            "CRM da assessoria",
+            "Planos para atletas",
+            "Equipe e permissão",
+            "Suporte prioritário",
           ]}
-          cta={{ label: "Falar com a gente", href: "/registrar", primary: false }}
+          cta={{ label: "Começar com Assessoria", href: "/registrar", primary: false }}
         />
       </div>
     </section>
@@ -543,7 +558,7 @@ function PlanCard({
 }) {
   return (
     <div
-      className={`flex flex-col rounded-2xl border p-8 ${
+      className={`flex flex-col rounded-2xl border p-6 ${
         highlight
           ? "border-orange/50 bg-petrol/80 shadow-2xl shadow-orange/5"
           : "border-line bg-petrol/40"
@@ -553,7 +568,7 @@ function PlanCard({
         <h3 className="font-display text-lg font-bold text-ink">{name}</h3>
         {highlight && (
           <span className="rounded-full bg-orange/15 px-2.5 py-0.5 text-xs font-semibold text-orange">
-            Recomendado
+            Popular
           </span>
         )}
       </div>

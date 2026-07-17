@@ -74,7 +74,7 @@ export default function EditTemplatePage({ params }: { params: Promise<{ id: str
   if (!checked || (!initialValues && !error)) {
     return (
       <main className={uiClasses.page}>
-        <p className="text-slate-400">Carregando...</p>
+        <p className="text-muted">Carregando...</p>
       </main>
     );
   }

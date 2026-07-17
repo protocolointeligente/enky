@@ -737,7 +737,7 @@ function WorkoutCardMini({
       onDragEnd={onDragEnd}
       onClick={onOpen}
       style={{ borderLeftColor: meta.accent }}
-      className={`flex w-full flex-col gap-0.5 rounded-lg border-l-[3px] px-2 py-1.5 text-left transition-colors ${
+      className={`flex w-full flex-col gap-0.5 overflow-hidden rounded-lg border-l-[3px] px-2 py-1.5 text-left transition-colors ${
         draft
           ? "border border-dashed border-line-strong bg-transparent"
           : "bg-surface hover:bg-surface-2"
@@ -753,10 +753,10 @@ function WorkoutCardMini({
           <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-turq" title="Feedback pendente" />
         )}
       </div>
-      <div className="flex items-center gap-1.5 pl-[22px] text-[10.5px] leading-tight">
-        {time && <span className="tabular text-muted">{time}</span>}
-        {duration && <span className="tabular text-faint">{duration}</span>}
-        <span className={`ml-auto font-medium ${statusTone(card.status)}`}>
+      <div className="flex flex-wrap items-center gap-x-1.5 pl-[22px] text-[10.5px] leading-tight">
+        {time && <span className="tabular shrink-0 text-muted">{time}</span>}
+        {duration && <span className="tabular shrink-0 text-faint">{duration}</span>}
+        <span className={`ml-auto min-w-0 truncate font-medium ${statusTone(card.status)}`}>
           {statusLabel(card.status)}
         </span>
       </div>

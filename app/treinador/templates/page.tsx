@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { uiClasses } from "@/app/_lib/ui";
+import { modalityMeta } from "@/app/_lib/modality";
 
 interface TemplateListItem {
   id: string;
@@ -77,7 +78,7 @@ export default function TrainerTemplatesPage() {
   if (!checked || loading) {
     return (
       <main className={uiClasses.page}>
-        <p className="text-slate-400">Carregando...</p>
+        <p className="text-muted">Carregando...</p>
       </main>
     );
   }
@@ -95,7 +96,7 @@ export default function TrainerTemplatesPage() {
         {error && <p className={uiClasses.error}>{error}</p>}
         {notice && <p className={uiClasses.success}>{notice}</p>}
 
-        <label className="flex items-center gap-2 text-sm text-slate-300">
+        <label className="flex items-center gap-2 text-sm text-muted">
           <input
             type="checkbox"
             checked={includeInactive}
@@ -104,89 +105,105 @@ export default function TrainerTemplatesPage() {
           Incluir arquivados
         </label>
 
-        <section className={`${uiClasses.card} flex flex-col gap-2`}>
-          {templates.length === 0 ? (
-            <p className="text-sm text-slate-400">
-              Nenhum template ainda. Crie um do zero ou salve um treino como template.
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {templates.map((tpl) => (
+        {templates.length === 0 ? (
+          <p className={`${uiClasses.card} text-sm text-muted`}>
+            Nenhum template ainda. Crie um do zero ou salve um treino como template.
+          </p>
+        ) : (
+          <ul className="grid gap-3 sm:grid-cols-2">
+            {templates.map((tpl) => {
+              const meta = modalityMeta(tpl.modality);
+              return (
                 <li
                   key={tpl.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 p-3"
+                  className={`flex flex-col overflow-hidden rounded-xl border border-line bg-petrol/60 ${
+                    tpl.isActive ? "" : "opacity-60"
+                  }`}
                 >
-                  <div className="min-w-0">
-                    <p className="flex items-center gap-2 font-medium text-slate-100">
-                      <span className="truncate">{tpl.title}</span>
-                      <span className={`${uiClasses.badge} bg-slate-700 text-slate-200`}>
-                        {tpl.modality}
-                      </span>
+                  {/* Banner gerado automaticamente: gradiente + ícone da
+                      modalidade. Sem upload/armazenamento — visual determinístico. */}
+                  <div
+                    className="relative h-24 overflow-hidden"
+                    style={{
+                      background: `linear-gradient(135deg, ${meta.accent}33, ${meta.accent}0a)`,
+                    }}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-2 -top-3 opacity-25 [&_svg]:h-28 [&_svg]:w-28"
+                      style={{ color: meta.accent }}
+                    >
+                      {meta.icon}
+                    </span>
+                    <span className="absolute left-3 top-3 flex items-center gap-2">
+                      <span className={`${uiClasses.badge} ${meta.chip}`}>{meta.label}</span>
                       {!tpl.isActive && (
-                        <span className={`${uiClasses.badge} bg-slate-800 text-slate-400`}>
-                          Arquivado
-                        </span>
+                        <span className={`${uiClasses.badge} bg-surface text-faint`}>Arquivado</span>
                       )}
-                    </p>
+                    </span>
+                  </div>
+
+                  <div className="flex min-w-0 flex-1 flex-col gap-1 p-4">
+                    <p className="truncate font-medium text-ink">{tpl.title}</p>
                     {tpl.description && (
-                      <p className="truncate text-xs text-slate-400">{tpl.description}</p>
+                      <p className="line-clamp-2 text-xs text-muted">{tpl.description}</p>
+                    )}
+                    {tpl.isActive && (
+                      <div className="mt-3 flex items-center gap-3 text-xs">
+                        <button
+                          type="button"
+                          className="font-medium text-turq hover:underline disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() => setApplying(tpl)}
+                        >
+                          Aplicar
+                        </button>
+                        <Link
+                          href={`/treinador/templates/${tpl.id}/editar`}
+                          className="text-muted hover:text-ink hover:underline"
+                        >
+                          Editar
+                        </Link>
+                        <button
+                          type="button"
+                          className="text-muted hover:text-ink hover:underline disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() =>
+                            runAction(
+                              () =>
+                                apiFetch(`/api/trainer/templates/${tpl.id}/duplicate`, {
+                                  method: "POST",
+                                }),
+                              "Template duplicado.",
+                            )
+                          }
+                        >
+                          Duplicar
+                        </button>
+                        <button
+                          type="button"
+                          className="ml-auto text-danger hover:underline disabled:opacity-50"
+                          disabled={busy}
+                          onClick={() =>
+                            runAction(
+                              () =>
+                                apiFetch(`/api/trainer/templates/${tpl.id}/archive`, {
+                                  method: "POST",
+                                }),
+                              "Template arquivado.",
+                            )
+                          }
+                        >
+                          Arquivar
+                        </button>
+                      </div>
                     )}
                   </div>
-                  {tpl.isActive && (
-                    <div className="flex shrink-0 items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        className="text-[#00e6c3] hover:underline disabled:opacity-50"
-                        disabled={busy}
-                        onClick={() => setApplying(tpl)}
-                      >
-                        Aplicar
-                      </button>
-                      <Link
-                        href={`/treinador/templates/${tpl.id}/editar`}
-                        className="text-slate-300 hover:underline"
-                      >
-                        Editar
-                      </Link>
-                      <button
-                        type="button"
-                        className="text-slate-300 hover:underline disabled:opacity-50"
-                        disabled={busy}
-                        onClick={() =>
-                          runAction(
-                            () =>
-                              apiFetch(`/api/trainer/templates/${tpl.id}/duplicate`, {
-                                method: "POST",
-                              }),
-                            "Template duplicado.",
-                          )
-                        }
-                      >
-                        Duplicar
-                      </button>
-                      <button
-                        type="button"
-                        className="text-red-400 hover:underline disabled:opacity-50"
-                        disabled={busy}
-                        onClick={() =>
-                          runAction(
-                            () =>
-                              apiFetch(`/api/trainer/templates/${tpl.id}/archive`, {
-                                method: "POST",
-                              }),
-                            "Template arquivado.",
-                          )
-                        }
-                      >
-                        Arquivar
-                      </button>
-                    </div>
-                  )}
                 </li>
-              ))}
-            </ul>
-          )}
-        </section>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       {applying && (
@@ -246,7 +263,7 @@ function ApplyTemplateModal({
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleApply}
       >
-        <h2 className="font-semibold text-slate-100">Aplicar “{template.title}”</h2>
+        <h2 className={uiClasses.subheading}>Aplicar “{template.title}”</h2>
         {error && <p className={uiClasses.error}>{error}</p>}
         <div>
           <label className={uiClasses.label} htmlFor="apply-athlete">

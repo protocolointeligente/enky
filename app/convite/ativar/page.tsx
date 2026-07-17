@@ -82,7 +82,7 @@ export default function ActivateInvitationPage() {
     <main className={uiClasses.page}>
       <div className="mx-auto flex max-w-sm flex-col gap-6">
         <h1 className={uiClasses.heading}>Ativar convite — ENKY</h1>
-        <Suspense fallback={<p className="text-slate-400">Carregando...</p>}>
+        <Suspense fallback={<p className="text-muted">Carregando...</p>}>
           <ActivateInvitationForm />
         </Suspense>
       </div>
