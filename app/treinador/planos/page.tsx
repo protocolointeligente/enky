@@ -18,6 +18,7 @@ interface Plan {
   price: number;
   currency: string;
   billingCycle: string;
+  trialDays: number;
   limits: PlanLimits;
   isCurrent: boolean;
 }
@@ -123,6 +124,11 @@ export default function TrainerPlansPage() {
                     </span>
                   ) : null}
                 </p>
+                {plan.trialDays > 0 ? (
+                  <p className="text-xs font-semibold text-turq">
+                    {plan.trialDays} dias grátis para testar
+                  </p>
+                ) : null}
                 {plan.description ? <p className={uiClasses.hint}>{plan.description}</p> : null}
               </div>
 

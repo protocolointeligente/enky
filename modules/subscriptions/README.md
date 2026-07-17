@@ -21,6 +21,8 @@ Decisão comercial registrada na migração `20260717120000_plan_catalog_pricing
 
 O limite de **1 atleta** do plano grátis é anterior à Fase 10 e foi reafirmado como definitivo — não altere sem decisão comercial explícita. Pro e Assessoria têm os mesmos recursos e diferem por volume; o diferencial real da Assessoria (múltiplos treinadores na mesma organização) é da Fase 6 (ADR-001).
 
+**Fase 05 — limites por dimensão + trial.** `featuresLimits` passou a modelar, além de `maxAthletes` e `features`, também `maxTrainers`, `maxTemplates` e `maxStorageMb` (todos `null` = ilimitado; `plan-limits.ts`). `SubscriptionPlan.trialDays` torna o trial configurável por plano (Starter/Pro = 7 dias; Grátis/Assessoria = 0) — o gateway aplica o período no checkout e a assinatura entra `TRIALING` até o primeiro pagamento confirmado. Migração aditiva `20260718120000_plan_limits_trial` (nova coluna + UPSERT convergente do catálogo — nunca edita migração já aplicada). Novas features: `integrations`, `marketplace`.
+
 ## Entitlements — quem pode o quê
 
 `entitlements.ts` é a fonte única. Nenhuma rota, tela ou serviço decide limite por conta própria.
@@ -48,4 +50,6 @@ O checkout deixa a assinatura `INCOMPLETE` e guarda os ids do gateway. Quem ativ
 ## Onde os limites são aplicados
 
 - **Atletas:** `assertCanAddAthlete()` é chamado **dentro** de `inviteAthlete` (na transação, com o `tx`), não só na rota — o limite é invariante de negócio, não detalhe de HTTP. Mesmo racional da exceção de Fase 02C em `docs/ARCHITECTURE.md`. Usar `tx` é o que impede dois convites simultâneos na fronteira do limite de passarem os dois.
+- **Templates:** `assertCanCreateTemplate()` é chamado **dentro** de `createTemplate` (na transação) — mesmo padrão. Grátis = 3 modelos (coberto por `tests/integration/workout-templates.test.ts`).
 - **Recursos:** `assertFeature()` / `hasFeature()`. A Fase 10 estabelece o mecanismo e o catálogo; aplicar `assertFeature` nas rotas de periodização/inteligência/relatórios premium é o passo seguinte — hoje esses recursos seguem liberados para não retirar, sem aviso, o que já estava em uso.
+- **Treinadores e armazenamento:** `maxTrainers`/`maxStorageMb` são declarados no catálogo (configuráveis por plano), mas o enforcement só faz sentido quando a feature existir — organização multiusuário é Fase 6 (ADR-001) e upload de arquivos ainda não existe. Declarados agora para o catálogo já ser completo; a checagem entra junto da feature.

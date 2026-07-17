@@ -1,10 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { FREE_LIMITS, parsePlanLimits } from "@/modules/subscriptions/plan-limits";
 
-describe("plan-limits — parsing de featuresLimits (Fase 10)", () => {
-  it("lê limites válidos do catálogo", () => {
-    expect(parsePlanLimits({ maxAthletes: 25, features: ["templates"] })).toEqual({
+describe("plan-limits — parsing de featuresLimits (Fase 10 → 05)", () => {
+  it("lê limites válidos do catálogo, incluindo as dimensões da Fase 05", () => {
+    expect(
+      parsePlanLimits({
+        maxAthletes: 25,
+        maxTrainers: 1,
+        maxTemplates: 50,
+        maxStorageMb: 2048,
+        features: ["templates"],
+      }),
+    ).toEqual({
       maxAthletes: 25,
+      maxTrainers: 1,
+      maxTemplates: 50,
+      maxStorageMb: 2048,
       features: ["templates"],
     });
   });
@@ -13,8 +24,13 @@ describe("plan-limits — parsing de featuresLimits (Fase 10)", () => {
     expect(parsePlanLimits({ maxAthletes: null, features: [] }).maxAthletes).toBeNull();
   });
 
-  it("assume features vazias quando o campo não vem", () => {
-    expect(parsePlanLimits({ maxAthletes: 10 })).toEqual({ maxAthletes: 10, features: [] });
+  it("dimensões novas ausentes viram null (ilimitado) sem quebrar catálogos antigos", () => {
+    const parsed = parsePlanLimits({ maxAthletes: 10 });
+    expect(parsed.maxAthletes).toBe(10);
+    expect(parsed.maxTemplates).toBeNull();
+    expect(parsed.maxTrainers).toBeNull();
+    expect(parsed.maxStorageMb).toBeNull();
+    expect(parsed.features).toEqual([]);
   });
 
   // A regra que mais importa: Json malformado NÃO pode virar acesso ilimitado.

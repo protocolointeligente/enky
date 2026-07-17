@@ -44,6 +44,7 @@ export interface PlanCatalogItem {
   price: number;
   currency: string;
   billingCycle: string;
+  trialDays: number;
   limits: PlanLimits;
   isCurrent: boolean;
 }
@@ -64,6 +65,7 @@ export async function listPlans(organizationId: string): Promise<PlanCatalogItem
     price: Number(plan.price),
     currency: plan.currency,
     billingCycle: plan.billingCycle,
+    trialDays: plan.trialDays,
     limits: parsePlanLimits(plan.featuresLimits),
     isCurrent: plan.slug === entitlements.planSlug,
   }));

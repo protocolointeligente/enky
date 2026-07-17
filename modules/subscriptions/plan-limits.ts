@@ -5,10 +5,22 @@ import { z } from "zod";
 // por `parsePlanLimits`. Um plano com limites malformados é um erro de
 // operação, e falha fechado (cai no plano grátis), nunca aberto.
 
+// null = ilimitado (plano profissional). Ausente vira o default (null =
+// ilimitado) para dimensões novas, para não quebrar catálogos já semeados que
+// não as traziam; `maxAthletes` continua obrigatório e nunca vira ilimitado por
+// acidente (parse falha → chamador cai em FREE_LIMITS).
+const limit = z.number().int().min(0).nullable();
+
 export const planLimitsSchema = z.object({
-  // null = ilimitado (plano profissional). Ausente/inválido NUNCA vira
-  // ilimitado por acidente — o parse falha e o chamador cai em FREE_LIMITS.
-  maxAthletes: z.number().int().min(0).nullable(),
+  maxAthletes: limit,
+  // Dimensões configuráveis por plano (Fase 05). Opcionais com default null
+  // (ilimitado) — um plano antigo sem elas segue válido. Enforcement: atletas e
+  // templates têm ponto de checagem no servidor; treinadores (multiusuário,
+  // Fase 6) e armazenamento (uploads, ainda inexistentes) são declarados aqui e
+  // ganharão enforcement quando a feature existir.
+  maxTrainers: limit.default(null),
+  maxTemplates: limit.default(null),
+  maxStorageMb: limit.default(null),
   features: z.array(z.string()).default([]),
 });
 
@@ -23,6 +35,8 @@ export const PLAN_FEATURES = [
   "periodization",
   "intelligence",
   "premium_reports",
+  "integrations",
+  "marketplace",
 ] as const;
 
 export type PlanFeature = (typeof PLAN_FEATURES)[number];
@@ -41,7 +55,13 @@ export const FREE_PLAN_SLUG = "free";
 // 1 atleta é decisão comercial firmada, não um palpite: o valor já existia no
 // catálogo antes desta fase e foi reafirmado. Mantenha em sincronia com a
 // linha `free` da migração 20260716140000.
-export const FREE_LIMITS: PlanLimits = { maxAthletes: 1, features: [] };
+export const FREE_LIMITS: PlanLimits = {
+  maxAthletes: 1,
+  maxTrainers: 1,
+  maxTemplates: 3,
+  maxStorageMb: 100,
+  features: [],
+};
 
 export function parsePlanLimits(raw: unknown): PlanLimits {
   const parsed = planLimitsSchema.safeParse(raw);

@@ -163,6 +163,43 @@ export async function assertCanAddAthlete(organizationId: string, db: Db = prism
   );
 }
 
+// Templates ativos (não arquivados) que contam para o limite do plano.
+export async function countActiveTemplates(organizationId: string, db: Db = prisma): Promise<number> {
+  return db.workoutTemplate.count({ where: { organizationId, isActive: true } });
+}
+
+export interface TemplateLimitStatus {
+  used: number;
+  max: number | null; // null = ilimitado
+  canAddMore: boolean;
+}
+
+export async function getTemplateLimitStatus(
+  organizationId: string,
+  db: Db = prisma,
+): Promise<TemplateLimitStatus> {
+  const [entitlements, used] = await Promise.all([
+    resolveEntitlements(organizationId, db),
+    countActiveTemplates(organizationId, db),
+  ]);
+  const max = entitlements.limits.maxTemplates;
+  return { used, max, canAddMore: max === null || used < max };
+}
+
+// Teto de templates por plano. Mesmo racional (e mesma natureza de teto SUAVE)
+// de `assertCanAddAthlete`: invariante de negócio checado dentro do caso de uso,
+// não fronteira de segurança. Barra a criação do próximo, nunca apaga os
+// existentes (inadimplência degrada, não destrói).
+export async function assertCanCreateTemplate(organizationId: string, db: Db = prisma): Promise<void> {
+  const status = await getTemplateLimitStatus(organizationId, db);
+  if (status.canAddMore) return;
+
+  throw new BusinessRuleError(
+    `Seu plano permite até ${status.max} modelo(s) de treino e você já tem ${status.used}. ` +
+      "Faça upgrade do plano para criar mais modelos.",
+  );
+}
+
 export async function hasFeature(organizationId: string, feature: PlanFeature): Promise<boolean> {
   const entitlements = await resolveEntitlements(organizationId);
   return entitlements.limits.features.includes(feature);

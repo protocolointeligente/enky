@@ -1022,6 +1022,10 @@ model SubscriptionPlan {
   currency       String       @default("BRL") @db.VarChar(3)
   billingCycle   BillingCycle
   featuresLimits Json
+  // Trial configurável por plano (Fase 05). 0 = sem trial. É o gateway que, no
+  // checkout, aplica o período; a assinatura entra TRIALING até o primeiro
+  // pagamento confirmado (webhook). Grátis e Assessoria = 0.
+  trialDays      Int          @default(0)
   // Identificador do preço no gateway (ex.: Stripe `price_...`). Nulo no
   // plano grátis, que nunca vai a checkout.
   gatewayPriceId String?

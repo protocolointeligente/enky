@@ -262,6 +262,29 @@ describe("Fase 02D.2 — templates de treino", () => {
     });
   });
 
+  // Fase 05 — limite de templates por plano. O grátis permite 3; o 4º é barrado
+  // no próprio caso de uso (não dá para contornar chamando o serviço direto).
+  it("aplica o teto de templates do plano (grátis = 3) e barra o excedente", async () => {
+    const { actor } = await newTrainerWithAthlete("tpl-limit");
+    for (let i = 1; i <= 3; i++) {
+      await createTemplate(
+        { title: `Modelo ${i}`, modality: "STRENGTH", content: strengthContent("Agachamento") },
+        actor,
+      );
+    }
+    await expect(
+      createTemplate(
+        { title: "Modelo 4", modality: "STRENGTH", content: strengthContent("Supino") },
+        actor,
+      ),
+    ).rejects.toMatchObject({ code: "BUSINESS_RULE_VIOLATION" });
+
+    // A recusa não deixa o 4º pela metade.
+    expect(
+      await prisma.workoutTemplate.count({ where: { organizationId: actor.organizationId, isActive: true } }),
+    ).toBe(3);
+  });
+
   afterAll(async () => {
     if (createdOrganizationIds.length > 0) {
       await prisma.auditLog.deleteMany({

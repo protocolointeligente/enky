@@ -3,6 +3,7 @@ import { recordAuditLog } from "@/domain/audit";
 import { NotFoundError } from "@/domain/errors";
 import { prisma } from "@/infrastructure/database/prisma";
 import { requireTrainerAccessToAthlete } from "@/server/auth/guards";
+import { assertCanCreateTemplate } from "@/modules/subscriptions/entitlements";
 import { persistWorkoutBlocks } from "@/modules/workouts/persist-blocks";
 import { workoutBlocksToInput, workoutContentInclude } from "@/modules/workouts/workout-content";
 import {
@@ -98,6 +99,10 @@ export async function getTemplate(id: string, actor: TrainerScope) {
 
 export async function createTemplate(input: CreateWorkoutTemplateInput, actor: TemplateActor) {
   return prisma.$transaction(async (tx) => {
+    // Teto de templates do plano — invariante de negócio dentro do caso de uso,
+    // não só na rota (mesmo racional de assertCanAddAthlete). Checa na própria
+    // transação para leitura consistente; teto SUAVE, ver nota em entitlements.
+    await assertCanCreateTemplate(actor.organizationId, tx);
     const template = await tx.workoutTemplate.create({
       data: {
         organizationId: actor.organizationId,
