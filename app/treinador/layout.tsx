@@ -12,6 +12,7 @@ const TRAINER_LINKS = [
   { href: "/treinador/exercicios", label: "Exercícios" },
   { href: "/treinador/templates", label: "Templates" },
   { href: "/treinador/relatorios", label: "Relatórios" },
+  { href: "/treinador/novidades", label: "Novidades" },
   { href: "/treinador/planos", label: "Planos" },
 ];
 
