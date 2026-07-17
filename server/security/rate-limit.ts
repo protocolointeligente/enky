@@ -106,13 +106,30 @@ export class UpstashRateLimiter implements RateLimiter {
   }
 }
 
-// Produção sem store distribuído configurado. Fail-closed no runtime (nunca no
-// import/build): o fallback em memória é permitido só em development/test.
-class UnconfiguredProductionRateLimiter implements RateLimiter {
-  async consume(): Promise<RateLimitResult> {
-    throw new Error(
-      "Rate limiting não configurado em produção. Defina UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN.",
-    );
+// Produção sem store distribuído configurado. Degrada para memória em vez de
+// barrar: a versão anterior era fail-closed (lançava), e o resultado prático foi
+// login 100% fora do ar por uma variável de ambiente errada. Trocar toda a
+// autenticação por uma proteção de brute-force é o pior dos dois mundos.
+//
+// O que se perde: a contagem passa a ser POR INSTÂNCIA (várias instâncias
+// multiplicam o limite efetivo) e um redeploy zera as janelas. Ainda segura o
+// ataque óbvio de uma origem só, e é muito melhor que ninguém entrar.
+// Não é silencioso: grita no log na primeira vez que é usado.
+class DegradedInMemoryRateLimiter extends InMemoryRateLimiter {
+  private warned = false;
+
+  async consume(key: string): Promise<RateLimitResult> {
+    if (!this.warned) {
+      this.warned = true;
+      // console, não o logger: o logger toca `env`, e este arquivo já derrubou
+      // produção uma vez por acoplar rate limit à validação global de ambiente.
+      console.error(
+        "[rate-limit] DEGRADADO — produção sem UPSTASH_REDIS_REST_URL/TOKEN válidos. " +
+          "Contagem por instância, não global. Configure o Upstash e faça redeploy " +
+          "(variável nova só vale em deployment novo).",
+      );
+    }
+    return super.consume(key);
   }
 }
 
@@ -141,7 +158,7 @@ export function createRateLimiter(limit: number, windowMs: number): RateLimiter 
   const url = restUrl(process.env.UPSTASH_REDIS_REST_URL);
   const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
   if (url && token) return new UpstashRateLimiter(url, token, limit, windowMs);
-  if (process.env.NODE_ENV === "production") return new UnconfiguredProductionRateLimiter();
+  if (process.env.NODE_ENV === "production") return new DegradedInMemoryRateLimiter(limit, windowMs);
   return new InMemoryRateLimiter(limit, windowMs);
 }
 

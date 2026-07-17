@@ -92,16 +92,27 @@ describe("server/security/rate-limit", () => {
       expect(createRateLimiter(5, 60_000)).toBeInstanceOf(UpstashRateLimiter);
     });
 
-    it("returns UnconfiguredProductionRateLimiter in production when config is missing", async () => {
+    // Produção sem Upstash degrada para memória, NÃO barra. A versão anterior
+    // lançava (fail-closed) e o resultado prático foi login inteiro fora do ar
+    // por uma env var errada — trocar a autenticação toda pela proteção de
+    // brute-force é o pior dos dois mundos. Degradado + log alto.
+    it("em produção sem config: degrada para memória e avisa, sem derrubar o login", async () => {
       delete process.env.UPSTASH_REDIS_REST_URL;
       delete process.env.UPSTASH_REDIS_REST_TOKEN;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (process.env as any).NODE_ENV = "production";
+      const warn = vi.spyOn(console, "error").mockImplementation(() => {});
 
-      const limiter = createRateLimiter(5, 60_000);
-      await expect(limiter.consume("key")).rejects.toThrow(
-        "Rate limiting não configurado em produção",
-      );
+      const limiter = createRateLimiter(2, 60_000);
+      await expect(limiter.consume("key")).resolves.toEqual({ allowed: true, retryAfterMs: 0 });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(String(warn.mock.calls[0]?.[0])).toContain("DEGRADADO");
+
+      // Continua limitando de fato (por instância), e avisa uma vez só.
+      await limiter.consume("key");
+      expect((await limiter.consume("key")).allowed).toBe(false);
+      expect(warn).toHaveBeenCalledOnce();
+      warn.mockRestore();
     });
   });
 
