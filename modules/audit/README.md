@@ -6,4 +6,6 @@
 
 **Regra crítica:** `AuditLog` nunca sofre hard delete. Em anonimização LGPD, perde a associação nominal direta mas preserva estrutura e hashes.
 
-**Status:** escrita já em uso por toda a plataforma via `domain/audit.ts` (`recordAuditLog` + catálogo `AuditAction`). Leitura (admin básico, Fase 1) em `audit-service.ts`: `getPlatformStats` (contagens cross-tenant) e `listAuditLogs` (trilha recente + ações distintas para filtro). Rotas cross-tenant guardadas por ADMIN/SUPERADMIN: `GET /api/admin/stats`, `GET /api/admin/audit`. UI `/admin`. Sem escopo de organização — o papel é a fronteira.
+**Status:** escrita em uso por toda a plataforma via `domain/audit.ts` (`recordAuditLog` + catálogo `AuditAction`).
+
+**Leitura mora em `modules/admin`** (Fase 9). O antigo `audit-service.ts` (`getPlatformStats` + `listAuditLogs`) foi absorvido por `modules/admin/admin-service.ts`: quem lê a trilha é só o painel administrativo, e manter a leitura aqui deixava a autorização (papel ADMIN/SUPERADMIN) longe do módulo que a exige. Este módulo é hoje o lado de **escrita** da trilha; `modules/admin` é o lado de leitura/operação.

@@ -115,11 +115,26 @@ describe("server/auth/guards", () => {
   });
 
   it("resolveActiveOrganization returns the membership's organization and role", async () => {
-    membershipFindFirst.mockResolvedValue({ organizationId: "org1", role: "OWNER" });
+    membershipFindFirst.mockResolvedValue({
+      organizationId: "org1",
+      role: "OWNER",
+      organization: { isActive: true },
+    });
     expect(await resolveActiveOrganization("u1")).toEqual({
       organizationId: "org1",
       organizationRole: "OWNER",
     });
+  });
+
+  // Fase 9: suspender a organização no /admin é aplicado aqui, no ponto único
+  // que resolve tenant — não em cada rota.
+  it("resolveActiveOrganization throws when the organization is suspended", async () => {
+    membershipFindFirst.mockResolvedValue({
+      organizationId: "org1",
+      role: "OWNER",
+      organization: { isActive: false },
+    });
+    await expect(resolveActiveOrganization("u1")).rejects.toThrow("Organização suspensa");
   });
 
   it("resolveAthleteOrganization throws when the user has no athlete profile", async () => {
@@ -135,11 +150,23 @@ describe("server/auth/guards", () => {
 
   it("resolveAthleteOrganization returns the single active organization", async () => {
     athleteProfileFindUnique.mockResolvedValue({ id: "ath1" });
-    relationshipFindMany.mockResolvedValue([{ organizationId: "org1" }]);
+    relationshipFindMany.mockResolvedValue([
+      { organizationId: "org1", organization: { isActive: true } },
+    ]);
     expect(await resolveAthleteOrganization("u1")).toEqual({
       organizationId: "org1",
       athleteProfileId: "ath1",
     });
+  });
+
+  // A suspensão corta o atleta também, não só o treinador — senão seria
+  // meia-suspensão e o tenant seguiria operando pela metade.
+  it("resolveAthleteOrganization throws when the organization is suspended", async () => {
+    athleteProfileFindUnique.mockResolvedValue({ id: "ath1" });
+    relationshipFindMany.mockResolvedValue([
+      { organizationId: "org1", organization: { isActive: false } },
+    ]);
+    await expect(resolveAthleteOrganization("u1")).rejects.toThrow("Organização suspensa");
   });
 
   // MVP invariant: an athlete has at most one active organization. If the DB
@@ -149,8 +176,8 @@ describe("server/auth/guards", () => {
   it("resolveAthleteOrganization throws when the athlete has multiple active organizations", async () => {
     athleteProfileFindUnique.mockResolvedValue({ id: "ath1" });
     relationshipFindMany.mockResolvedValue([
-      { organizationId: "org1" },
-      { organizationId: "org2" },
+      { organizationId: "org1", organization: { isActive: true } },
+      { organizationId: "org2", organization: { isActive: true } },
     ]);
     await expect(resolveAthleteOrganization("u1")).rejects.toThrow();
   });

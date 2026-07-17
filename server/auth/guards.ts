@@ -65,10 +65,20 @@ export async function resolveActiveOrganization(userId: string): Promise<ActiveO
   const membership = await prisma.organizationMembership.findFirst({
     where: { userId },
     orderBy: { createdAt: "asc" },
+    include: { organization: { select: { isActive: true } } },
   });
 
   if (!membership) {
     throw new AuthorizationError("Usuário não pertence a nenhuma organização.");
+  }
+
+  // Suspensão de organização (Fase 9) é aplicada aqui, no único ponto que
+  // resolve tenant para o treinador — e não em cada rota. Suspender a
+  // organização no /admin passa a valer na requisição seguinte, sem revogar
+  // sessão nem tocar em nenhum dado: o vínculo continua intacto e reativar
+  // devolve o acesso. É por isso que suspender substitui delete.
+  if (!membership.organization.isActive) {
+    throw new AuthorizationError("Organização suspensa. Contate o suporte da plataforma.");
   }
 
   return { organizationId: membership.organizationId, organizationRole: membership.role };
@@ -104,7 +114,7 @@ export async function resolveAthleteOrganization(
 
   const activeRelationships = await prisma.coachAthleteRelationship.findMany({
     where: { athleteId: athleteProfile.id, isActive: true },
-    select: { organizationId: true },
+    select: { organizationId: true, organization: { select: { isActive: true } } },
   });
 
   const [relationship, ...extraRelationships] = activeRelationships;
@@ -117,6 +127,13 @@ export async function resolveAthleteOrganization(
     throw new AuthorizationError(
       "Atleta possui vínculos ativos em múltiplas organizações — não suportado no MVP.",
     );
+  }
+
+  // Suspender a organização também corta o atleta, não só o treinador — senão
+  // a suspensão seria meia-suspensão e o tenant continuaria operando por
+  // metade. Mesmo racional de `resolveActiveOrganization`.
+  if (!relationship.organization.isActive) {
+    throw new AuthorizationError("Organização suspensa. Contate o suporte da plataforma.");
   }
 
   return { organizationId: relationship.organizationId, athleteProfileId: athleteProfile.id };
