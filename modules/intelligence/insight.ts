@@ -17,6 +17,7 @@ export interface InsightEvidence {
 export interface Insight {
   athleteId: string;
   athleteName: string | null;
+  workoutId?: string | null; // treino-alvo, quando o motor analisa uma sessão
   engine: string;
   risk: InsightRisk;
   observacao: string; // motivo principal — por que este atleta apareceu
@@ -30,19 +31,50 @@ export interface Insight {
   regras: string[];
 }
 
-export type InsightLifecycleStatus = "PENDING" | "ACCEPTED" | "IGNORED";
+// Máquina de estados do Insight persistido (Fase 03). NEW→VIEWED→ACCEPTED/IGNORED
+// →RESOLVED; EXPIRED quando a situação some antes de qualquer decisão. "PENDING"
+// é aceito só na leitura de linhas legadas (reconciliadas para NEW pela migração).
+export type InsightLifecycleStatus =
+  | "NEW"
+  | "VIEWED"
+  | "ACCEPTED"
+  | "IGNORED"
+  | "RESOLVED"
+  | "EXPIRED";
 
 // Insight calculado + seu estado persistido (02H). `id` é null enquanto a
-// situação nunca foi gravada; status/outcome refletem a decisão do treinador.
+// situação nunca foi gravada; status/nota/outcome refletem a decisão do treinador.
 export type PersistedInsight = Insight & {
   id: string | null;
   status: InsightLifecycleStatus;
+  note: string | null;
   outcome: string | null;
 };
 
-// Identidade estável de uma situação: mesmo atleta + mesmo motor + mesmas
-// regras disparadas ⇒ mesma linha, preservando aceito/ignorado entre
-// varreduras. Regras ordenadas para ser determinístico. Puro (testável).
-export function fingerprintOf(insight: Pick<Insight, "athleteId" | "engine" | "regras">): string {
-  return `${insight.athleteId}:${insight.engine}:${[...insight.regras].sort().join("|")}`;
+// Versão do conjunto de regras da Intelligence. Entra no fingerprint: mudar a
+// versão faz uma mesma situação virar um insight novo (não reaproveita a decisão
+// tomada sobre a regra antiga). Bump manual quando a semântica de uma regra muda.
+export const RULESET_VERSION = "1.0.0";
+
+// Janela temporal (semana ISO-8601, baseada na quinta-feira). Puro/determinístico.
+// A mesma situação recorrendo em semanas diferentes é um insight distinto —
+// dedup "por janela temporal" da Fase 03.
+export function isoWeekKey(now: Date): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const day = d.getUTCDay() || 7; // domingo (0) vira 7
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+// Identidade estável de uma situação: mesmo atleta + motor + regras disparadas
+// + versão de regras + janela temporal ⇒ mesma linha, preservando aceito/ignorado
+// dentro da janela. Regras ordenadas para ser determinístico. Puro (testável).
+export function fingerprintOf(
+  insight: Pick<Insight, "athleteId" | "engine" | "regras">,
+  opts: { version: string; windowKey: string },
+): string {
+  const regras = [...insight.regras].sort().join("|");
+  return `${insight.athleteId}:${insight.engine}:${opts.version}:${opts.windowKey}:${regras}`;
 }

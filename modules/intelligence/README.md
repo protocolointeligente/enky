@@ -17,16 +17,18 @@
 - `sinaisAusentes` — o que o motor **não** tinha ao concluir (retorno, RPE, histórico de carga, prontidão, e sempre sono/HRV objetivos, que o sistema não recebe). A lacuna é parte do insight: o treinador precisa ver o tamanho do ponto cego;
 - `janela` — o contexto temporal da leitura (28 dias para os sinais recentes; 90 dias para a carga).
 
-Como o `fingerprintOf` é `athleteId:engine:regras`, `sinaisAusentes`/`janela` podem mudar entre varreduras **sem** criar linha nova — o aceito/ignorado do treinador é preservado (testado).
+Como o `fingerprintOf` é `athleteId:engine:versão:janela:regras`, `sinaisAusentes`/`janela` legível podem mudar entre varreduras da mesma semana **sem** criar linha nova — o aceito/ignorado do treinador é preservado (testado).
 
-**Prontidão** entra como sinal (presente/ausente + classe do último check-in), **nunca** como regra própria: a heurística de `readiness.ts` segue experimental e não decide carga sozinha.
+**Prontidão** entra como sinal (presente/ausente + classe do último check-in), **nunca** como regra própria: a heurística de `readiness.ts` segue experimental e não decide carga sozinha. O check-in (`ReadinessCheckIn`) coleta sono, fadiga, dor muscular, estresse, motivação, **humor**, **disposição**, **dor localizada** (texto livre, redigido em log) e observação — todos opcionais; menos sinais reduzem a confiança para "insuficiente".
 
 **Linguagem (obrigatória, testada em `homologation.test.ts`):** proibido "prever lesão", "previsão/risco de lesão", "propenso a lesão", "iminente" e linguagem de certeza — em **qualquer** texto exposto, inclusive limitações. O vocabulário é "sinal de atenção", "carga elevada", "contexto de cautela". A decisão final é sempre do treinador.
 
-**Status (02H — persistência do ciclo):** a tabela `Insight` foi criada (migration `20260712120000_add_insight_lifecycle`) reabrindo a decisão F2, agora com aprovação explícita. O motor continua calculando on-the-fly; o store grava o ciclo **detecção→exposição→ação→resultado**:
+**Status (02H → Fase 03 — máquina de estados persistente):** a tabela `Insight` (migrations `20260712120000_add_insight_lifecycle` + `20260718100000/…100_insight_state_machine`) grava o ciclo **detecção→exposição→ação→resultado** com uma máquina de estados completa:
 
-- `insight-store.ts` — `upsertExposedInsights(actor, insights)` grava a exposição na leitura da carteira (uma linha por `fingerprintOf` = `athleteId:engine:regras`, idempotente) e devolve cada Insight com `{ id, status, outcome }`. `resolveInsight(id, actor, { status?, outcome? })` registra aceitar/ignorar (a ação) e o resultado, com escopo org+treinador e `AuditLog` (`RESOLVE_INSIGHT`).
-- Rotas: `GET /api/trainer/intelligence/attention` (agora persiste + devolve estado); `POST /api/trainer/intelligence/insights/[id]/decision`.
-- `fingerprintOf` (em `insight.ts`) é puro e testado; o ciclo é coberto por `tests/integration/insight-lifecycle.test.ts`.
+- **Estados:** `NEW` (exposto, não visto) → `VIEWED` (treinador abriu) → `ACCEPTED`/`IGNORED` (decisão) → `RESOLVED` (encerrado com `outcome`). `EXPIRED` é aplicado pela varredura quando a situação some antes de qualquer decisão — nunca sobrescreve uma decisão. `PENDING` é legado, reconciliado para `NEW`.
+- **Dedup:** `fingerprintOf` = `athleteId:engine:versão:janela-ISO:regras`. A mesma situação em semana nova (ou após bump de `RULESET_VERSION`) é um insight novo — dedup por atleta, regra, contexto, **janela temporal e versão**.
+- `insight-store.ts` — `upsertExposedInsights(actor, insights, now?)` grava a exposição (idempotente) e expira o que ficou aberto e não voltou à varredura; devolve `{ id, status, note, outcome }`. `resolveInsight(id, actor, { status?, note?, outcome? }, now)` registra visto/aceito/ignorado/resolvido + nota + resultado, com escopo org+treinador e `AuditLog` (`RESOLVE_INSIGHT`). Cada `Insight` pode apontar para um `workoutId` (opcional).
+- Rotas: `GET /api/trainer/intelligence/attention` (persiste + devolve estado); `POST /api/trainer/intelligence/insights/[id]/decision`.
+- `fingerprintOf`/`isoWeekKey` (em `insight.ts`) são puros e testados (`tests/unit/.../fingerprint.test.ts`); o ciclo/expiração é coberto por `tests/integration/insight-lifecycle.test.ts`.
 
-Fases seguintes (ver roadmap): questionário de prontidão/recuperação e cron/lote por organização na Fase II; integrações wearable e `MetricSample` na Fase III.
+Fases seguintes (ver roadmap): cron/lote por organização; integrações wearable e `MetricSample`.

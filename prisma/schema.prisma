@@ -218,12 +218,21 @@ enum DerivedMetricStatus {
   INVALID
 }
 
-// Ciclo de vida do Insight persistido (02H): exposto ao treinador (PENDING),
-// aceito ou ignorado. O "resultado" é o campo `outcome`, registrado depois.
+// Ciclo de vida do Insight persistido (02H → 03). Máquina de estados completa:
+// NEW (exposto, não visto) → VIEWED (treinador abriu) → ACCEPTED/IGNORED (decisão)
+// → RESOLVED (situação encerrada, com `outcome` observado). EXPIRED é aplicado
+// pela varredura quando a situação some (deixa de ser recalculada) antes de
+// qualquer decisão — nunca sobrescreve uma decisão já tomada.
+// PENDING é legado (linhas anteriores à Fase 03) e é reconciliado para NEW pela
+// migração; mantido no enum só para não quebrar linhas antigas em dev/preview.
 enum InsightStatus {
-  PENDING
+  NEW
+  VIEWED
   ACCEPTED
   IGNORED
+  RESOLVED
+  EXPIRED
+  PENDING
 }
 
 // Fase 11 — Integrações externas. Enum (e não texto livre) porque cada valor
@@ -601,6 +610,7 @@ model Workout {
   workoutTemplate     WorkoutTemplate?     @relation(fields: [workoutTemplateId], references: [id], onDelete: SetNull)
   blocks              WorkoutBlock[]
   feedback            WorkoutFeedback?
+  insights            Insight[]
   // Realizado importado de um provedor externo (Fase 11). Opcional e 1:1 — um
   // treino planejado nunca recebe duas atividades.
   externalActivity    ExternalActivity?
@@ -851,13 +861,15 @@ model Insight {
   id             String        @id @default(uuid())
   organizationId String
   athleteId      String
+  workoutId      String?
   trainerId      String
   engine         String
   risk           String
   rulesetVersion String        @default("1.0.0")
   fingerprint    String
   content        Json
-  status         InsightStatus @default(PENDING)
+  status         InsightStatus @default(NEW)
+  note           String?
   outcome        String?
   resolvedById   String?
   resolvedAt     DateTime?     @db.Timestamptz
@@ -867,6 +879,7 @@ model Insight {
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  workout      Workout?       @relation(fields: [workoutId], references: [id], onDelete: SetNull)
   trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   resolvedBy   User?          @relation("InsightResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
 
@@ -879,7 +892,10 @@ model Insight {
 // sono, fadiga, dor muscular, estresse, motivação. Coleta os sinais que faltam
 // para o índice de prontidão (ENKY_METRIC_REGISTRY `readiness`). Campos são
 // opcionais — preenchimento parcial reduz a confiança (classe "insuficiente").
-// Um check-in por atleta por dia (upsert).
+// Um check-in por atleta por dia (upsert). Fase 03 acrescenta humor (`mood`),
+// disposição (`disposition`) e dor localizada (`localizedPain`, texto livre —
+// dado de saúde, redigido em log). `localizedPain` é qualitativo (onde dói) e
+// não entra no escore numérico de prontidão; é sinalizado ao treinador.
 model ReadinessCheckIn {
   id             String   @id @default(uuid())
   organizationId String
@@ -891,6 +907,9 @@ model ReadinessCheckIn {
   soreness       Int?
   stress         Int?
   motivation     Int?
+  mood           Int?
+  disposition    Int?
+  localizedPain  String?
   notes          String?
   createdAt      DateTime @default(now()) @db.Timestamptz
   updatedAt      DateTime @updatedAt @db.Timestamptz

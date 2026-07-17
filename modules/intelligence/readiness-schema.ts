@@ -13,6 +13,11 @@ export const submitReadinessInputSchema = z
     soreness: score.optional(),
     stress: score.optional(),
     motivation: score.optional(),
+    mood: score.optional(),
+    disposition: score.optional(),
+    // Dor localizada é texto livre (onde/como dói) — dado de saúde, redigido em
+    // log. Qualitativo: não entra no escore, é sinalizado ao treinador.
+    localizedPain: z.string().trim().max(500).optional(),
     notes: z.string().trim().max(2000).optional(),
   })
   .refine(
@@ -22,7 +27,10 @@ export const submitReadinessInputSchema = z
       d.fatigue != null ||
       d.soreness != null ||
       d.stress != null ||
-      d.motivation != null,
+      d.motivation != null ||
+      d.mood != null ||
+      d.disposition != null ||
+      (d.localizedPain != null && d.localizedPain.length > 0),
     { message: "Preencha ao menos um item do questionário de prontidão." },
   );
 

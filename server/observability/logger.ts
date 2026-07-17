@@ -31,6 +31,7 @@ function getLogger(): Logger {
         "*.cvv",
         "*.symptoms",
         "*.notes",
+        "*.localizedPain",
       ],
       censor: "[REDACTED]",
     },

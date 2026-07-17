@@ -15,6 +15,8 @@ export interface ReadinessInputs {
   soreness?: number | null; // 0–10 (alto = ruim)
   stress?: number | null; // 0–10 (alto = ruim)
   motivation?: number | null; // 0–10 (alto = bom)
+  mood?: number | null; // 0–10 (alto = bom) — humor
+  disposition?: number | null; // 0–10 (alto = bom) — disposição
 }
 
 export interface ReadinessResult {
@@ -35,6 +37,8 @@ export function classifyReadiness(inputs: ReadinessInputs): ReadinessResult {
   if (inputs.sleepHours != null) good.push(clamp01(inputs.sleepHours / 8));
   if (inputs.sleepQuality != null) good.push(clamp01(inputs.sleepQuality / 10));
   if (inputs.motivation != null) good.push(clamp01(inputs.motivation / 10));
+  if (inputs.mood != null) good.push(clamp01(inputs.mood / 10));
+  if (inputs.disposition != null) good.push(clamp01(inputs.disposition / 10));
   // Sinais "ruins" invertidos: quanto maior, pior.
   if (inputs.fatigue != null) good.push(clamp01((10 - inputs.fatigue) / 10));
   if (inputs.soreness != null) good.push(clamp01((10 - inputs.soreness) / 10));

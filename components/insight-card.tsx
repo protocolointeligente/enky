@@ -48,15 +48,20 @@ function SparkIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+// NEW/VIEWED não mostram selo (o cartão ainda oferece as ações); os estados
+// terminais (decisão do treinador ou expiração) mostram.
 const STATUS_META: Record<InsightLifecycleStatus, { label: string; cls: string } | null> = {
-  PENDING: null,
+  NEW: null,
+  VIEWED: null,
   ACCEPTED: { label: "Aceito", cls: "text-turq" },
   IGNORED: { label: "Ignorado", cls: "text-faint" },
+  RESOLVED: { label: "Resolvido", cls: "text-turq" },
+  EXPIRED: { label: "Expirado", cls: "text-faint" },
 };
 
 export function InsightCard({ insight, href }: { insight: InsightCardInsight; href?: string }) {
   const [open, setOpen] = useState(false);
-  const [status, setStatus] = useState<InsightLifecycleStatus>(insight.status ?? "PENDING");
+  const [status, setStatus] = useState<InsightLifecycleStatus>(insight.status ?? "NEW");
   const [busy, setBusy] = useState<InsightLifecycleStatus | "OUTCOME" | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<string | null>(insight.outcome ?? null);
@@ -205,7 +210,7 @@ export function InsightCard({ insight, href }: { insight: InsightCardInsight; hr
         </a>
       )}
 
-      {actionable && status === "PENDING" && (
+      {actionable && (status === "NEW" || status === "VIEWED") && (
         <div className="flex items-center gap-2 border-t border-line pt-2">
           <button
             type="button"

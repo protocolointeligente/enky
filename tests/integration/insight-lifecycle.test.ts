@@ -74,46 +74,80 @@ describe("02H — ciclo de vida do Insight (insight-store)", () => {
     const actor = { organizationId: trainer.organizationId, trainerProfileId: trainer.trainerProfileId };
     const now = new Date();
 
-    // Detecção → exposição: primeira varredura grava o Insight como PENDING.
-    const first = await upsertExposedInsights(actor, [painInsight(athleteId)]);
+    // Detecção → exposição: primeira varredura grava o Insight como NEW.
+    const first = await upsertExposedInsights(actor, [painInsight(athleteId)], now);
     expect(first).toHaveLength(1);
     expect(first[0]?.id).not.toBeNull();
-    expect(first[0]?.status).toBe("PENDING");
+    expect(first[0]?.status).toBe("NEW");
     expect(first[0]?.outcome).toBeNull();
     const insightId = first[0]!.id!;
 
-    // Idempotência: nova varredura da mesma situação ⇒ mesma linha, sem duplicar.
-    const second = await upsertExposedInsights(actor, [painInsight(athleteId)]);
+    // Idempotência: nova varredura da mesma situação (mesma janela) ⇒ mesma
+    // linha, sem duplicar.
+    const second = await upsertExposedInsights(actor, [painInsight(athleteId)], now);
     expect(second[0]?.id).toBe(insightId);
     const count = await prisma.insight.count({
       where: { organizationId: trainer.organizationId, trainerId: trainer.trainerProfileId },
     });
     expect(count).toBe(1);
 
-    // Ação: o treinador aceita.
+    // Visto: transição leve NEW → VIEWED.
+    const viewed = await resolveInsight(
+      insightId,
+      { ...actor, userId: trainer.userId },
+      { status: "VIEWED" },
+      now,
+    );
+    expect(viewed.status).toBe("VIEWED");
+    expect(viewed.resolvedAt).toBeNull(); // VIEWED não é resolução
+
+    // Ação: o treinador aceita, com nota.
     const accepted = await resolveInsight(
       insightId,
       { ...actor, userId: trainer.userId },
-      { status: "ACCEPTED" },
+      { status: "ACCEPTED", note: "Falei com o atleta." },
       now,
     );
     expect(accepted.status).toBe("ACCEPTED");
+    expect(accepted.note).toBe("Falei com o atleta.");
     expect(accepted.resolvedById).toBe(trainer.userId);
     expect(accepted.resolvedAt).not.toBeNull();
 
-    // A decisão sobrevive à próxima varredura (não volta para PENDING).
-    const third = await upsertExposedInsights(actor, [painInsight(athleteId)]);
+    // A decisão sobrevive à próxima varredura (não volta para NEW nem expira).
+    const third = await upsertExposedInsights(actor, [painInsight(athleteId)], now);
     expect(third[0]?.status).toBe("ACCEPTED");
 
-    // Resultado: registrado depois, sem alterar o status.
-    const withOutcome = await resolveInsight(
+    // Encerramento: RESOLVED com resultado observado.
+    const resolved = await resolveInsight(
       insightId,
       { ...actor, userId: trainer.userId },
-      { outcome: "Atleta liberado após avaliação." },
+      { status: "RESOLVED", outcome: "Atleta liberado após avaliação." },
       now,
     );
-    expect(withOutcome.status).toBe("ACCEPTED");
-    expect(withOutcome.outcome).toBe("Atleta liberado após avaliação.");
+    expect(resolved.status).toBe("RESOLVED");
+    expect(resolved.outcome).toBe("Atleta liberado após avaliação.");
+  });
+
+  it("expira situações abertas que somem da varredura, sem tocar as já decididas", async () => {
+    const trainer = await newTrainer("insight-expire");
+    const athleteId = await newAthlete(trainer);
+    const actor = { organizationId: trainer.organizationId, trainerProfileId: trainer.trainerProfileId };
+    const now = new Date();
+
+    const [open] = await upsertExposedInsights(actor, [painInsight(athleteId)], now);
+    expect(open?.status).toBe("NEW");
+
+    // Próxima varredura sem essa situação (roster limpo) ⇒ a linha aberta expira.
+    await upsertExposedInsights(actor, [], now);
+    const afterExpire = await prisma.insight.findUniqueOrThrow({ where: { id: open!.id! } });
+    expect(afterExpire.status).toBe("EXPIRED");
+
+    // Uma situação já ACCEPTED nunca expira ao sumir da varredura.
+    const [again] = await upsertExposedInsights(actor, [painInsight(athleteId)], now);
+    await resolveInsight(again!.id!, { ...actor, userId: trainer.userId }, { status: "ACCEPTED" }, now);
+    await upsertExposedInsights(actor, [], now);
+    const stillAccepted = await prisma.insight.findUniqueOrThrow({ where: { id: again!.id! } });
+    expect(stillAccepted.status).toBe("ACCEPTED");
   });
 
   it("não deixa outro treinador resolver um Insight fora do seu escopo", async () => {
