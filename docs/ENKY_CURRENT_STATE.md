@@ -160,5 +160,36 @@ no repositório. A entrega desta branch é, portanto, **consolidação**, não c
 
 **Próximo passo real recomendado:** homologação em **Preview** com banco isolado — subir a branch,
 rodar integração + E2E contra a Preview, homologação visual humana, e fechar os `[ ]` de
-`PRODUCTION_READINESS.md`. **Não** iniciar Fase 3 (periodização inteligente/pagamentos/marketplace
-avançados) antes dessa homologação, conforme a diretriz de fases controladas.
+`PRODUCTION_READINESS.md`.
+
+---
+
+## 13. Atualização — Fases 03/04/05 (branch `feat/fase-04-intelligence-periodization-billing`)
+
+Fechamento das lacunas identificadas (as três fases já estavam 70–90% implementadas; este trabalho
+fechou os gaps concretos contra a especificação, sem reconstruir o que já existia):
+
+- **Fase 03 (Intelligence 02H):** `InsightStatus` virou máquina de estados completa
+  (`NEW/VIEWED/ACCEPTED/IGNORED/RESOLVED/EXPIRED`, era 3 estados); `Insight` ganhou `note` e
+  `workoutId` opcional; dedup passou a incluir versão de regras + janela ISO (situação recorrente em
+  semana nova = insight novo); varredura expira o que fica aberto e some. Prontidão ganhou `mood`,
+  `disposition`, `localizedPain` (dado de saúde, redigido em log). Migrations aditivas
+  `20260718100000/…100`.
+- **Fase 04 (Periodização):** criação virou modal sobreposto com dropdowns e **parâmetros por
+  modalidade** (VDOT/pace, FTP/TSS, CSS, séries/RIR/tonelagem, padrão de movimento); `Periodization`
+  ganhou modalidade, prova-alvo, nível, controle de carga, unidade, volume, meso/microciclos,
+  recuperação, distribuição de dificuldade, geração automática, observações e `parameters` (JSON
+  validado). Rascunho (`isDraft`) vs. plano completo. Migration aditiva `20260718110000`.
+- **Fase 05 (Planos/Pagamentos):** os 4 planos (FREE/STARTER/PRO/ASSESSORIA) já estavam semeados;
+  `PlanLimits` ganhou `maxTrainers/maxTemplates/maxStorageMb` + features `integrations`/`marketplace`;
+  `SubscriptionPlan.trialDays` (trial configurável); enforcement de teto de templates
+  (`assertCanCreateTemplate`) dentro do caso de uso. Migration aditiva `20260718120000`.
+
+**Verificação:** `npm run validate` (lint + typecheck + build + unit) verde a cada fase; testes
+unitários novos (fingerprint/janela/versão, prontidão, periodization-schema, plan-limits) e de
+integração (ciclo/expiração de insight, teto de templates). **Integração/E2E/Preview seguem pendentes
+de banco isolado** (mesma fronteira de ambiente das fases anteriores) — o operador roda em Preview.
+
+**Fora de escopo (inalterado):** Marketplace e Metric Registry seguem só especificados; organização
+multiusuário/grupo e upload de arquivos são Fase 6+ (ADR-001) — por isso `maxTrainers`/`maxStorageMb`
+são declarados no catálogo mas sem ponto de enforcement ainda.
