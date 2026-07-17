@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { addDays, toISODate } from "@/app/_lib/calendar";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
+import { WeekGenerationModal, type WeekTarget } from "@/components/week-generation-modal";
 
 interface RosterEntry {
   athleteProfileId: string;
@@ -72,6 +73,7 @@ export default function TrainerPeriodizationPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState<WeekTarget | null>(null);
 
   const [title, setTitle] = useState("");
   const [goal, setGoal] = useState("");
@@ -98,22 +100,29 @@ export default function TrainerPeriodizationPage() {
       setPlans([]);
       return;
     }
-    apiFetch<{ periodizations: PlanSummary[] }>(
-      `/api/trainer/athletes/${athleteId}/periodizations`,
-    )
+    apiFetch<{ periodizations: PlanSummary[] }>(`/api/trainer/athletes/${athleteId}/periodizations`)
       .then((r) => setPlans(r.periodizations))
       .catch(() => setPlans([]));
   }, [athleteId]);
 
-  useEffect(() => {
+  const loadDetail = useCallback(async () => {
     if (!selectedId) {
       setDetail(null);
       return;
     }
-    apiFetch<{ periodization: PlanDetail }>(`/api/trainer/periodizations/${selectedId}`)
-      .then((r) => setDetail(r.periodization))
-      .catch(() => setDetail(null));
+    try {
+      const r = await apiFetch<{ periodization: PlanDetail }>(
+        `/api/trainer/periodizations/${selectedId}`,
+      );
+      setDetail(r.periodization);
+    } catch {
+      setDetail(null);
+    }
   }, [selectedId]);
+
+  useEffect(() => {
+    void loadDetail();
+  }, [loadDetail]);
 
   function addPhase() {
     setPhases((prev) => [
@@ -434,6 +443,10 @@ export default function TrainerPeriodizationPage() {
 
                   <div className="flex flex-col gap-2">
                     <h3 className="text-sm font-semibold text-ink">Semanas</h3>
+                    <p className={uiClasses.hint}>
+                      Gere as sessões de uma semana a partir da fase, do volume alvo e da
+                      disponibilidade. Tudo sai como rascunho para você revisar.
+                    </p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-sm">
                         <thead>
@@ -442,6 +455,7 @@ export default function TrainerPeriodizationPage() {
                             <th className="py-2 pr-3">Período</th>
                             <th className="py-2 pr-3">Fase</th>
                             <th className="py-2 pr-3 text-right">Treinos</th>
+                            <th className="py-2 text-right">Ações</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-line">
@@ -450,12 +464,39 @@ export default function TrainerPeriodizationPage() {
                               <td className="py-2 pr-3 tabular text-muted">{w.sequence}</td>
                               <td className="py-2 pr-3 text-ink">
                                 {fmtDay(w.startDate)} – {fmtDay(w.endDate)}
+                                {w.isRecoveryWeek && (
+                                  <span className={`${uiClasses.badge} ml-2 bg-turq/15 text-turq`}>
+                                    regenerativa
+                                  </span>
+                                )}
                               </td>
                               <td className="py-2 pr-3 text-muted">
                                 {w.phaseId ? (phaseName.get(w.phaseId) ?? "—") : "—"}
                               </td>
                               <td className="py-2 pr-3 text-right tabular text-ink">
                                 {w.scheduledCount}
+                              </td>
+                              <td className="py-2 text-right">
+                                <button
+                                  type="button"
+                                  className={uiClasses.buttonGhost}
+                                  onClick={() =>
+                                    setGenerating({
+                                      periodizationId: detail.id,
+                                      weekId: w.id,
+                                      sequence: w.sequence,
+                                      startDate: w.startDate,
+                                      endDate: w.endDate,
+                                      phaseName: w.phaseId
+                                        ? (phaseName.get(w.phaseId) ?? null)
+                                        : null,
+                                      isRecoveryWeek: w.isRecoveryWeek,
+                                      scheduledCount: w.scheduledCount,
+                                    })
+                                  }
+                                >
+                                  Gerar
+                                </button>
                               </td>
                             </tr>
                           ))}
@@ -468,6 +509,12 @@ export default function TrainerPeriodizationPage() {
             </section>
           </div>
         )}
+
+        <WeekGenerationModal
+          week={generating}
+          onClose={() => setGenerating(null)}
+          onGenerated={loadDetail}
+        />
 
         <Link href="/treinador" className={uiClasses.link}>
           ← Voltar ao painel

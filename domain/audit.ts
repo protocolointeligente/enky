@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { AuditActorType, Prisma } from "@prisma/client";
 
 // Central catalog — every AuditLog write in the codebase uses one of these
 // actions, never an ad-hoc string, so log queries stay filterable.
@@ -34,8 +34,31 @@ export type AuditAction =
   | "SUBMIT_READINESS_CHECKIN"
   | "GENERATE_REPORT"
   | "SHARE_REPORT"
+  | "REVOKE_REPORT"
   | "CREATE_PERIODIZATION"
-  | "DELETE_PERIODIZATION";
+  | "DELETE_PERIODIZATION"
+  | "GENERATE_WEEK"
+  // Fase 9 — Admin Operacional. Toda ação do ADMIN/SUPERADMIN é cross-tenant
+  // e por isso sempre auditada, inclusive a LEITURA de detalhes de uma
+  // organização: quem inspecionou os dados de qual tenant é exatamente o que
+  // uma investigação de privacidade/LGPD precisa reconstruir depois. As
+  // listagens (usuários/orgs/treinadores/atletas) não são auditadas — não têm
+  // sujeito específico e gerariam ruído que afogaria a trilha real.
+  | "ADMIN_VIEW_ORGANIZATION"
+  | "ADMIN_BLOCK_USER"
+  | "ADMIN_UNBLOCK_USER"
+  | "ADMIN_SUSPEND_ORGANIZATION"
+  | "ADMIN_REACTIVATE_ORGANIZATION"
+  // Fase 10 — Planos e Pagamentos. As ações iniciadas pelo treinador
+  // (checkout, pedido de cancelamento) são `USER`; as confirmações vindas do
+  // gateway são `SYSTEM` — não há usuário na requisição de webhook, e
+  // atribuí-las ao treinador falsificaria a trilha.
+  | "START_SUBSCRIPTION_CHECKOUT"
+  | "REQUEST_SUBSCRIPTION_CANCELLATION"
+  | "SUBSCRIPTION_ACTIVATED"
+  | "SUBSCRIPTION_RENEWED"
+  | "SUBSCRIPTION_PAYMENT_FAILED"
+  | "SUBSCRIPTION_CANCELLED";
 
 export interface AuditLogInput {
   action: AuditAction;
@@ -49,6 +72,9 @@ export interface AuditLogInput {
   requestId?: string;
   ipAddress?: string;
   userAgent?: string;
+  // Default USER. O webhook de pagamento (Fase 10) grava como SYSTEM: a
+  // requisição vem do gateway, sem sessão — ver modules/payments/webhook-service.ts.
+  actorType?: AuditActorType;
 }
 
 // Never pass password, token (raw or hash), cookie, or other sensitive
@@ -71,7 +97,7 @@ export async function recordAuditLog(
       requestId: input.requestId,
       ipAddress: input.ipAddress,
       userAgent: input.userAgent,
-      actorType: "USER",
+      actorType: input.actorType ?? "USER",
     },
   });
 }
