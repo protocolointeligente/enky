@@ -158,7 +158,13 @@ async function runGeneration(args: RunArgs) {
   const outcomes: WeekOutcome[] = [];
   const workoutRows: Prisma.WorkoutCreateManyInput[] = [];
   const blockItems: WorkoutBlocksItem[] = [];
-  const created: { id: string; title: string; plannedDate: string; modality: string }[] = [];
+  const created: {
+    id: string;
+    title: string;
+    plannedDate: string;
+    modality: string;
+    weekSequence: number;
+  }[] = [];
 
   for (const week of weeks) {
     // O volume alvo da semana manda; se estiver vazio, a fase responde. Se as
@@ -239,6 +245,7 @@ async function runGeneration(args: RunArgs) {
         title: session.title,
         plannedDate: session.plannedDate,
         modality: session.modality,
+        weekSequence: week.sequence,
       });
     }
 

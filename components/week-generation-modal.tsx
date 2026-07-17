@@ -20,6 +20,7 @@ interface GeneratedWorkout {
   title: string;
   plannedDate: string;
   modality: string;
+  weekSequence: number;
 }
 
 interface AppliedRule {
@@ -227,33 +228,47 @@ export function WeekGenerationModal({ target, onClose, onGenerated }: Props) {
           )}
 
           {isCycle ? (
-            // 60 links seriam ruído. No ciclo o treinador quer o mapa das
-            // semanas; a revisão sessão a sessão acontece no calendário.
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="text-xs uppercase tracking-wider text-faint">
-                    <th className="py-2 pr-3">Semana</th>
-                    <th className="py-2 pr-3">Confiança</th>
-                    <th className="py-2 text-right">Treinos</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line">
-                  {result.weeks.map((w) => (
-                    <tr key={w.weekId}>
-                      <td className="py-2 pr-3 tabular text-ink">{w.sequence}</td>
-                      <td className="py-2 pr-3">
+            // As sessões do ciclo inteiro, agrupadas por semana. Cada semana é
+            // um bloco recolhível para o treinador ver as sessões (com a
+            // modalidade) sem afogar 36 links de uma vez.
+            <div className="flex max-h-[45vh] flex-col gap-2 overflow-y-auto">
+              {result.weeks.map((week, i) => {
+                const sessions = result.workouts.filter((w) => w.weekSequence === week.sequence);
+                return (
+                  <details
+                    key={week.weekId}
+                    className="rounded-lg border border-line"
+                    open={i === 0}
+                  >
+                    <summary className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-sm">
+                      <span className="font-semibold text-ink">Semana {week.sequence}</span>
+                      <span className="flex items-center gap-2">
                         <span
-                          className={`${uiClasses.badge} ${CONFIDENCE_META[w.confidence].chip}`}
+                          className={`${uiClasses.badge} ${CONFIDENCE_META[week.confidence].chip}`}
                         >
-                          {CONFIDENCE_META[w.confidence].label}
+                          {CONFIDENCE_META[week.confidence].label}
                         </span>
-                      </td>
-                      <td className="py-2 text-right tabular text-ink">{w.workoutCount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        <span className="text-xs text-muted">{sessions.length} sessão(ões)</span>
+                      </span>
+                    </summary>
+                    <div className="flex flex-col gap-1 border-t border-line p-2">
+                      {sessions.map((w) => (
+                        <Link
+                          key={w.id}
+                          href={`/treinador/treinos/${w.id}`}
+                          className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm transition-colors hover:bg-surface"
+                        >
+                          <span className="flex items-center gap-2">
+                            {MODALITY_META[w.modality]?.icon}
+                            <span className="text-ink">{w.title}</span>
+                          </span>
+                          <span className="text-xs text-muted">{fmtDay(w.plannedDate)}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  </details>
+                );
+              })}
             </div>
           ) : (
             <div className="flex flex-col gap-2">

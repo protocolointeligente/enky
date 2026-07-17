@@ -132,7 +132,9 @@ test("treinador cria periodização, gera a semana em rascunho e vê a regra apl
     await dialog.getByRole("button", { name: "Fechar" }).click();
   });
 
-  await test.step("o modo automático deduz do histórico, e nao publica sozinho", async () => {
+  await test.step("gera o ciclo inteiro e lista as sessões de cada semana", async () => {
+    // A semana 1 já tem rascunhos do passo anterior; regerar o ciclo por cima
+    // é o caminho real (substituir os rascunhos intactos, gerar o resto).
     await page.getByRole("button", { name: "Gerar ciclo inteiro" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "Gerar ciclo inteiro" })).toBeVisible();
@@ -141,14 +143,20 @@ test("treinador cria periodização, gera a semana em rascunho e vê a regra apl
     // contagem aparece no subtítulo e no corpo do modal.
     await expect(dialog.getByText(/\d+ semanas/).first()).toBeVisible();
 
-    await dialog.getByRole("button", { name: "Deduzir do histórico" }).click();
-    // No automático o formulário de parâmetros some: quem escolhe é o motor.
-    await expect(dialog.locator("#gen-modality")).toHaveCount(0);
-    await expect(dialog.getByText(/nenhum modo publica sozinho/i)).toBeVisible();
-
-    // Este atleta não tem histórico — o motor pede o dado em vez de adivinhar.
     await dialog.getByRole("button", { name: "Gerar rascunhos" }).click();
-    await expect(dialog.getByText(/histórico/i).first()).toBeVisible({ timeout: 60_000 });
+    // A semana 1 já tinha rascunhos: o servidor recusa e pede a substituição.
+    await expect(dialog.getByRole("button", { name: "Substituir rascunhos e gerar" })).toBeVisible({
+      timeout: 60_000,
+    });
+    await dialog.getByRole("button", { name: "Substituir rascunhos e gerar" }).click();
+
+    // O que o usuário reportou faltando: VER as sessões geradas, por semana.
+    await expect(dialog.getByText(/rascunho\(s\) criado\(s\) em \d+ semanas/)).toBeVisible({
+      timeout: 90_000,
+    });
+    await expect(dialog.getByText("Semana 1", { exact: true })).toBeVisible();
+    // A semana 1 abre por padrão e mostra sessões de corrida (a modalidade escolhida).
+    await expect(dialog.getByRole("link", { name: /Corrida/ }).first()).toBeVisible();
   });
 
   // Limpeza: workouts e batches caem antes do plano por causa do Restrict.
