@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
-import { shareReport } from "@/modules/reports/report-service";
+import { getTrainerReportDocument, shareReport } from "@/modules/reports/report-service";
 import {
   requireAuthenticatedUser,
   requireGlobalRole,
@@ -27,18 +27,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
     const { id } = await params;
 
-    const report = await shareReport(
-      id,
-      {
-        userId: identity.userId,
-        organizationId,
-        trainerProfileId: trainerProfile.id,
-        ipAddress: getClientIp(request),
-        userAgent: request.headers.get("user-agent") ?? undefined,
-      },
-      new Date(),
-    );
-    return apiSuccess({ report });
+    const actor = {
+      userId: identity.userId,
+      organizationId,
+      trainerProfileId: trainerProfile.id,
+      ipAddress: getClientIp(request),
+      userAgent: request.headers.get("user-agent") ?? undefined,
+    };
+    const report = await shareReport(id, actor, new Date());
+    const document = await getTrainerReportDocument(id, actor);
+    return apiSuccess({ report, document });
   } catch (error) {
     return apiError(error);
   }

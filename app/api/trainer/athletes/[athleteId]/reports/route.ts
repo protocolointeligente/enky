@@ -1,7 +1,11 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import { generateReportInputSchema } from "@/modules/reports/report-schema";
-import { generateAthleteReport, listTrainerReports } from "@/modules/reports/report-service";
+import {
+  generateAthleteReport,
+  getTrainerReportDocument,
+  listTrainerReportDocuments,
+} from "@/modules/reports/report-service";
 import {
   requireAuthenticatedUser,
   requireGlobalRole,
@@ -33,7 +37,7 @@ export async function GET(
     const { athleteId } = await params;
     await requireTrainerAccessToAthlete(organizationId, trainerProfileId, athleteId);
 
-    const reports = await listTrainerReports(athleteId, {
+    const reports = await listTrainerReportDocuments(athleteId, {
       userId: identity.userId,
       organizationId,
       trainerProfileId,
@@ -59,14 +63,16 @@ export async function POST(
     await requireTrainerAccessToAthlete(organizationId, trainerProfileId, athleteId);
 
     const input = await parseJsonBody(request, generateReportInputSchema);
-    const report = await generateAthleteReport(athleteId, input, {
+    const actor = {
       userId: identity.userId,
       organizationId,
       trainerProfileId,
       ipAddress: getClientIp(request),
       userAgent: request.headers.get("user-agent") ?? undefined,
-    });
-    return apiSuccess({ report }, 201);
+    };
+    const report = await generateAthleteReport(athleteId, input, actor);
+    const document = await getTrainerReportDocument(report.id, actor);
+    return apiSuccess({ report, document }, 201);
   } catch (error) {
     return apiError(error);
   }

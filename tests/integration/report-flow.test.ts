@@ -73,8 +73,11 @@ describe("Item 6 — fluxo de relatório (report-service)", () => {
 
     const report = await generateAthleteReport(athleteId, PERIOD, actor);
     expect(report.status).toBe("DRAFT");
-    expect(report.insights).toBeTruthy();
     expect(report.metricsSnapshot).toBeTruthy();
+    // Fase 8: o resumo executivo passou a ser DERIVADO do snapshot pelo
+    // report-document. `insights` nasce vazio de propósito — é o campo de
+    // interpretação DO TREINADOR, e pré-preenchê-lo assinaria em nome dele.
+    expect(report.insights).toBeNull();
 
     // Rascunho não vaza para o atleta.
     const before = await listAthleteReports(trainer.organizationId, athleteId);
@@ -106,9 +109,9 @@ describe("Item 6 — fluxo de relatório (report-service)", () => {
     await expect(shareReport(report.id, actorA, new Date())).rejects.toThrow(/rascunho/i);
 
     // Escopo da org de B não alcança o relatório do atleta de A.
-    await expect(
-      getAthleteReport(report.id, trainerB.organizationId, athleteId),
-    ).rejects.toThrow(/não encontrado/i);
+    await expect(getAthleteReport(report.id, trainerB.organizationId, athleteId)).rejects.toThrow(
+      /não encontrado/i,
+    );
   });
 
   afterAll(async () => {
@@ -118,7 +121,10 @@ describe("Item 6 — fluxo de relatório (report-service)", () => {
     if (createdUserIds.length > 0 || createdOrganizationIds.length > 0) {
       await prisma.auditLog.deleteMany({
         where: {
-          OR: [{ userId: { in: createdUserIds } }, { organizationId: { in: createdOrganizationIds } }],
+          OR: [
+            { userId: { in: createdUserIds } },
+            { organizationId: { in: createdOrganizationIds } },
+          ],
         },
       });
     }
