@@ -5,6 +5,7 @@ import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { addDays, toISODate } from "@/app/_lib/calendar";
 import { Modal } from "@/components/ui/modal";
+import { ErrorNotice } from "@/components/ui/error-notice";
 import {
   DIFFICULTY_DISTRIBUTIONS,
   LOAD_CONTROL_METHODS,
@@ -129,7 +130,7 @@ export function PeriodizationCreateModal({
   const [notes, setNotes] = useState("");
   const [params, setParams] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<"draft" | "create" | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   function buildParameters() {
     if (!modality) return undefined;
@@ -190,7 +191,7 @@ export function PeriodizationCreateModal({
       onCreated(athleteId, result.periodization.id);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Não foi possível salvar o plano.");
+      setError(err instanceof ApiClientError ? err : "Não foi possível salvar o plano.");
     } finally {
       setBusy(null);
     }
@@ -226,7 +227,7 @@ export function PeriodizationCreateModal({
         </>
       }
     >
-      {error && <p className={uiClasses.error}>{error}</p>}
+      <ErrorNotice error={error} />
 
       <div>
         <label htmlFor="p-athlete" className={uiClasses.label}>

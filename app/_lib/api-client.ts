@@ -2,6 +2,9 @@ export class ApiClientError extends Error {
   constructor(
     message: string,
     readonly code: string,
+    // Correlaciona com os logs do servidor. É o "código" que mensagens de erro
+    // pedem que o usuário informe ao suporte (ex.: banco desatualizado).
+    readonly correlationId?: string,
   ) {
     super(message);
   }
@@ -10,7 +13,7 @@ export class ApiClientError extends Error {
 interface ApiEnvelope<T> {
   ok: boolean;
   data?: T;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; correlationId?: string };
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -26,6 +29,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
     throw new ApiClientError(
       body.error?.message ?? "Erro inesperado.",
       body.error?.code ?? "UNKNOWN",
+      body.error?.correlationId,
     );
   }
 

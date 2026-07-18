@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ApiClientError, apiFetch } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
+import { ErrorNotice } from "@/components/ui/error-notice";
 
 interface PlanLimits {
   maxAthletes: number | null;
@@ -46,7 +47,7 @@ export default function TrainerPlansPage() {
   const { checked } = useRequireRole("TRAINER");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [checkoutSlug, setCheckoutSlug] = useState<string | null>(null);
   const [taxId, setTaxId] = useState("");
   const [busy, setBusy] = useState(false);
@@ -55,7 +56,7 @@ export default function TrainerPlansPage() {
     setLoading(true);
     apiFetch<{ plans: Plan[] }>("/api/trainer/billing/plans")
       .then((data) => setPlans(data.plans))
-      .catch((e: ApiClientError) => setError(e.message))
+      .catch((e: ApiClientError) => setError(e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -75,7 +76,7 @@ export default function TrainerPlansPage() {
       });
       window.location.href = result.redirectUrl;
     } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "Erro ao iniciar o checkout.");
+      setError(e instanceof ApiClientError ? e : "Erro ao iniciar o checkout.");
       setBusy(false);
     }
   }
@@ -96,7 +97,7 @@ export default function TrainerPlansPage() {
           </p>
         </header>
 
-        {error ? <p className={uiClasses.error}>{error}</p> : null}
+        <ErrorNotice error={error} />
         {loading ? <p className={uiClasses.hint}>Carregando planos…</p> : null}
 
         <div className="grid gap-4 md:grid-cols-3">
