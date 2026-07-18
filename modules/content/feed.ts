@@ -53,6 +53,37 @@ function stripHtml(input: string): string {
     .trim();
 }
 
+function timestamp(date: string | null): number {
+  if (!date) return 0;
+  const t = new Date(date).getTime();
+  return Number.isNaN(t) ? 0 : t;
+}
+
+async function loadFeed(url: string, modality: string, source: string): Promise<FeedItem[]> {
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 3600 }, // cache 1h — não martelar os blogs a cada visita
+      headers: { "user-agent": "ENKY/1.0 (+https://enky.com.br)" },
+    });
+    if (!res.ok) return [];
+    return parseFeed(await res.text())
+      .slice(0, 8)
+      .map((item) => ({ ...item, modality, source }));
+  } catch {
+    return [];
+  }
+}
+
+// Agrega todos os feeds curados, mais recente primeiro. Cada feed é resiliente:
+// se um cair, os outros continuam. Usado pela página pública /novidades (Server
+// Component) — sem auth, é conteúdo de vitrine.
+export async function loadContentFeeds(): Promise<FeedItem[]> {
+  const groups = await Promise.all(
+    CONTENT_FEEDS.map((f) => loadFeed(f.url, f.modality, f.label)),
+  );
+  return groups.flat().sort((a, b) => timestamp(b.date) - timestamp(a.date));
+}
+
 export function parseFeed(xml: string): FeedItem[] {
   const isAtom = /<feed[\s>]/i.test(xml) && !/<rss[\s>]/i.test(xml);
   const blocks = xml.match(isAtom ? /<entry[\s\S]*?<\/entry>/gi : /<item[\s\S]*?<\/item>/gi) ?? [];
