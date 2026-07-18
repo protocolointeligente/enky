@@ -42,7 +42,7 @@ React**. O que já existe é reaproveitado — não reconstruído.
 | `modules/intelligence` (`load-state`) | CTL/ATL/TSB/ACWR, motor de atenção, prontidão | ✅ já existia |
 | `modules/scientific-rules` | Catálogo de regras científicas transversal | ⏳ hoje vive em `strategy-rules.ts` + `generation-rules.ts`; extração dedicada é pendente |
 | `modules/training-library` | Catálogo de sessões com evidência/referência/contraindicação | ✅ **entregue** (Fase 2) |
-| `modules/session-generator` | Geração de sessão a partir do catálogo | ⏳ hoje procedural em `generation-rules`; wiring com o catálogo é Fase 3 |
+| `modules/session-generator` | Geração/enriquecimento de sessão a partir do catálogo | ✅ **entregue** (Fase 3 — camada de enriquecimento sobre `planWeek` + catálogo) |
 | `modules/load-simulation` | Simular CTL/ATL/TSB de alterações antes de salvar | ⏳ Fase 6 — pendente (base pronta em `load-state`) |
 | `modules/adaptation-engine` | Ajuste por feedback/aderência/lesão | ⏳ Fase 5 — pendente |
 
@@ -58,7 +58,7 @@ React**. O que já existe é reaproveitado — não reconstruído.
 |---|---|---|
 | **1 — Motor estratégico** | macrociclo/meso/micro, fases, taper, deload, onda de carga a partir da prova + estado do atleta | ✅ **entregue** (`modules/periodization-engine`, 18 testes) |
 | **2 — Biblioteca científica** | catálogo de sessões por modalidade com evidência, contraindicação, pré-requisito | ✅ **entregue** (`modules/training-library`, 10 testes, rota + página de navegação; ver [`TRAINING_LIBRARY.md`](./TRAINING_LIBRARY.md)) |
-| **3 — Motor de sugestão** | gerar plano/meso/micro/semana/dia com "por quê", sistema energético, risco, confiança | 🟡 **pipeline + persistência prontos** — `toWeekContexts` + `planWeek` geram sessões DRAFT; o motor estratégico já **grava periodização-rascunho** (fases + semanas + rationale) via `saveMacrocyclePlan` e tem **UI com preview/porquê antes de salvar**; granularidade "só um dia" pendente |
+| **3 — Motor de sugestão** | gerar plano/meso/micro/semana/dia com "por quê", sistema energético, risco, confiança | ✅ **entregue** — `modules/session-generator` casa cada sessão gerada com o catálogo (objetivo, sistema energético, adaptação, risco, carga prevista, evidência, referências); rota de preview `POST …/session-suggestions` + tie-in na UI do motor estratégico. Persistência DRAFT segue no `generate-week`; granularidade "só um dia" pendente |
 | **4 — Editor inteligente** | recálculo de volume/carga/CTL/ATL/TSB ao editar | ⏳ pendente (núcleos de cálculo já existem) |
 | **5 — Regeneração** | regenerar preservando aceitos/anotações/ajustes | ⏳ pendente |
 | **6 — Simulação** | prever CTL/ATL/TSB/volume antes de salvar | ⏳ pendente (`load-state` é a base) |
@@ -108,8 +108,8 @@ detalhada das regras.
 
 ## 6. Próxima fatia recomendada
 
-**Fase 3 — wiring do catálogo no gerador:** `generation-rules.planWeek` passa a
-enriquecer cada sessão gerada com a entrada de `training-library`
-(`recommendSessions`), fechando o "por quê" da sugestão com objetivo, sistema
-energético, contraindicações e referências da biblioteca. Em seguida, **Fase 6 —
-simulação** de CTL/ATL/TSB reaproveitando `load-state`.
+**Fase 6 — simulação:** prever CTL/ATL/TSB/volume de uma alteração **antes de
+salvar**, reaproveitando `modules/intelligence/load-state.ts` (EWMA já pronto).
+O `estimatedLoadPerHour` do catálogo (Fase 2) e a `predictedLoad` por sessão
+(Fase 3) dão a série de carga que alimenta a projeção. Em seguida, **Fase 4/5**
+(editor com recálculo e regeneração preservando aceitos).

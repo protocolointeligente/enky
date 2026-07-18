@@ -91,6 +91,44 @@ interface Preview {
   rationale: Rationale;
 }
 
+interface SessionSuggestion {
+  plannedDate: string;
+  modality: string;
+  kind: string;
+  title: string;
+  matched: boolean;
+  objective: string | null;
+  energySystem: string | null;
+  adaptation: string | null;
+  risk: string[];
+  evidenceLevel: string | null;
+  references: string[];
+  predictedLoad: number | null;
+  why: string;
+}
+interface WeekSuggestion {
+  catalogVersion: string;
+  sessions: SessionSuggestion[];
+  confidence: string;
+}
+
+// Nível PT → nível do motor (3 faixas), espelhando toEngineLevel do servidor.
+const LEVEL_TO_ENGINE: Record<string, string> = {
+  INICIANTE: "BEGINNER",
+  INTERMEDIARIO: "INTERMEDIATE",
+  AVANCADO: "ADVANCED",
+  ELITE: "ADVANCED",
+};
+
+// PhaseKind → um nome que o classificador do gerador reconhece de volta.
+const PHASE_NAME: Record<string, string> = {
+  BASE: "Base",
+  BUILD: "Construção específica",
+  PEAK: "Pico",
+  TAPER: "Taper",
+  TRANSITION: "Transição",
+};
+
 function fmtDay(iso: string): string {
   return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -124,6 +162,8 @@ export function PeriodizationStrategyModal({
   const [notes, setNotes] = useState("");
 
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [suggestions, setSuggestions] = useState<WeekSuggestion | null>(null);
+  const [suggestBusy, setSuggestBusy] = useState(false);
   const [busy, setBusy] = useState<"preview" | "save" | null>(null);
   const [error, setError] = useState<unknown>(null);
 
@@ -157,6 +197,7 @@ export function PeriodizationStrategyModal({
     }
     setBusy("preview");
     setError(null);
+    setSuggestions(null);
     try {
       const result = await apiFetch<Preview>(
         `/api/trainer/athletes/${athleteId}/periodizations/strategy/preview`,
@@ -188,6 +229,52 @@ export function PeriodizationStrategyModal({
       setError(err instanceof ApiClientError ? err : "Não foi possível salvar o plano.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Escolhe uma semana representativa (a de maior carga na fase de construção) e
+  // pede ao motor de sugestão as sessões-exemplo enriquecidas pelo catálogo —
+  // fecha visualmente Fase 1 (estrutura) + 2 (biblioteca) + 3 (sugestão).
+  async function loadExampleSessions() {
+    if (!preview) return;
+    if (weekdays.length === 0) {
+      setError("Selecione ao menos um dia disponível para ver as sessões.");
+      return;
+    }
+    const build = preview.weeks.filter((w) => w.phaseKind === "BUILD" && !w.isRecoveryWeek);
+    const pool = build.length ? build : preview.weeks.filter((w) => !w.isRecoveryWeek);
+    const week = pool.reduce<WeekRow | null>(
+      (best, w) => ((w.targetVolumeKm ?? 0) > (best?.targetVolumeKm ?? -1) ? w : best),
+      null,
+    ) ?? preview.weeks[0];
+    if (!week) return;
+
+    setSuggestBusy(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = {
+        goal: goal.trim(),
+        modality,
+        availableWeekdays: weekdays,
+        phaseName: PHASE_NAME[week.phaseKind] ?? week.phaseKind,
+        isRecoveryWeek: week.isRecoveryWeek,
+        weekStartDate: week.startDate,
+        weekEndDate: week.endDate,
+        includeStrength,
+      };
+      const engineLevel = level ? LEVEL_TO_ENGINE[level] : undefined;
+      if (engineLevel) body.level = engineLevel;
+      if (week.targetVolumeKm != null) body.targetVolumeKm = week.targetVolumeKm;
+
+      const result = await apiFetch<WeekSuggestion>(
+        `/api/trainer/athletes/${athleteId}/session-suggestions`,
+        { method: "POST", body: JSON.stringify(body) },
+      );
+      setSuggestions(result);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err : "Não foi possível carregar as sessões.");
+    } finally {
+      setSuggestBusy(false);
     }
   }
 
@@ -530,6 +617,68 @@ export function PeriodizationStrategyModal({
               </div>
             )}
           </details>
+
+          {/* Sessões-exemplo enriquecidas pelo catálogo (Fase 3) */}
+          <div className="flex flex-col gap-2 border-t border-line pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-ink">Sessões de exemplo</span>
+              <button
+                type="button"
+                className={uiClasses.buttonGhost}
+                onClick={loadExampleSessions}
+                disabled={suggestBusy}
+              >
+                {suggestBusy
+                  ? "Carregando…"
+                  : suggestions
+                    ? "Recarregar"
+                    : "Ver sessões da semana de maior carga"}
+              </button>
+            </div>
+
+            {suggestions && (
+              <div className="flex flex-col gap-2">
+                {suggestions.sessions.length === 0 ? (
+                  <p className="text-xs text-muted">Nenhuma sessão nesta semana.</p>
+                ) : (
+                  suggestions.sessions.map((s, i) => (
+                    <div key={i} className="rounded-lg border border-line bg-petrol/50 p-3 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-ink">{s.title}</span>
+                        <span className="flex items-center gap-1.5 text-faint">
+                          {s.predictedLoad != null && <span>~{s.predictedLoad} UA</span>}
+                          {s.evidenceLevel && (
+                            <span className={`${uiClasses.badge} bg-electric/15 text-electric`}>
+                              Ev. {s.evidenceLevel}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {s.objective && <p className="mt-1 text-muted">{s.objective}</p>}
+                      {s.adaptation && (
+                        <p className="mt-1 text-faint">
+                          Sistema {s.energySystem} · {s.adaptation}
+                        </p>
+                      )}
+                      {s.risk.length > 0 && (
+                        <p className="mt-1 text-orange">Risco: {s.risk.join("; ")}.</p>
+                      )}
+                      {!s.matched && (
+                        <p className="mt-1 text-faint">
+                          Sem sessão de catálogo específica desta fase — análogo, revise a
+                          intensidade.
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
+                <p className="text-[11px] text-faint">
+                  Exemplo da semana de maior carga · catálogo {suggestions.catalogVersion}. As
+                  sessões só são criadas (como rascunho) quando você gerar o ciclo depois de salvar.
+                </p>
+              </div>
+            )}
+          </div>
 
           <p className={uiClasses.hint}>
             Confiança alta significa que o motor tinha os dados que a regra pede — não que a
