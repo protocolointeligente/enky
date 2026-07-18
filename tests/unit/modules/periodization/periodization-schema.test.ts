@@ -63,6 +63,33 @@ describe("createPeriodizationInputSchema", () => {
     });
     expect(r.success).toBe(false);
   });
+
+  it("aceita um plano completo em cada modalidade", () => {
+    for (const modality of ["RUNNING", "STRENGTH", "FUNCTIONAL", "CYCLING", "SWIMMING", "TRIATHLON"] as const) {
+      const r = createPeriodizationInputSchema.safeParse({ ...base, goal: "x", modality });
+      expect(r.success, `modalidade ${modality}`).toBe(true);
+    }
+  });
+
+  it("aceita apenas os campos obrigatórios (todos os opcionais ausentes) como rascunho", () => {
+    const r = createPeriodizationInputSchema.safeParse({ ...base, isDraft: true });
+    expect(r.success).toBe(true);
+    if (r.success) {
+      // defaults aplicados, opcionais ficam undefined (nunca null cru para o Prisma).
+      expect(r.data.phases).toEqual([]);
+      expect(r.data.autoGenerate).toBe(false);
+      expect(r.data.modality).toBeUndefined();
+    }
+  });
+
+  it("rejeita fase fora da janela do plano", () => {
+    const r = createPeriodizationInputSchema.safeParse({
+      ...base,
+      isDraft: true,
+      phases: [{ name: "Base", startDate: "2026-07-01", endDate: "2026-08-10" }],
+    });
+    expect(r.success).toBe(false);
+  });
 });
 
 describe("periodizationParametersSchema", () => {
