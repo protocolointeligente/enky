@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable */
 // Aplica as migrações no deploy (Vercel `vercel-build`), de forma resiliente.
 //
 // Por que existe: o schema exige `directUrl` (conexão direta/unpooled) para

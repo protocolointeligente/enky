@@ -193,3 +193,34 @@ de banco isolado** (mesma fronteira de ambiente das fases anteriores) — o oper
 **Fora de escopo (inalterado):** Marketplace e Metric Registry seguem só especificados; organização
 multiusuário/grupo e upload de arquivos são Fase 6+ (ADR-001) — por isso `maxTrainers`/`maxStorageMb`
 são declarados no catálogo mas sem ponto de enforcement ainda.
+
+## Etapa — Avaliações, zonas individualizadas e motor de intensidade
+
+Branch `feat/athlete-assessments-prescription-zones` (sobre `fix/production-critical-...`). O treinador
+deixa de digitar FC/pace/potência/carga a cada sessão: cadastra avaliações do atleta e prescreve por
+**método + zona**, com a faixa real calculada e a fonte à vista. Ver `ENKY_ASSESSMENT_MODEL.md`,
+`ENKY_TRAINING_ZONE_ENGINE.md`, `ENKY_PRESCRIPTION_INTENSITY_FLOW.md`.
+
+- **A — Avaliações:** modelo `Assessment` versionado (DRAFT/VALID/SUPERSEDED/EXPIRED/INVALID; validar
+  supersede a anterior, nada é apagado). Medições por protocolo em JSON validado por Zod (FC/corrida/
+  ciclismo/natação/força/composição). CRUD com escopo org+treinador+acesso e auditoria. Migration
+  aditiva `20260718150000`. `TestResult`/`DerivedMetric` (legados, sem uso) intactos.
+- **B — Perfil consolidado:** `getCurrentAthletePerformanceProfile` escolhe o valor atual por regra
+  versionada (não-expirado > expirado; medido > estimado; mais recente); ausência explícita; expirado
+  com aviso.
+- **C — Motor de zonas:** `modules/training-zones/` puro, versionado, erro tipado — FC (%FCmáx/Karvonen/
+  %LTHR), pace (limiar/VAM/CV/VDOT), potência (FTP/Coggan), natação (CSS), força (%1RM + Epley/Brzycki/
+  Lander/O'Conner). `zoneRegistry` declarativo + `zone-engine`. 22 testes científicos.
+- **D/D2 — Prescrição:** seção de intensidade recalculada no modal (método→zona→faixa+fonte);
+  ausência/expiração tratadas; **proveniência** gravada em `WorkoutStep.metadata` e
+  `WorkoutExercise.metadata` (migration `20260718160000`) — avaliação nova não altera treino já
+  prescrito.
+- **E — Aba Avaliações (360º):** listar/criar/validar/histórico, com status e procedência.
+
+**Verificação:** `lint + typecheck + unit + build` verde por fatia (unit: schema de avaliação,
+seleção do perfil, 22 de zonas, proveniência). **Integração/E2E/Preview seguem pendentes de banco
+migrado** — o `migrate-on-deploy` aplica as migrações no ambiente do deploy.
+
+**Fora de escopo (explícito):** composição corporal não integra o motor de zonas; carga por %1RM sem
+exercise-picker por id (texto opcional); re-hidratar a zona ao editar treino salvo; override formal
+com motivo preservado; CRM/cobrança/marketplace/geração automática de periodização.

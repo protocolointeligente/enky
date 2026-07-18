@@ -385,6 +385,7 @@ function CreateAssessmentModal({
               <label className={uiClasses.label}>{f.label}</label>
               {f.kind === "select" ? (
                 <select
+                  aria-label={f.label}
                   className={uiClasses.select}
                   value={values[f.key] ?? ""}
                   onChange={(e) => setValues((p) => ({ ...p, [f.key]: e.target.value }))}
@@ -398,6 +399,7 @@ function CreateAssessmentModal({
                 </select>
               ) : (
                 <input
+                  aria-label={f.label}
                   type={f.kind === "text" ? "text" : "number"}
                   className={uiClasses.input}
                   value={values[f.key] ?? ""}
