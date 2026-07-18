@@ -10,6 +10,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 export interface AppNavLink {
   href: string;
   label: string;
+  // Chave do ícone exibido na sidebar (ver NAV_ICONS em app-sidebar). Opcional:
+  // sem ícone a sidebar recolhida cai num marcador neutro.
+  icon?: string;
 }
 
 // Shared authenticated chrome for the trainer/athlete areas: brand, section
