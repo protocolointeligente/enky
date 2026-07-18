@@ -33,14 +33,20 @@ O front formata (mm:ss); o banco guarda número.
 - `assessment-service.ts` — `createAssessment` (DRAFT), `updateAssessmentDraft`,
   `validateAssessment` (supersede transacional), `listAssessments`, `getAssessment`.
   Escopo org+treinador reforçado em toda entrada; auditoria em toda escrita.
+- `performance-profile.ts` (**fatia B**) — `getCurrentAthletePerformanceProfile`:
+  deriva o valor ATUAL de cada indicador das avaliações VÁLIDAS. `selectBestMetric`
+  é puro e versionado (`PROFILE_SELECTION_VERSION`): não-expirado > expirado,
+  medido > estimado, depois mais recente; ausência é `null`; expirado volta COM
+  aviso (`expired: true`). Nunca inventa valor, nunca diagnostica.
 
 ## Rotas
 
 - `GET|POST /api/trainer/athletes/[athleteId]/assessments` — listar histórico / criar.
 - `GET|PATCH /api/trainer/assessments/[id]` — ver / editar rascunho.
 - `POST /api/trainer/assessments/[id]/validate` — validar (DRAFT→VALID + supersede).
+- `GET /api/trainer/athletes/[athleteId]/performance-profile` — perfil consolidado (B).
 
-## Fora desta fatia
+## Fora destas fatias
 
-Perfil consolidado (B), motor/registro de zonas (C), integração ao modal (D), aba
-Avaliações na 360º (E). `TestResult`/`DerivedMetric` (sem uso) não foram tocados.
+Motor/registro de zonas (C), integração ao modal (D), aba Avaliações na 360º (E).
+`TestResult`/`DerivedMetric` (sem uso) não foram tocados.
