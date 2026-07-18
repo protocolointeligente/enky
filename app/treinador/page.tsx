@@ -57,6 +57,7 @@ const SHORTCUTS = [
   { href: "/treinador/exercicios", label: "Exercícios", icon: <DumbbellIcon /> },
   { href: "/treinador/templates", label: "Templates", icon: <LayersIcon /> },
   { href: "/treinador/periodizacao", label: "Periodização", icon: <CalendarIcon /> },
+  { href: "/treinador/biblioteca-sessoes", label: "Biblioteca", icon: <LayersIcon /> },
   { href: "/treinador/relatorios", label: "Relatórios", icon: <CopyIcon /> },
 ];
 
