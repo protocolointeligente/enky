@@ -6,11 +6,7 @@ import { requireTrainerAccessToAthlete } from "@/server/auth/guards";
 import type { PeriodizationActor } from "@/modules/periodization/periodization-service";
 import { buildMacrocycle } from "./build-macrocycle";
 import type { MacrocycleResult } from "./periodization-engine-types";
-import {
-  type StrategyInput,
-  toEngineLevel,
-  toEngineModality,
-} from "./strategy-input-schema";
+import { type StrategyInput, toStrategicInputs } from "./strategy-input-schema";
 
 // ============================================================================
 // SERVIÇO DO MOTOR ESTRATÉGICO — persistência + autorização (Fase 1, fatia 2).
@@ -31,20 +27,6 @@ function day(iso: string): Date {
   return new Date(`${iso}${DAY_MS_ISO}`);
 }
 
-/** Converte a StrategyInput da API nas entradas do motor puro. */
-function toEngineInputs(input: StrategyInput) {
-  return {
-    modality: toEngineModality(input.modality),
-    goal: input.goal,
-    startDate: input.startDate,
-    eventDate: input.eventDate,
-    level: toEngineLevel(input.level),
-    availableWeekdays: input.availableWeekdays,
-    baseWeeklyVolumeKm: input.baseWeeklyVolumeKm,
-    includeStrength: input.includeStrength,
-  };
-}
-
 /** Erro tipado do motor → erro de validação do domínio (400). */
 function assertOk(result: MacrocycleResult): asserts result is Extract<MacrocycleResult, { ok: true }> {
   if (!result.ok) throw new ValidationError(result.error.message);
@@ -60,7 +42,7 @@ export async function proposeMacrocycle(
   actor: PeriodizationActor,
 ) {
   await requireTrainerAccessToAthlete(actor.organizationId, actor.trainerProfileId, athleteId);
-  const result = buildMacrocycle(toEngineInputs(input));
+  const result = buildMacrocycle(toStrategicInputs(input));
   assertOk(result);
   return result;
 }
@@ -76,7 +58,7 @@ export async function saveMacrocyclePlan(
 ) {
   await requireTrainerAccessToAthlete(actor.organizationId, actor.trainerProfileId, athleteId);
 
-  const result = buildMacrocycle(toEngineInputs(input));
+  const result = buildMacrocycle(toStrategicInputs(input));
   assertOk(result);
   const { macrocycle, mesocycles, weeks, rationale, confidence } = result;
 

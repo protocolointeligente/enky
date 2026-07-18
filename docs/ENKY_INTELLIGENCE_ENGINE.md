@@ -43,7 +43,7 @@ React**. O que já existe é reaproveitado — não reconstruído.
 | `modules/scientific-rules` | Catálogo de regras científicas transversal | ⏳ hoje vive em `strategy-rules.ts` + `generation-rules.ts`; extração dedicada é pendente |
 | `modules/training-library` | Catálogo de sessões com evidência/referência/contraindicação | ✅ **entregue** (Fase 2) |
 | `modules/session-generator` | Geração/enriquecimento de sessão a partir do catálogo | ✅ **entregue** (Fase 3 — camada de enriquecimento sobre `planWeek` + catálogo) |
-| `modules/load-simulation` | Simular CTL/ATL/TSB de alterações antes de salvar | ⏳ Fase 6 — pendente (base pronta em `load-state`) |
+| `modules/load-simulation` | Simular CTL/ATL/TSB de alterações antes de salvar | ✅ **entregue** (Fase 6 — projeção pura sobre `load-state`) |
 | `modules/adaptation-engine` | Ajuste por feedback/aderência/lesão | ⏳ Fase 5 — pendente |
 
 > Optamos por **não** criar módulos vazios só para "bater" a lista da Fase 8:
@@ -61,7 +61,7 @@ React**. O que já existe é reaproveitado — não reconstruído.
 | **3 — Motor de sugestão** | gerar plano/meso/micro/semana/dia com "por quê", sistema energético, risco, confiança | ✅ **entregue** — `modules/session-generator` casa cada sessão gerada com o catálogo (objetivo, sistema energético, adaptação, risco, carga prevista, evidência, referências); rota de preview `POST …/session-suggestions` + tie-in na UI do motor estratégico. Persistência DRAFT segue no `generate-week`; granularidade "só um dia" pendente |
 | **4 — Editor inteligente** | recálculo de volume/carga/CTL/ATL/TSB ao editar | ⏳ pendente (núcleos de cálculo já existem) |
 | **5 — Regeneração** | regenerar preservando aceitos/anotações/ajustes | ⏳ pendente |
-| **6 — Simulação** | prever CTL/ATL/TSB/volume antes de salvar | ⏳ pendente (`load-state` é a base) |
+| **6 — Simulação** | prever CTL/ATL/TSB/volume antes de salvar | ✅ **entregue** — `modules/load-simulation` projeta CTL/ATL/TSB por cima do histórico real (mesma EWMA do `load-state`); rota `POST …/strategy/simulate` + botão "Simular carga" no modo estratégico; ver [`LOAD_SIMULATION.md`](./LOAD_SIMULATION.md) |
 | **7 — Explicabilidade** | "por quê", "e se", evidências, confiança, versão da regra | ✅ **transversal** — `rationale.rules/references/missingData/caveats` + `confidence` em toda saída dos motores |
 | **8 — Arquitetura** | módulos desacoplados, sem ciência em React | ✅ respeitada; módulos pendentes catalogados acima |
 | **9 — Performance** | processamento pesado em background/fila/cache | ⏳ pendente — motor é puro e barato hoje (ms); só migra p/ job quando o custo justificar |
@@ -108,8 +108,9 @@ detalhada das regras.
 
 ## 6. Próxima fatia recomendada
 
-**Fase 6 — simulação:** prever CTL/ATL/TSB/volume de uma alteração **antes de
-salvar**, reaproveitando `modules/intelligence/load-state.ts` (EWMA já pronto).
-O `estimatedLoadPerHour` do catálogo (Fase 2) e a `predictedLoad` por sessão
-(Fase 3) dão a série de carga que alimenta a projeção. Em seguida, **Fase 4/5**
-(editor com recálculo e regeneração preservando aceitos).
+**Fase 4/5 — editor inteligente + regeneração:** ao editar uma sessão, recalcular
+volume/carga/CTL/ATL/TSB da semana (reaproveitando `load-simulation`); e regenerar
+sessão/micro/meso/plano **preservando** o que o treinador já aceitou/editou (o
+`trainerModified` já existe no `Workout` e é respeitado pela geração assistida).
+Depois, **Fase 9** (mover geração pesada para background job quando o custo
+justificar).

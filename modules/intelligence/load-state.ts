@@ -8,8 +8,11 @@
 
 export const LOAD_FORMULA_VERSION = "1.0.0";
 
-const CTL_TIME_CONSTANT = 42; // dias — carga crônica ("fitness")
-const ATL_TIME_CONSTANT = 7; // dias — carga aguda ("fadiga")
+// Constantes de tempo do impulso-resposta. Exportadas para o motor de SIMULAÇÃO
+// (modules/load-simulation) projetar CTL/ATL para frente com a MESMA matemática —
+// a projeção não pode divergir da leitura, senão o "simular" mentiria.
+export const CTL_TIME_CONSTANT = 42; // dias — carga crônica ("fitness")
+export const ATL_TIME_CONSTANT = 7; // dias — carga aguda ("fadiga")
 
 export interface LoadState {
   ctl: number; // carga crônica (EWMA 42d)
@@ -22,7 +25,7 @@ export interface LoadState {
   dataDays: number; // dias com treino na janela (proxy de volume de dados)
 }
 
-function ewmaAlpha(timeConstant: number): number {
+export function ewmaAlpha(timeConstant: number): number {
   return 1 - Math.exp(-1 / timeConstant);
 }
 

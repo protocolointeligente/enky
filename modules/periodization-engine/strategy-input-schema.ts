@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MODALITIES, PERIODIZATION_LEVELS } from "@/modules/periodization/periodization-schema";
-import type { AthleteLevel, Modality } from "./periodization-engine-types";
+import type { AthleteLevel, Modality, StrategicInputs } from "./periodization-engine-types";
 
 // Entrada da API do motor estratégico (Fase 1). Reaproveita os enums já usados
 // pela periodização manual (mesmos dropdowns na UI). A regra científica vive no
@@ -50,4 +50,19 @@ export function toEngineLevel(
 // para deixar a intenção clara no serviço.
 export function toEngineModality(modality: (typeof MODALITIES)[number]): Modality {
   return modality;
+}
+
+// Ponte única StrategyInput (API) → StrategicInputs (motor puro). Compartilhada
+// pelos serviços de geração e de simulação para não divergirem no mapeamento.
+export function toStrategicInputs(input: StrategyInput): StrategicInputs {
+  return {
+    modality: toEngineModality(input.modality),
+    goal: input.goal,
+    startDate: input.startDate,
+    eventDate: input.eventDate,
+    level: toEngineLevel(input.level),
+    availableWeekdays: input.availableWeekdays,
+    baseWeeklyVolumeKm: input.baseWeeklyVolumeKm,
+    includeStrength: input.includeStrength,
+  };
 }

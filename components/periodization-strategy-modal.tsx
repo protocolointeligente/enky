@@ -112,6 +112,23 @@ interface WeekSuggestion {
   confidence: string;
 }
 
+interface LoadStatePoint {
+  ctl: number;
+  atl: number;
+  tsb: number;
+}
+interface StrategySimulation {
+  simulation: {
+    formulaVersion: string;
+    start: LoadStatePoint;
+    end: LoadStatePoint;
+    peak: { ctl: number; atl: number; tsbMin: number };
+  };
+  confidence: string;
+  totalVolumeKm: number | null;
+  historyDays: number;
+}
+
 // Nível PT → nível do motor (3 faixas), espelhando toEngineLevel do servidor.
 const LEVEL_TO_ENGINE: Record<string, string> = {
   INICIANTE: "BEGINNER",
@@ -164,6 +181,8 @@ export function PeriodizationStrategyModal({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [suggestions, setSuggestions] = useState<WeekSuggestion | null>(null);
   const [suggestBusy, setSuggestBusy] = useState(false);
+  const [sim, setSim] = useState<StrategySimulation | null>(null);
+  const [simBusy, setSimBusy] = useState(false);
   const [busy, setBusy] = useState<"preview" | "save" | null>(null);
   const [error, setError] = useState<unknown>(null);
 
@@ -198,6 +217,7 @@ export function PeriodizationStrategyModal({
     setBusy("preview");
     setError(null);
     setSuggestions(null);
+    setSim(null);
     try {
       const result = await apiFetch<Preview>(
         `/api/trainer/athletes/${athleteId}/periodizations/strategy/preview`,
@@ -275,6 +295,28 @@ export function PeriodizationStrategyModal({
       setError(err instanceof ApiClientError ? err : "Não foi possível carregar as sessões.");
     } finally {
       setSuggestBusy(false);
+    }
+  }
+
+  // Projeta CTL/ATL/TSB do plano proposto sobre o histórico real do atleta —
+  // "simular antes de salvar" (Fase 6). Mesmo corpo do preview/salvar.
+  async function runSimulation() {
+    if (!athleteId || !goal.trim()) {
+      setError("Informe atleta e objetivo.");
+      return;
+    }
+    setSimBusy(true);
+    setError(null);
+    try {
+      const result = await apiFetch<StrategySimulation>(
+        `/api/trainer/athletes/${athleteId}/periodizations/strategy/simulate`,
+        { method: "POST", body: JSON.stringify(buildBody()) },
+      );
+      setSim(result);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err : "Não foi possível simular a carga.");
+    } finally {
+      setSimBusy(false);
     }
   }
 
@@ -675,6 +717,69 @@ export function PeriodizationStrategyModal({
                 <p className="text-[11px] text-faint">
                   Exemplo da semana de maior carga · catálogo {suggestions.catalogVersion}. As
                   sessões só são criadas (como rascunho) quando você gerar o ciclo depois de salvar.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Simulação de carga CTL/ATL/TSB (Fase 6) */}
+          <div className="flex flex-col gap-2 border-t border-line pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-ink">
+                Simular carga (CTL / ATL / TSB)
+              </span>
+              <button
+                type="button"
+                className={uiClasses.buttonGhost}
+                onClick={runSimulation}
+                disabled={simBusy}
+              >
+                {simBusy ? "Simulando…" : sim ? "Recalcular" : "Projetar carga do plano"}
+              </button>
+            </div>
+
+            {sim && (
+              <div className="flex flex-col gap-2">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="uppercase tracking-wider text-faint">
+                        <th className="py-1 pr-3" />
+                        <th className="py-1 pr-3 text-right">CTL</th>
+                        <th className="py-1 pr-3 text-right">ATL</th>
+                        <th className="py-1 text-right">TSB</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      <tr>
+                        <td className="py-1 pr-3 text-muted">Hoje</td>
+                        <td className="py-1 pr-3 text-right tabular text-ink">{sim.simulation.start.ctl}</td>
+                        <td className="py-1 pr-3 text-right tabular text-ink">{sim.simulation.start.atl}</td>
+                        <td className="py-1 text-right tabular text-ink">{sim.simulation.start.tsb}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 pr-3 text-muted">Pico do ciclo</td>
+                        <td className="py-1 pr-3 text-right tabular text-ink">{sim.simulation.peak.ctl}</td>
+                        <td className="py-1 pr-3 text-right tabular text-ink">{sim.simulation.peak.atl}</td>
+                        <td className="py-1 text-right tabular text-orange">{sim.simulation.peak.tsbMin}</td>
+                      </tr>
+                      <tr>
+                        <td className="py-1 pr-3 text-muted">Na prova</td>
+                        <td className="py-1 pr-3 text-right tabular text-ink">{sim.simulation.end.ctl}</td>
+                        <td className="py-1 pr-3 text-right tabular text-ink">{sim.simulation.end.atl}</td>
+                        <td className="py-1 text-right tabular text-turq">{sim.simulation.end.tsb}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-faint">
+                  {sim.totalVolumeKm != null ? `Volume total planejado ~${sim.totalVolumeKm} km · ` : ""}
+                  Partida de {sim.historyDays} dia(s) com carga registrada nos últimos 42.
+                  {sim.historyDays < 7 && " Pouco histórico — a projeção parte de uma base fraca."}
+                </p>
+                <p className="text-[11px] text-faint">
+                  Projeção (impulso-resposta, mesma fórmula do painel), não promessa: a carga futura é
+                  estimada. TSB negativo no pico é esperado; positivo na prova é o objetivo do taper.
                 </p>
               </div>
             )}
