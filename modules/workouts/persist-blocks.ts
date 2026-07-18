@@ -68,7 +68,13 @@ export async function persistManyWorkoutBlocks(
       });
 
       for (const [stepIndex, step] of block.steps.entries()) {
-        stepRows.push({ ...step, workoutBlockId: blockId, sequence: stepIndex + 1 });
+        stepRows.push({
+          ...step,
+          // metadata é JSON no banco — o objeto validado por Zod entra como tal.
+          metadata: (step.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
+          workoutBlockId: blockId,
+          sequence: stepIndex + 1,
+        });
       }
 
       for (const [exerciseIndex, exercise] of block.exercises.entries()) {

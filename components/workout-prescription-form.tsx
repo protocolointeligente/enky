@@ -321,6 +321,7 @@ export function WorkoutPrescriptionForm({
             blocks={values.blocks}
             modality={values.modality}
             exerciseOptions={exerciseOptions}
+            athleteId={values.athleteId || undefined}
             onChange={(blocks) => set("blocks", blocks)}
           />
         </div>
