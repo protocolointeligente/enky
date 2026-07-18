@@ -77,6 +77,12 @@ export interface PlatformStats {
   pendingInvitations: number;
   reports: number;
   auditEvents: number;
+  // Fase 06 — saúde comercial e de integração.
+  activeSubscriptions: number;
+  delinquentSubscriptions: number; // PAST_DUE + UNPAID
+  mrr: number; // receita recorrente mensal (equivalente mensal, em BRL)
+  webhooksProcessed: number;
+  webhooksFailed: number;
 }
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -100,6 +106,9 @@ export async function getPlatformStats(actor: AdminActor, now = new Date()): Pro
     auditEvents,
     recentSessionUsers,
     relationshipsByTrainer,
+    activeSubs,
+    delinquentSubscriptions,
+    webhooksByStatus,
   ] = await Promise.all([
     prisma.trainerProfile.count(),
     prisma.athleteProfile.count(),
@@ -126,10 +135,26 @@ export async function getPlatformStats(actor: AdminActor, now = new Date()): Pro
       where: { isActive: true },
       _count: { _all: true },
     }),
+    // MRR: assinaturas ACTIVE com o preço e ciclo do plano. Anual vira
+    // equivalente mensal (÷12) para o número somar peras com peras.
+    prisma.subscription.findMany({
+      where: { status: "ACTIVE" },
+      select: { plan: { select: { price: true, billingCycle: true } } },
+    }),
+    prisma.subscription.count({ where: { status: { in: ["PAST_DUE", "UNPAID"] } } }),
+    prisma.webhookEvent.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
 
   const athleteCounts = relationshipsByTrainer.map((r) => r._count._all);
   const linkedAthletes = athleteCounts.reduce((sum, n) => sum + n, 0);
+
+  const mrr = activeSubs.reduce((sum, s) => {
+    const monthly =
+      s.plan.billingCycle === "ANUAL" ? Number(s.plan.price) / 12 : Number(s.plan.price);
+    return sum + monthly;
+  }, 0);
+  const webhookCount = (status: string) =>
+    webhooksByStatus.find((w) => w.status === status)?._count._all ?? 0;
 
   return {
     trainers,
@@ -150,6 +175,11 @@ export async function getPlatformStats(actor: AdminActor, now = new Date()): Pro
     pendingInvitations,
     reports,
     auditEvents,
+    activeSubscriptions: activeSubs.length,
+    delinquentSubscriptions,
+    mrr: Number(mrr.toFixed(2)),
+    webhooksProcessed: webhookCount("PROCESSED"),
+    webhooksFailed: webhookCount("FAILED"),
   };
 }
 

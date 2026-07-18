@@ -265,6 +265,22 @@ enum ExternalProvider {
   STRAVA
 }
 
+// Fase 06/08 — feature flag global da plataforma. Só SUPERADMIN altera (matriz
+// de permissões §3). Flag DESLIGADA/ausente é o padrão seguro: um recurso atrás
+// de flag não vaza por acidente. Escopo global no MVP (não por organização);
+// `enabledOrganizationIds` permite habilitação gradual (canário) sem schema novo.
+model FeatureFlag {
+  key                   String   @id
+  description           String
+  enabled               Boolean  @default(false)
+  enabledOrganizationIds String[] @default([])
+  updatedById           String?
+  createdAt             DateTime @default(now()) @db.Timestamptz
+  updatedAt             DateTime @updatedAt @db.Timestamptz
+
+  updatedBy User? @relation("FeatureFlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+}
+
 // Uma conexão nunca é apagada — vira REVOKED. Apagar a linha apagaria a
 // origem das atividades já importadas (que continuam sendo histórico de
 // treino do atleta) e a trilha de que o acesso um dia existiu.
@@ -306,6 +322,7 @@ model User {
   auditLogs                  AuditLog[]
   resolvedInsights           Insight[]                @relation("InsightResolvedBy")
   performedAssessments       Assessment[]             @relation("AssessmentPerformedBy")
+  updatedFeatureFlags        FeatureFlag[]            @relation("FeatureFlagUpdatedBy")
 
   @@index([email])
 }

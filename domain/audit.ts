@@ -54,6 +54,10 @@ export type AuditAction =
   | "ADMIN_VIEW_ORGANIZATION"
   | "ADMIN_BLOCK_USER"
   | "ADMIN_UNBLOCK_USER"
+  // Fase 05/06 (WIP admin) — feature flags e LGPD (exportar/anonimizar dados).
+  | "ADMIN_SET_FEATURE_FLAG"
+  | "ADMIN_EXPORT_USER_DATA"
+  | "ADMIN_ANONYMIZE_USER"
   | "ADMIN_SUSPEND_ORGANIZATION"
   | "ADMIN_REACTIVATE_ORGANIZATION"
   // Fase 10 — Planos e Pagamentos. As ações iniciadas pelo treinador

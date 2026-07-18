@@ -17,6 +17,11 @@ export interface PlatformStats {
   pendingInvitations: number;
   reports: number;
   auditEvents: number;
+  activeSubscriptions: number;
+  delinquentSubscriptions: number;
+  mrr: number;
+  webhooksProcessed: number;
+  webhooksFailed: number;
 }
 
 export interface OrganizationRef {
