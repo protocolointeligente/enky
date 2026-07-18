@@ -58,7 +58,7 @@ React**. O que já existe é reaproveitado — não reconstruído.
 |---|---|---|
 | **1 — Motor estratégico** | macrociclo/meso/micro, fases, taper, deload, onda de carga a partir da prova + estado do atleta | ✅ **entregue** (`modules/periodization-engine`, 18 testes) |
 | **2 — Biblioteca científica** | catálogo de sessões por modalidade com evidência, contraindicação, pré-requisito | ⏳ pendente |
-| **3 — Motor de sugestão** | gerar plano/meso/micro/semana/dia com "por quê", sistema energético, risco, confiança | 🟡 **pipeline pronto** — `toWeekContexts` + `planWeek` já geram sessões DRAFT com rationale/confiança; granularidade de escopo (só um dia etc.) e persistência pendentes |
+| **3 — Motor de sugestão** | gerar plano/meso/micro/semana/dia com "por quê", sistema energético, risco, confiança | 🟡 **pipeline + persistência prontos** — `toWeekContexts` + `planWeek` geram sessões DRAFT; o motor estratégico já **grava periodização-rascunho** (fases + semanas + rationale) via `saveMacrocyclePlan` e tem **UI com preview/porquê antes de salvar**; granularidade "só um dia" pendente |
 | **4 — Editor inteligente** | recálculo de volume/carga/CTL/ATL/TSB ao editar | ⏳ pendente (núcleos de cálculo já existem) |
 | **5 — Regeneração** | regenerar preservando aceitos/anotações/ajustes | ⏳ pendente |
 | **6 — Simulação** | prever CTL/ATL/TSB/volume antes de salvar | ⏳ pendente (`load-state` é a base) |
@@ -87,11 +87,29 @@ detalhada das regras.
 
 ---
 
-## 5. Próxima fatia recomendada
+## 5. Fatia 2 — Persistência + rota + UI (entregue)
 
-**Persistência + rota do motor estratégico:** um serviço
-`periodization-engine-service.ts` (escopo org+treinador+acesso, auditoria) que
-recebe `StrategicInputs`, chama `buildMacrocycle`, grava `Periodization`/fases/
-semanas como **rascunho** e devolve a `rationale` para a UI exibir o "porquê" de
-cada fase — reaproveitando o modelo `Periodization` já existente. Só então a
-Fase 2 (catálogo) e a Fase 6 (simulação) passam a ter onde encaixar.
+- **Migração aditiva** `20260718170000_periodization_strategy_rationale`:
+  `Periodization.strategyRationale Json?` — a saída explicável congelada na
+  geração. Planos manuais seguem com o campo nulo.
+- **Serviço** `periodization-engine-service.ts` (escopo org+treinador+acesso,
+  auditoria `GENERATE_PERIODIZATION_STRATEGY`):
+  - `proposeMacrocycle` — **preview**, não grava (alimenta o "simular antes de salvar");
+  - `saveMacrocyclePlan` — grava `Periodization` (isDraft) + fases (mesociclos) +
+    semanas (microciclos) + `strategyRationale`, em transação.
+- **Rotas:** `POST …/periodizations/strategy/preview` (prévia) e
+  `POST …/periodizations/strategy` (salva rascunho).
+- **UI:** `components/periodization-strategy-modal.tsx` — botão **"✨ Gerar com
+  ENKY"** na página de periodização: coleta prova/atleta, mostra a **proposta +
+  o porquê** (regras, confiança, dados ausentes, referências) e só então salva
+  como rascunho. Nada publica.
+- **Schema/mapeamento** puros e testados (`strategy-input-schema.ts`,
+  `toEngineLevel` PT→motor, ELITE→ADVANCED).
+
+## 6. Próxima fatia recomendada
+
+**Fase 2 — biblioteca científica de sessões** (catálogo com evidência/
+contraindicação por sessão) para o gerador escolher sessões do catálogo em vez
+de procedurais; e **Fase 6 — simulação** de CTL/ATL/TSB reaproveitando
+`load-state`. Ambas agora têm onde encaixar (o plano-rascunho existe e é
+persistido).

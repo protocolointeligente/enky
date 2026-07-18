@@ -6,6 +6,7 @@ import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { PeriodizationCreateModal } from "@/components/periodization-create-modal";
+import { PeriodizationStrategyModal } from "@/components/periodization-strategy-modal";
 import { WeekGenerationModal, type GenerationTarget } from "@/components/week-generation-modal";
 
 interface RosterEntry {
@@ -66,6 +67,7 @@ export default function TrainerPeriodizationPage() {
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState<GenerationTarget | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showStrategy, setShowStrategy] = useState(false);
 
   useEffect(() => {
     if (!checked) return;
@@ -191,10 +193,18 @@ export default function TrainerPeriodizationPage() {
                 <button
                   type="button"
                   className={uiClasses.button}
+                  onClick={() => setShowStrategy(true)}
+                  disabled={!athleteId}
+                >
+                  ✨ Gerar com ENKY
+                </button>
+                <button
+                  type="button"
+                  className={uiClasses.buttonSecondary}
                   onClick={() => setShowCreate(true)}
                   disabled={!athleteId}
                 >
-                  + Criar periodização
+                  + Criar manualmente
                 </button>
               </section>
 
@@ -369,6 +379,14 @@ export default function TrainerPeriodizationPage() {
           target={generating}
           onClose={() => setGenerating(null)}
           onGenerated={loadDetail}
+        />
+
+        <PeriodizationStrategyModal
+          open={showStrategy}
+          onClose={() => setShowStrategy(false)}
+          athletes={roster}
+          defaultAthleteId={athleteId}
+          onCreated={onCreated}
         />
 
         <PeriodizationCreateModal

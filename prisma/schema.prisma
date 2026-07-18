@@ -521,6 +521,10 @@ model Periodization {
   isDraft                Boolean   @default(false)
   notes                  String?
   parameters             Json?
+  // Saída explicável do motor estratégico (Fase 1) congelada na geração:
+  // regras aplicadas + versão + referências + confiança + dados ausentes.
+  // Null em planos desenhados manualmente. Validado por Zod na escrita.
+  strategyRationale      Json?
   createdAt              DateTime  @default(now()) @db.Timestamptz
   updatedAt              DateTime  @updatedAt @db.Timestamptz
   lockVersion            Int       @default(1)

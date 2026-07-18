@@ -39,6 +39,9 @@ export type AuditAction =
   | "DELETE_PERIODIZATION"
   | "GENERATE_WEEK"
   | "GENERATE_CYCLE"
+  // ENKY Intelligence 2.0 (Fase 1) — geração do macrociclo pelo motor
+  // estratégico. Nasce como periodização-RASCUNHO; nada publica sozinho.
+  | "GENERATE_PERIODIZATION_STRATEGY"
   // Etapa de avaliações e zonas. Dados de saúde/performance do atleta —
   // sempre auditados. Notas livres e valores clínicos NÃO entram no log
   // (só ids/ação), conforme a regra de redação da etapa.
