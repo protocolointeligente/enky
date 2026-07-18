@@ -5,7 +5,7 @@ import { apiFetch } from "@/app/_lib/api-client";
 import { stepTypeLabel } from "@/app/_lib/labels";
 import { uiClasses } from "@/app/_lib/ui";
 import { ExerciseDemo } from "@/components/exercise-demo";
-import { ZoneCalculator, formatBand } from "@/components/zone-calculator";
+import { ZoneCalculator, StrengthZoneCalculator, formatBand } from "@/components/zone-calculator";
 import type { PerformanceProfile } from "@/modules/assessments/performance-profile";
 import type { ZoneProvenance } from "@/modules/workouts/zone-provenance";
 
@@ -100,6 +100,7 @@ export interface ExerciseFormState {
   rpeTarget: string;
   restSeconds: string;
   notes: string;
+  zone?: ZoneProvenance | null; // proveniência da carga por %1RM (fatia D2)
 }
 
 export interface BlockFormState {
@@ -149,6 +150,7 @@ export function emptyExercise(): ExerciseFormState {
     rpeTarget: "",
     restSeconds: "",
     notes: "",
+    zone: null,
   };
 }
 
@@ -198,6 +200,7 @@ export function buildBlocksPayload(blocks: BlockFormState[]) {
       rpeTarget: toFloatOrUndefined(exercise.rpeTarget),
       restSeconds: toIntOrUndefined(exercise.restSeconds),
       notes: exercise.notes.trim() === "" ? undefined : exercise.notes,
+      metadata: exercise.zone ? { zone: exercise.zone } : undefined,
     })),
   }));
 }
@@ -230,6 +233,7 @@ export interface BlockInputLike {
     rpeTarget?: number | null;
     restSeconds?: number | null;
     notes?: string | null;
+    metadata?: { zone?: ZoneProvenance | null } | null;
   }>;
 }
 
@@ -267,6 +271,7 @@ export function blocksInputToState(blocks: BlockInputLike[]): BlockFormState[] {
       rpeTarget: toStr(exercise.rpeTarget),
       restSeconds: toStr(exercise.restSeconds),
       notes: exercise.notes ?? "",
+      zone: exercise.metadata?.zone ?? null,
     })),
   }));
 }
@@ -676,7 +681,10 @@ export function BlocksEditor({
                         className={uiClasses.input}
                         value={exercise.loadKg}
                         onChange={(e) =>
-                          updateExercise(blockIndex, exerciseIndex, { loadKg: e.target.value })
+                          updateExercise(blockIndex, exerciseIndex, {
+                            loadKg: e.target.value,
+                            zone: null,
+                          })
                         }
                       />
                     </div>
@@ -725,6 +733,26 @@ export function BlocksEditor({
                       }
                     />
                   </div>
+
+                  {/* Carga por %1RM (fatia D2) — só na prescrição (atleta conhecido). */}
+                  {athleteId && (
+                    <StrengthZoneCalculator
+                      athleteId={athleteId}
+                      profile={profile}
+                      onApply={(loadKg, prov) =>
+                        updateExercise(blockIndex, exerciseIndex, {
+                          loadKg: String(loadKg),
+                          zone: prov,
+                        })
+                      }
+                    />
+                  )}
+                  {exercise.zone && (
+                    <p className="mt-1 text-[11px] text-turq">
+                      {exercise.zone.zoneCode} de 1RM aplicado: {exercise.zone.calculatedLowerBound}–
+                      {exercise.zone.calculatedUpperBound} kg · carga {exercise.loadKg} kg
+                    </p>
+                  )}
                 </div>
               ))}
               <button

@@ -32,6 +32,8 @@ export const workoutExerciseInputSchema = z.object({
   rpeTarget: z.number().min(1).max(10).optional(),
   restSeconds: z.number().int().nonnegative().optional(),
   notes: z.string().trim().max(1000).optional(),
+  // Proveniência da carga por %1RM (fatia D2).
+  metadata: stepMetadataSchema.optional(),
 });
 
 export const workoutBlockInputSchema = z.object({

@@ -725,6 +725,8 @@ model WorkoutExercise {
   rpeTarget       Float?
   restSeconds     Int?
   notes           String?
+  // Proveniência da carga por %1RM (fatia D2) — paridade com WorkoutStep.metadata.
+  metadata        Json?
   createdAt       DateTime @default(now()) @db.Timestamptz
   updatedAt       DateTime @updatedAt @db.Timestamptz
 

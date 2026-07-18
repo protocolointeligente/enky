@@ -29,7 +29,8 @@ export interface PerformanceProfile {
   referenceDate: string;
   selectionVersion: string;
   metrics: Record<string, ProfileMetric>; // indicadores escalares (FC, VDOT, FTP, CSS…)
-  oneRepMaxByExercise: Record<string, ProfileMetric>; // força: 1RM por exercício
+  // força: 1RM atual por exercício, com nome resolvido (para a UI escolher).
+  oneRepMax: { exerciseId: string; exerciseName: string | null; metric: ProfileMetric }[];
   sourceAssessmentCount: number;
 }
 
@@ -184,7 +185,6 @@ export async function getCurrentAthletePerformanceProfile(
 
   // Força: 1RM por exercício (measurements.exerciseId). Valor direto tem
   // prioridade; só estimativa marca estimated=true.
-  const oneRepMaxByExercise: Record<string, ProfileMetric> = {};
   const byExercise = new Map<string, MetricCandidate[]>();
   for (const row of rows) {
     if (row.assessmentType !== "STRENGTH") continue;
@@ -199,10 +199,25 @@ export async function getCurrentAthletePerformanceProfile(
     list.push(candidateFrom(row, value, estimated));
     byExercise.set(exerciseId, list);
   }
+
+  const exerciseNames = new Map<string, string>();
+  if (byExercise.size > 0) {
+    const names = await prisma.exercise.findMany({
+      where: { id: { in: [...byExercise.keys()] } },
+      select: { id: true, name: true },
+    });
+    for (const e of names) exerciseNames.set(e.id, e.name);
+  }
+
+  const oneRepMax: PerformanceProfile["oneRepMax"] = [];
   for (const [exerciseId, candidates] of byExercise) {
     const best = selectBestMetric(candidates, refIso);
     if (best) {
-      oneRepMaxByExercise[exerciseId] = { ...best, unit: "kg" };
+      oneRepMax.push({
+        exerciseId,
+        exerciseName: exerciseNames.get(exerciseId) ?? null,
+        metric: { ...best, unit: "kg" },
+      });
     }
   }
 
@@ -211,7 +226,7 @@ export async function getCurrentAthletePerformanceProfile(
     referenceDate: refIso,
     selectionVersion: PROFILE_SELECTION_VERSION,
     metrics,
-    oneRepMaxByExercise,
+    oneRepMax,
     sourceAssessmentCount: rows.length,
   };
 }

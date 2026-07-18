@@ -92,6 +92,7 @@ export async function persistManyWorkoutBlocks(
           rpeTarget: exercise.rpeTarget,
           restSeconds: exercise.restSeconds,
           notes: exercise.notes,
+          metadata: (exercise.metadata ?? undefined) as Prisma.InputJsonValue | undefined,
         });
       }
     }

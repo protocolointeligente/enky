@@ -6,6 +6,7 @@ import type { PerformanceProfile } from "@/modules/assessments/performance-profi
 import type { ZoneProvenance } from "@/modules/workouts/zone-provenance";
 import { computeZones, sourceForMethod, zoneInputsFromProfile } from "@/modules/training-zones/zone-engine";
 import { zoneMethodsForModality } from "@/modules/training-zones/zone-registry";
+import { strengthLoadFromPercent, type LoadIncrement } from "@/modules/training-zones/strength-zones";
 import type { ZoneBand } from "@/modules/training-zones/training-zone-types";
 import { uiClasses } from "@/app/_lib/ui";
 
@@ -41,6 +42,128 @@ export function formatBand(band: ZoneBand): string {
     case "kg":
       return `${band.lowerBound}–${band.upperBound} kg`;
   }
+}
+
+// Carga por %1RM (fatia D2). O treinador escolhe um 1RM avaliado do atleta e um
+// intervalo de %; a carga sugerida (arredondada) preenche o campo de carga.
+export function StrengthZoneCalculator({
+  athleteId,
+  profile,
+  onApply,
+}: {
+  athleteId: string;
+  profile: PerformanceProfile | null;
+  onApply: (loadKg: number, provenance: ZoneProvenance) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [exerciseId, setExerciseId] = useState("");
+  const [low, setLow] = useState("70");
+  const [high, setHigh] = useState("75");
+  const [increment, setIncrement] = useState<LoadIncrement>(2.5);
+
+  if (!profile) return <p className="mt-1 text-[11px] text-faint">Carregando avaliações…</p>;
+
+  const options = profile.oneRepMax;
+  const selected = options.find((o) => o.exerciseId === exerciseId) ?? options[0] ?? null;
+  const result = selected
+    ? strengthLoadFromPercent(selected.metric.value, Number(low), Number(high), increment)
+    : null;
+
+  return (
+    <div className="mt-2 rounded-lg border border-line bg-deep/30 p-2.5">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="text-[11px] font-semibold text-electric-hi">Calcular carga por %1RM</span>
+        <span className="text-faint">{open ? "▾" : "▸"}</span>
+      </button>
+      {open &&
+        (options.length === 0 ? (
+          <div className="mt-2 rounded-md border border-orange/30 bg-orange/10 p-2 text-[11px] text-orange-hi">
+            Este atleta ainda não possui 1RM avaliado.{" "}
+            <Link href={`/treinador/atletas/${athleteId}`} className="font-medium underline">
+              Cadastrar avaliação
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-2 flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                className={`${uiClasses.select} h-8 py-1 text-xs`}
+                value={selected?.exerciseId ?? ""}
+                onChange={(e) => setExerciseId(e.target.value)}
+              >
+                {options.map((o) => (
+                  <option key={o.exerciseId} value={o.exerciseId}>
+                    {(o.exerciseName ?? "Exercício") + ` — ${o.metric.value} kg`}
+                    {o.metric.estimated ? " (est.)" : ""}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                className={`${uiClasses.input} h-8 w-16 py-1 text-xs`}
+                value={low}
+                onChange={(e) => setLow(e.target.value)}
+                aria-label="% mínimo"
+              />
+              <span className="text-[11px] text-faint">–</span>
+              <input
+                type="number"
+                className={`${uiClasses.input} h-8 w-16 py-1 text-xs`}
+                value={high}
+                onChange={(e) => setHigh(e.target.value)}
+                aria-label="% máximo"
+              />
+              <span className="text-[11px] text-faint">%</span>
+              <select
+                className={`${uiClasses.select} h-8 py-1 text-xs`}
+                value={increment}
+                onChange={(e) => setIncrement(Number(e.target.value) as LoadIncrement)}
+              >
+                {[0.5, 1, 2, 2.5, 5].map((i) => (
+                  <option key={i} value={i}>
+                    {i} kg
+                  </option>
+                ))}
+              </select>
+            </div>
+            {result && !result.ok && <p className="text-[11px] text-danger">{result.error.message}</p>}
+            {result && result.ok && selected && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted">
+                  {formatBand(result.zones[0]!)} · 1RM {selected.metric.value} kg
+                  {selected.metric.estimated ? " (estimado)" : ""}
+                </span>
+                <button
+                  type="button"
+                  className="rounded-md border border-line bg-surface px-2 py-1 text-[11px] text-ink hover:border-electric hover:text-electric-hi"
+                  onClick={() =>
+                    onApply(result.zones[0]!.lowerBound, {
+                      intensityMethod: "STRENGTH_PERCENT_1RM",
+                      zoneCode: result.zones[0]!.zoneCode,
+                      calculatedLowerBound: result.zones[0]!.lowerBound,
+                      calculatedUpperBound: result.zones[0]!.upperBound,
+                      unit: "kg",
+                      formulaCode: result.methodCode,
+                      formulaVersion: result.methodVersion,
+                      assessmentId: selected.metric.assessmentId,
+                      assessmentDate: selected.metric.assessmentDate,
+                      wasManuallyOverridden: false,
+                      overrideReason: null,
+                    })
+                  }
+                >
+                  Aplicar carga
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+    </div>
+  );
 }
 
 export function ZoneCalculator({
