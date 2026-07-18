@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { useRequireRole } from "@/app/_lib/use-session";
@@ -59,6 +59,22 @@ export default function TrainerAthletesPage() {
   const [inviteName, setInviteName] = useState("");
   const [inviting, setInviting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Carteira de 200 atletas: busca no cliente + render incremental. A lista
+  // vem inteira (payload pequeno), mas só renderizamos uma janela por vez para
+  // não jogar 200 linhas no DOM de uma vez. ponytail: paginação server-side só
+  // quando a carteira passar de alguns milhares.
+  const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(50);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return athletes;
+    return athletes.filter((a) =>
+      `${a.name ?? ""} ${a.email ?? ""}`.toLowerCase().includes(q),
+    );
+  }, [athletes, query]);
+  const visible = filtered.slice(0, visibleCount);
 
   const load = useCallback(() => {
     return apiFetch<{ athletes: RosterEntry[] }>("/api/trainer/athletes/roster")
@@ -160,14 +176,29 @@ export default function TrainerAthletesPage() {
         </section>
 
         <section className={`${uiClasses.card} flex flex-col gap-3`}>
-          <h2 className={uiClasses.subheading}>Meus atletas ({athletes.length})</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className={uiClasses.subheading}>Meus atletas ({athletes.length})</h2>
+            {athletes.length > 8 && (
+              <input
+                className={`${uiClasses.input} max-w-xs`}
+                placeholder="Buscar por nome ou e-mail..."
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setVisibleCount(50);
+                }}
+              />
+            )}
+          </div>
           {athletes.length === 0 ? (
             <p className="text-sm text-muted">
               Nenhum atleta ainda. Convide um atleta pelo formulário acima para começar.
             </p>
+          ) : filtered.length === 0 ? (
+            <p className="text-sm text-muted">Nenhum atleta corresponde à busca.</p>
           ) : (
             <ul className="flex flex-col gap-2">
-              {athletes.map((athlete) => {
+              {visible.map((athlete) => {
                 const label =
                   athlete.name ??
                   athlete.email ??
@@ -250,6 +281,15 @@ export default function TrainerAthletesPage() {
                 );
               })}
             </ul>
+          )}
+          {filtered.length > visible.length && (
+            <button
+              type="button"
+              className={`${uiClasses.buttonGhost} self-center`}
+              onClick={() => setVisibleCount((n) => n + 50)}
+            >
+              Carregar mais ({visible.length} de {filtered.length})
+            </button>
           )}
         </section>
       </div>

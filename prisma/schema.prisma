@@ -635,6 +635,11 @@ model Workout {
   externalActivity    ExternalActivity?
 
   @@index([organizationId, athleteId, plannedDate])
+  // Consulta ampla da carteira: calendário "todos os atletas" e o motor de
+  // atenção filtram por organização+treinador+data. Sem este composto, o
+  // índice só de trainerId varre todas as datas do treinador (pesa com 200
+  // atletas × meses de treino).
+  @@index([organizationId, trainerId, plannedDate])
   @@index([trainerId])
   @@index([generationBatchId])
 }
