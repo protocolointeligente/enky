@@ -36,6 +36,7 @@ const FILTER_STATUSES = [
   "CANCELLED",
 ] as const;
 const REVIEW_STATUSES = ["COMPLETED", "PARTIAL", "MISSED"];
+const RECENT_KEY = "enky:calendar-recent-athletes";
 
 interface CalendarCard {
   id: string;
@@ -50,9 +51,20 @@ interface CalendarCard {
   hasFeedback: boolean;
 }
 
-// Kept intentionally short (roadmap signal, not clutter): a single, honest
-// "em breve" affordance for the headline future capability. Everything the
-// domain can't do yet stays out of the menu rather than filling it.
+// Métricas vivas do atleta selecionado (report-free) — /api/trainer/athletes/:id/context.
+interface AthleteContext {
+  athlete: { athleteProfileId: string; name: string | null; email: string | null; age: number | null };
+  plan: { modality: string | null; goal: string | null; targetEvent: string | null; title: string } | null;
+  metrics: {
+    load: { ctl: number; atl: number; tsb: number; acwr: number | null; dataDays: number };
+    weeklyLoad: number | null;
+    readiness: { class: string | null; score: number | null; date: string | null };
+    formulaVersion: string;
+    lastUpdatedAt: string | null;
+    sufficient: boolean;
+  };
+}
+
 const FUTURE_ITEM = "Periodização";
 
 function isMovable(card: CalendarCard): boolean {
@@ -85,17 +97,28 @@ function statusTone(status: string): string {
   }
 }
 
+const READINESS_META: Record<string, { label: string; tone: string }> = {
+  boa: { label: "Boa", tone: "text-turq" },
+  atencao: { label: "Atenção", tone: "text-orange-hi" },
+  baixa: { label: "Baixa", tone: "text-danger" },
+  insuficiente: { label: "—", tone: "text-faint" },
+};
+
 export default function TrainerCalendarPage() {
   const { checked } = useRequireRole("TRAINER");
-  const [view, setView] = useState<"month" | "week">("month");
+  const [view, setView] = useState<"month" | "week" | "list">("month");
   const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [athleteId, setAthleteId] = useState("");
   const [modality, setModality] = useState("");
   const [status, setStatus] = useState("");
+  const [feedbackFilter, setFeedbackFilter] = useState<"" | "with" | "without">("");
   const [athleteSearch, setAthleteSearch] = useState("");
   const [athletes, setAthletes] = useState<AthleteOption[]>([]);
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [cards, setCards] = useState<CalendarCard[]>([]);
+  const [context, setContext] = useState<AthleteContext | null>(null);
+  const [contextLoading, setContextLoading] = useState(false);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,12 +128,13 @@ export default function TrainerCalendarPage() {
   const [clipboard, setClipboard] = useState<CalendarCard | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
-  const [leftOpen, setLeftOpen] = useState(true);
-  const [rightOpen, setRightOpen] = useState(true);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [summaryOpen, setSummaryOpen] = useState(true);
   const exerciseOptions = useExerciseOptions(checked);
 
   const days = useMemo(
-    () => (view === "month" ? getMonthMatrix(anchor).flat() : getWeekDays(anchor)),
+    () => (view === "week" ? getWeekDays(anchor) : getMonthMatrix(anchor).flat()),
     [view, anchor],
   );
   const range = useMemo(() => {
@@ -135,6 +159,7 @@ export default function TrainerCalendarPage() {
 
   useEffect(() => {
     if (!checked) return;
+    setRecentIds(JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]"));
     Promise.all([
       apiFetch<{ athletes: AthleteOption[] }>("/api/trainer/athletes"),
       apiFetch<{ templates: TemplateOption[] }>("/api/trainer/templates").catch(() => ({
@@ -152,25 +177,73 @@ export default function TrainerCalendarPage() {
     load().finally(() => setLoading(false));
   }, [checked, load]);
 
+  // Contexto vivo do atleta selecionado. "Todos os atletas" → sem contexto.
+  useEffect(() => {
+    if (!checked || !athleteId) {
+      setContext(null);
+      return;
+    }
+    let cancelled = false;
+    setContextLoading(true);
+    apiFetch<AthleteContext>(`/api/trainer/athletes/${athleteId}/context`)
+      .then((c) => !cancelled && setContext(c))
+      .catch(() => !cancelled && setContext(null))
+      .finally(() => !cancelled && setContextLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [checked, athleteId]);
+
+  function selectAthlete(id: string) {
+    setAthleteId(id);
+    setSelectorOpen(false);
+    setAthleteSearch("");
+    if (id) {
+      setRecentIds((prev) => {
+        const next = [id, ...prev.filter((x) => x !== id)].slice(0, 5);
+        localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+        return next;
+      });
+    }
+  }
+
+  // Filtro cliente por retorno (com/sem feedback). Modalidade/status são server-side.
+  const filteredCards = useMemo(() => {
+    if (!feedbackFilter) return cards;
+    return cards.filter((c) => (feedbackFilter === "with" ? c.hasFeedback : !c.hasFeedback));
+  }, [cards, feedbackFilter]);
+
   const cardsByDay = useMemo(() => {
     const map = new Map<string, CalendarCard[]>();
-    for (const card of cards) {
+    for (const card of filteredCards) {
       const list = map.get(card.plannedDate) ?? [];
       list.push(card);
       map.set(card.plannedDate, list);
     }
     return map;
-  }, [cards]);
+  }, [filteredCards]);
+
+  const listCards = useMemo(
+    () =>
+      [...filteredCards].sort(
+        (a, b) =>
+          a.plannedDate.localeCompare(b.plannedDate) ||
+          (a.plannedStartAt ?? "").localeCompare(b.plannedStartAt ?? ""),
+      ),
+    [filteredCards],
+  );
 
   const summary = useMemo(() => {
-    const sessions = cards.length;
-    const minutes = cards.reduce((sum, c) => sum + (c.plannedDurationMinutes ?? 0), 0);
-    const drafts = cards.filter((c) => c.status === "DRAFT").length;
-    const returns = cards.filter((c) => c.hasFeedback && REVIEW_STATUSES.includes(c.status)).length;
+    const sessions = filteredCards.length;
+    const minutes = filteredCards.reduce((sum, c) => sum + (c.plannedDurationMinutes ?? 0), 0);
+    const drafts = filteredCards.filter((c) => c.status === "DRAFT").length;
+    const returns = filteredCards.filter(
+      (c) => c.hasFeedback && REVIEW_STATUSES.includes(c.status),
+    ).length;
     const byModality = new Map<string, number>();
-    for (const c of cards) byModality.set(c.modality, (byModality.get(c.modality) ?? 0) + 1);
+    for (const c of filteredCards) byModality.set(c.modality, (byModality.get(c.modality) ?? 0) + 1);
     return { sessions, minutes, drafts, returns, byModality };
-  }, [cards]);
+  }, [filteredCards]);
 
   const visibleAthletes = useMemo(() => {
     const q = athleteSearch.trim().toLowerCase();
@@ -178,15 +251,23 @@ export default function TrainerCalendarPage() {
     return athletes.filter((a) => (a.name ?? a.email ?? "").toLowerCase().includes(q));
   }, [athletes, athleteSearch]);
 
+  const recentAthletes = useMemo(
+    () =>
+      recentIds
+        .map((id) => athletes.find((a) => a.athleteProfileId === id))
+        .filter((a): a is AthleteOption => a != null),
+    [recentIds, athletes],
+  );
+
   const selectedAthlete = athletes.find((a) => a.athleteProfileId === athleteId) ?? null;
+  const activeFilterCount = (modality ? 1 : 0) + (status ? 1 : 0) + (feedbackFilter ? 1 : 0);
 
   function step(direction: 1 | -1) {
     setAnchor((prev) =>
-      view === "month" ? addMonths(prev, direction) : addDays(prev, direction * 7),
+      view === "week" ? addDays(prev, direction * 7) : addMonths(prev, direction),
     );
   }
 
-  // Optimistic move: shift the card locally, persist, roll back (reload) on error.
   async function moveTo(card: CalendarCard, plannedDate: string) {
     if (plannedDate === card.plannedDate) return;
     setCards((prev) => prev.map((c) => (c.id === card.id ? { ...c, plannedDate } : c)));
@@ -218,6 +299,12 @@ export default function TrainerCalendarPage() {
     }
   }
 
+  function clearFilters() {
+    setModality("");
+    setStatus("");
+    setFeedbackFilter("");
+  }
+
   if (!checked) {
     return (
       <main className={uiClasses.page}>
@@ -227,20 +314,28 @@ export default function TrainerCalendarPage() {
   }
 
   return (
-    <main className={uiClasses.page} onClick={() => dayMenu && setDayMenu(null)}>
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-4">
-        {/* ── Cabeçalho do calendário ─────────────────────────────── */}
+    <main
+      className={uiClasses.page}
+      onClick={() => {
+        if (dayMenu) setDayMenu(null);
+        if (selectorOpen) setSelectorOpen(false);
+        if (filtersOpen) setFiltersOpen(false);
+      }}
+    >
+      <div className="mx-auto flex max-w-[1500px] flex-col gap-4">
+        {/* ── Athlete Context Header ───────────────────────────────── */}
         <header className="flex flex-col gap-4 rounded-2xl border border-line bg-petrol/70 p-4 sm:p-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            {/* Identidade + seletor pesquisável */}
+            <div className="flex min-w-0 items-center gap-3">
               <span
-                className="flex h-11 w-11 items-center justify-center rounded-xl font-display text-sm font-bold"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl font-display text-sm font-bold"
                 style={{
                   backgroundColor: selectedAthlete
-                    ? `${modalityMeta(modality || "RUNNING").accent}22`
+                    ? `${modalityMeta(context?.plan?.modality || modality || "RUNNING").accent}22`
                     : "var(--color-surface)",
                   color: selectedAthlete
-                    ? modalityMeta(modality || "RUNNING").accent
+                    ? modalityMeta(context?.plan?.modality || modality || "RUNNING").accent
                     : "var(--color-muted)",
                 }}
               >
@@ -248,13 +343,54 @@ export default function TrainerCalendarPage() {
                   ? initials(selectedAthlete.name ?? selectedAthlete.email ?? "?")
                   : "◎"}
               </span>
-              <div className="flex flex-col">
-                <span className={uiClasses.eyebrow}>Núcleo de prescrição</span>
-                <span className="font-display text-lg font-semibold text-ink">
-                  {selectedAthlete
-                    ? (selectedAthlete.name ?? selectedAthlete.email)
-                    : "Todos os atletas"}
-                </span>
+              <div className="flex min-w-0 flex-col">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectorOpen((v) => !v);
+                    }}
+                    className="flex items-center gap-1.5 text-left"
+                    aria-haspopup="listbox"
+                    aria-expanded={selectorOpen}
+                  >
+                    <span className="truncate font-display text-lg font-semibold text-ink">
+                      {selectedAthlete
+                        ? (selectedAthlete.name ?? selectedAthlete.email)
+                        : "Todos os atletas"}
+                    </span>
+                    <span className="text-faint">▾</span>
+                  </button>
+                  {selectorOpen && (
+                    <AthleteSelector
+                      search={athleteSearch}
+                      onSearch={setAthleteSearch}
+                      all={visibleAthletes}
+                      recents={recentAthletes}
+                      currentId={athleteId}
+                      onSelect={selectAthlete}
+                    />
+                  )}
+                </div>
+                {/* Sub-linha: idade · modalidade · objetivo/prova */}
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
+                  {selectedAthlete ? (
+                    <>
+                      {context?.athlete.age != null && <span>{context.athlete.age} anos</span>}
+                      {context?.plan?.modality && (
+                        <span className="text-faint">· {modalityLabel(context.plan.modality)}</span>
+                      )}
+                      {(context?.plan?.targetEvent || context?.plan?.goal) && (
+                        <span className="text-faint">
+                          · {context.plan.targetEvent ?? context.plan.goal}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-faint">Selecione um atleta para ver as métricas</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -271,220 +407,136 @@ export default function TrainerCalendarPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="rounded-lg border border-line px-2.5 py-2 text-muted transition-colors hover:bg-surface hover:text-ink"
-                onClick={() => step(-1)}
-                aria-label="Anterior"
-              >
-                ‹
-              </button>
-              <h1 className="min-w-[190px] text-center font-display text-2xl font-bold capitalize tracking-tight text-ink sm:text-[28px]">
-                {view === "month" ? monthLabel(anchor) : weekLabel(anchor)}
-              </h1>
-              <button
-                type="button"
-                className="rounded-lg border border-line px-2.5 py-2 text-muted transition-colors hover:bg-surface hover:text-ink"
-                onClick={() => step(1)}
-                aria-label="Próximo"
-              >
-                ›
-              </button>
-              <button
-                type="button"
-                className={`${uiClasses.buttonGhost} ml-1`}
-                onClick={() => setAnchor(new Date())}
-              >
-                Hoje
-              </button>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="tabular rounded-full border border-line px-3 py-1 text-xs font-medium text-muted">
-                {summary.sessions} {summary.sessions === 1 ? "sessão" : "sessões"} na janela
-              </span>
-              <div className="flex overflow-hidden rounded-lg border border-line">
-                <button
-                  type="button"
-                  className={`px-4 py-1.5 text-sm font-semibold transition-colors ${view === "week" ? "bg-orange text-onbrand" : "text-muted hover:bg-surface"}`}
-                  onClick={() => setView("week")}
-                >
-                  Semana
-                </button>
-                <button
-                  type="button"
-                  className={`px-4 py-1.5 text-sm font-semibold transition-colors ${view === "month" ? "bg-orange text-onbrand" : "text-muted hover:bg-surface"}`}
-                  onClick={() => setView("month")}
-                >
-                  Mês
-                </button>
+          {/* Faixa de métricas vivas */}
+          {selectedAthlete && (
+            <div className="flex flex-col gap-2 border-t border-line pt-3">
+              <div className="flex flex-wrap gap-2">
+                <MetricChip label="CTL" value={fmtNum(context?.metrics.load.ctl)} loading={contextLoading} />
+                <MetricChip label="ATL" value={fmtNum(context?.metrics.load.atl)} loading={contextLoading} />
+                <MetricChip label="TSB" value={fmtNum(context?.metrics.load.tsb)} loading={contextLoading} />
+                <MetricChip
+                  label="Carga semanal"
+                  value={context?.metrics.weeklyLoad != null ? String(context.metrics.weeklyLoad) : "—"}
+                  loading={contextLoading}
+                />
+                <MetricChip
+                  label="Prontidão"
+                  value={READINESS_META[context?.metrics.readiness.class ?? "insuficiente"]?.label ?? "—"}
+                  tone={READINESS_META[context?.metrics.readiness.class ?? "insuficiente"]?.tone}
+                  loading={contextLoading}
+                />
               </div>
+              {context && (
+                <p className="text-[11px] text-faint">
+                  {context.metrics.sufficient
+                    ? "Carga sRPE"
+                    : "Histórico insuficiente para leitura de carga confiável"}
+                  {" · fórmula v"}
+                  {context.metrics.formulaVersion}
+                  {context.metrics.lastUpdatedAt
+                    ? ` · atualizado ${context.metrics.lastUpdatedAt}`
+                    : " · sem dados recentes"}
+                  {" · "}
+                  <Link
+                    href={`/treinador/atletas/${athleteId}`}
+                    className="text-electric-hi hover:underline"
+                  >
+                    abrir 360º
+                  </Link>
+                </p>
+              )}
             </div>
-          </div>
-
-          {/* Filtros + toggles de rail */}
-          <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3">
-            <button
-              type="button"
-              className={uiClasses.buttonGhost}
-              onClick={() => setLeftOpen((v) => !v)}
-            >
-              {leftOpen ? "◂ Atletas" : "▸ Atletas"}
-            </button>
-            <select
-              className={uiClasses.select}
-              value={modality}
-              onChange={(e) => setModality(e.target.value)}
-            >
-              <option value="">Todas as modalidades</option>
-              {MODALITY_ORDER.map((m) => (
-                <option key={m} value={m}>
-                  {modalityLabel(m)}
-                </option>
-              ))}
-            </select>
-            <select
-              className={uiClasses.select}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="">Todos os status</option>
-              {FILTER_STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {statusLabel(s)}
-                </option>
-              ))}
-            </select>
-            {(modality || status || athleteId) && (
-              <button
-                type="button"
-                className={uiClasses.buttonGhost}
-                onClick={() => {
-                  setModality("");
-                  setStatus("");
-                  setAthleteId("");
-                }}
-              >
-                Limpar
-              </button>
-            )}
-            <button
-              type="button"
-              className={`${uiClasses.buttonGhost} ml-auto`}
-              onClick={() => setRightOpen((v) => !v)}
-            >
-              {rightOpen ? "Resumo ▸" : "◂ Resumo"}
-            </button>
-          </div>
+          )}
         </header>
 
-        {error && <p className={uiClasses.error}>{error}</p>}
-
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-          {/* ── Rail esquerdo ──────────────────────────────────────── */}
-          {leftOpen && (
-            <aside className="flex flex-col gap-4 lg:w-60 lg:shrink-0">
-              <div className="rounded-2xl border border-line bg-petrol/70">
-                <div className="flex items-center justify-between px-4 pt-3.5">
-                  <h3 className="font-display text-sm font-semibold text-ink">Atletas</h3>
-                  <Link
-                    href="/treinador/atletas"
-                    className="text-xs text-electric-hi hover:underline"
-                  >
-                    gerir
-                  </Link>
-                </div>
-                <div className="p-3">
-                  <input
-                    className={uiClasses.input}
-                    placeholder="Buscar atleta..."
-                    value={athleteSearch}
-                    onChange={(e) => setAthleteSearch(e.target.value)}
-                  />
-                  <div className="mt-2 flex max-h-72 flex-col gap-1 overflow-y-auto">
-                    <button
-                      type="button"
-                      onClick={() => setAthleteId("")}
-                      className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors ${
-                        athleteId === "" ? "bg-surface-2 text-ink" : "text-muted hover:bg-surface"
-                      }`}
-                    >
-                      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface text-xs">
-                        ◎
-                      </span>
-                      Todos os atletas
-                    </button>
-                    {visibleAthletes.map((a) => {
-                      const label = a.name ?? a.email ?? a.athleteProfileId;
-                      const active = athleteId === a.athleteProfileId;
-                      return (
-                        <button
-                          key={a.athleteProfileId}
-                          type="button"
-                          onClick={() => setAthleteId(a.athleteProfileId)}
-                          className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors ${
-                            active
-                              ? "bg-surface-2 text-ink ring-1 ring-orange/40"
-                              : "text-muted hover:bg-surface"
-                          }`}
-                        >
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface font-display text-[11px] font-bold text-muted">
-                            {initials(label)}
-                          </span>
-                          <span className="truncate">{label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-line bg-petrol/70">
-                <div className="flex items-center justify-between px-4 pt-3.5">
-                  <h3 className="font-display text-sm font-semibold text-ink">Templates</h3>
-                  <Link
-                    href="/treinador/templates"
-                    className="text-xs text-electric-hi hover:underline"
-                  >
-                    ver
-                  </Link>
-                </div>
-                <div className="flex flex-col gap-1.5 p-3">
-                  {templates.length === 0 ? (
-                    <p className="text-xs text-muted">Nenhum template ainda.</p>
-                  ) : (
-                    templates.slice(0, 6).map((t) => {
-                      const meta = modalityMeta(t.modality);
-                      return (
-                        <div
-                          key={t.id}
-                          className="flex items-center gap-2 rounded-lg bg-surface px-2.5 py-2"
-                          style={{ borderLeft: `3px solid ${meta.accent}` }}
-                        >
-                          <span style={{ color: meta.accent }}>{meta.icon}</span>
-                          <span className="truncate text-xs text-ink">{t.title}</span>
-                        </div>
-                      );
-                    })
-                  )}
-                  <p className="mt-0.5 text-[11px] text-faint">Aplique pelo menu “＋” de um dia.</p>
-                </div>
-              </div>
-            </aside>
-          )}
-
-          {/* ── Centro — grade ─────────────────────────────────────── */}
-          <section className="min-w-0 flex-1">
-            {loading && <p className="mb-2 text-sm text-muted">Carregando treinos...</p>}
-            <div
-              className={
-                view === "month"
-                  ? "grid grid-cols-7 gap-1.5"
-                  : "grid grid-cols-1 gap-2 sm:grid-cols-7"
-              }
+        {/* ── Barra de ferramentas: navegação + view + filtros ─────── */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-line px-2.5 py-2 text-muted transition-colors hover:bg-surface hover:text-ink"
+              onClick={() => step(-1)}
+              aria-label="Anterior"
             >
+              ‹
+            </button>
+            <h1 className="min-w-[180px] text-center font-display text-xl font-bold capitalize tracking-tight text-ink sm:text-2xl">
+              {view === "week" ? weekLabel(anchor) : monthLabel(anchor)}
+            </h1>
+            <button
+              type="button"
+              className="rounded-lg border border-line px-2.5 py-2 text-muted transition-colors hover:bg-surface hover:text-ink"
+              onClick={() => step(1)}
+              aria-label="Próximo"
+            >
+              ›
+            </button>
+            <button
+              type="button"
+              className={`${uiClasses.buttonGhost} ml-1`}
+              onClick={() => setAnchor(new Date())}
+            >
+              Hoje
+            </button>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="tabular rounded-full border border-line px-3 py-1 text-xs font-medium text-muted">
+              {summary.sessions} {summary.sessions === 1 ? "sessão" : "sessões"}
+            </span>
+
+            {/* Filtros compactos em popover */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setFiltersOpen((v) => !v);
+                }}
+                className={`${uiClasses.buttonGhost} ${activeFilterCount > 0 ? "text-electric-hi" : ""}`}
+                aria-expanded={filtersOpen}
+              >
+                Filtros{activeFilterCount > 0 ? ` · ${activeFilterCount}` : ""}
+              </button>
+              {filtersOpen && (
+                <FiltersPopover
+                  modality={modality}
+                  status={status}
+                  feedbackFilter={feedbackFilter}
+                  onModality={setModality}
+                  onStatus={setStatus}
+                  onFeedback={setFeedbackFilter}
+                  onClear={clearFilters}
+                />
+              )}
+            </div>
+
+            <div className="flex overflow-hidden rounded-lg border border-line">
+              {(["week", "month", "list"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  className={`px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                    view === v ? "bg-orange text-onbrand" : "text-muted hover:bg-surface"
+                  }`}
+                  onClick={() => setView(v)}
+                >
+                  {v === "week" ? "Semana" : v === "month" ? "Mês" : "Lista"}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {error && <p className={uiClasses.error}>{error}</p>}
+        {loading && <p className="text-sm text-muted">Carregando treinos...</p>}
+
+        {/* ── Calendário — área máxima, largura total ──────────────── */}
+        {view === "list" ? (
+          <ListView cards={listCards} onOpen={setSelected} />
+        ) : (
+          <section className="min-w-0">
+            <div className={view === "month" ? "grid grid-cols-7 gap-1.5" : "grid grid-cols-1 gap-2 sm:grid-cols-7"}>
               {view === "month" &&
                 WEEKDAY_LABELS.map((label) => (
                   <div
@@ -515,7 +567,9 @@ export default function TrainerCalendarPage() {
                       setDragId(null);
                       if (card) void moveTo(card, iso);
                     }}
-                    className={`group relative flex min-h-[122px] flex-col rounded-xl border p-1.5 transition-colors ${
+                    className={`group relative flex ${
+                      view === "week" ? "min-h-[180px]" : "min-h-[130px]"
+                    } flex-col rounded-xl border p-1.5 transition-colors ${
                       isDropTarget
                         ? "border-orange bg-orange/10"
                         : isToday(day)
@@ -575,31 +629,39 @@ export default function TrainerCalendarPage() {
               })}
             </div>
           </section>
+        )}
 
-          {/* ── Rail direito — resumo ──────────────────────────────── */}
-          {rightOpen && (
-            <aside className="flex flex-col gap-4 lg:w-64 lg:shrink-0">
-              <div className="rounded-2xl border border-line bg-petrol/70 p-4">
-                <h3 className="mb-3 font-display text-sm font-semibold text-ink">
-                  Resumo do período
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <Metric label="Sessões" value={String(summary.sessions)} />
-                  <Metric
-                    label="Duração"
-                    value={`${Math.floor(summary.minutes / 60)}h${String(summary.minutes % 60).padStart(2, "0")}`}
-                  />
-                  <Metric label="Rascunhos" value={String(summary.drafts)} tone="text-orange-hi" />
-                  <Metric label="Retornos" value={String(summary.returns)} tone="text-turq" />
-                </div>
+        {/* ── Resumo do período — recolhível, abaixo do calendário ── */}
+        <section className="rounded-2xl border border-line bg-petrol/70">
+          <button
+            type="button"
+            onClick={() => setSummaryOpen((v) => !v)}
+            aria-expanded={summaryOpen}
+            className="flex w-full items-center justify-between px-4 py-3 text-left"
+          >
+            <h3 className="font-display text-sm font-semibold text-ink">Resumo do período</h3>
+            <span className="text-faint">{summaryOpen ? "▾" : "▸"}</span>
+          </button>
+          {summaryOpen && (
+            <div className="grid gap-4 border-t border-line p-4 lg:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2">
+                <Metric label="Sessões" value={String(summary.sessions)} />
+                <Metric
+                  label="Duração"
+                  value={`${Math.floor(summary.minutes / 60)}h${String(summary.minutes % 60).padStart(2, "0")}`}
+                />
+                <Metric label="Rascunhos" value={String(summary.drafts)} tone="text-orange-hi" />
+                <Metric label="Retornos" value={String(summary.returns)} tone="text-turq" />
               </div>
 
-              <div className="rounded-2xl border border-line bg-petrol/70 p-4">
-                <h3 className="mb-3 font-display text-sm font-semibold text-ink">Por modalidade</h3>
+              <div>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-faint">
+                  Por modalidade
+                </h4>
                 {summary.sessions === 0 ? (
                   <p className="text-xs text-muted">Sem treinos no período.</p>
                 ) : (
-                  <div className="flex flex-col gap-2.5">
+                  <div className="flex flex-col gap-2">
                     {MODALITY_ORDER.filter((m) => summary.byModality.get(m)).map((m) => {
                       const count = summary.byModality.get(m) ?? 0;
                       const pct = Math.round((count / summary.sessions) * 100);
@@ -628,9 +690,11 @@ export default function TrainerCalendarPage() {
                 )}
               </div>
 
-              {(summary.drafts > 0 || summary.returns > 0) && (
-                <div className="rounded-2xl border border-line bg-petrol/70 p-4">
-                  <h3 className="mb-2 font-display text-sm font-semibold text-ink">Atenção</h3>
+              <div>
+                <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-faint">Atenção</h4>
+                {summary.drafts === 0 && summary.returns === 0 ? (
+                  <p className="text-xs text-muted">Nada aguardando.</p>
+                ) : (
                   <div className="flex flex-col gap-2">
                     {summary.drafts > 0 && (
                       <div className="rounded-lg border border-orange/30 bg-orange/10 px-3 py-2 text-xs text-orange-hi">
@@ -641,25 +705,16 @@ export default function TrainerCalendarPage() {
                     )}
                     {summary.returns > 0 && (
                       <div className="rounded-lg border border-turq/30 bg-turq/10 px-3 py-2 text-xs text-turq">
-                        {summary.returns} {summary.returns === 1 ? "retorno" : "retornos"} de atleta
-                        para revisar.
+                        {summary.returns} {summary.returns === 1 ? "retorno" : "retornos"} para
+                        revisar.
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-
-              <div className="rounded-2xl border border-dashed border-line px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-faint">
-                  Próximas fases
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  Carga fisiológica, periodização e sugestões automáticas da ENKY Intelligence.
-                </p>
+                )}
               </div>
-            </aside>
+            </div>
           )}
-        </div>
+        </section>
       </div>
 
       <PrescriptionModal
@@ -700,6 +755,250 @@ export default function TrainerCalendarPage() {
         )}
       </Modal>
     </main>
+  );
+}
+
+function fmtNum(n: number | undefined): string {
+  return n == null ? "—" : Math.round(n).toString();
+}
+
+// Seletor de atleta pesquisável: busca, recentes, todos. Troca sem navegação.
+function AthleteSelector({
+  search,
+  onSearch,
+  all,
+  recents,
+  currentId,
+  onSelect,
+}: {
+  search: string;
+  onSearch: (v: string) => void;
+  all: AthleteOption[];
+  recents: AthleteOption[];
+  currentId: string;
+  onSelect: (id: string) => void;
+}) {
+  const row = (a: AthleteOption) => {
+    const label = a.name ?? a.email ?? a.athleteProfileId;
+    const active = currentId === a.athleteProfileId;
+    return (
+      <button
+        key={a.athleteProfileId}
+        type="button"
+        role="option"
+        aria-selected={active}
+        onClick={() => onSelect(a.athleteProfileId)}
+        className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors ${
+          active ? "bg-surface-2 text-ink ring-1 ring-orange/40" : "text-muted hover:bg-surface"
+        }`}
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface font-display text-[11px] font-bold text-muted">
+          {initials(label)}
+        </span>
+        <span className="truncate">{label}</span>
+      </button>
+    );
+  };
+
+  return (
+    <div
+      role="listbox"
+      onClick={(e) => e.stopPropagation()}
+      className="absolute left-0 top-8 z-30 w-72 rounded-xl border border-line-strong bg-petrol p-2 shadow-2xl shadow-black/50"
+    >
+      <input
+        autoFocus
+        className={uiClasses.input}
+        placeholder="Buscar atleta..."
+        value={search}
+        onChange={(e) => onSearch(e.target.value)}
+      />
+      <div className="mt-2 flex max-h-72 flex-col gap-1 overflow-y-auto">
+        <button
+          type="button"
+          role="option"
+          aria-selected={currentId === ""}
+          onClick={() => onSelect("")}
+          className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors ${
+            currentId === "" ? "bg-surface-2 text-ink" : "text-muted hover:bg-surface"
+          }`}
+        >
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-surface text-xs">◎</span>
+          Todos os atletas
+        </button>
+        {!search && recents.length > 0 && (
+          <>
+            <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
+              Recentes
+            </p>
+            {recents.map(row)}
+            <p className="px-2 pt-1 text-[10px] font-semibold uppercase tracking-wide text-faint">
+              Todos
+            </p>
+          </>
+        )}
+        {all.map(row)}
+        {all.length === 0 && <p className="px-2 py-3 text-xs text-muted">Nenhum atleta encontrado.</p>}
+      </div>
+    </div>
+  );
+}
+
+function FiltersPopover({
+  modality,
+  status,
+  feedbackFilter,
+  onModality,
+  onStatus,
+  onFeedback,
+  onClear,
+}: {
+  modality: string;
+  status: string;
+  feedbackFilter: "" | "with" | "without";
+  onModality: (v: string) => void;
+  onStatus: (v: string) => void;
+  onFeedback: (v: "" | "with" | "without") => void;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      onClick={(e) => e.stopPropagation()}
+      className="absolute right-0 top-9 z-30 flex w-64 flex-col gap-3 rounded-xl border border-line-strong bg-petrol p-3 shadow-2xl shadow-black/50"
+    >
+      <div>
+        <label className={uiClasses.label}>Modalidade</label>
+        <select className={uiClasses.select} value={modality} onChange={(e) => onModality(e.target.value)}>
+          <option value="">Todas</option>
+          {MODALITY_ORDER.map((m) => (
+            <option key={m} value={m}>
+              {modalityLabel(m)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={uiClasses.label}>Status</label>
+        <select className={uiClasses.select} value={status} onChange={(e) => onStatus(e.target.value)}>
+          <option value="">Todos</option>
+          {FILTER_STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {statusLabel(s)}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={uiClasses.label}>Feedback</label>
+        <div className="flex overflow-hidden rounded-lg border border-line">
+          {(
+            [
+              ["", "Todos"],
+              ["with", "Com"],
+              ["without", "Sem"],
+            ] as const
+          ).map(([val, lbl]) => (
+            <button
+              key={val}
+              type="button"
+              onClick={() => onFeedback(val)}
+              className={`flex-1 px-2 py-1.5 text-xs font-semibold transition-colors ${
+                feedbackFilter === val ? "bg-orange text-onbrand" : "text-muted hover:bg-surface"
+              }`}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button type="button" className={uiClasses.buttonGhost} onClick={onClear}>
+        Limpar filtros
+      </button>
+      <p className="text-[10px] text-faint">Grupos e treinador chegam quando o domínio existir.</p>
+    </div>
+  );
+}
+
+// Vista em LISTA — cronológica, mesma ação de abrir/cores/status dos cards.
+function ListView({
+  cards,
+  onOpen,
+}: {
+  cards: CalendarCard[];
+  onOpen: (card: CalendarCard) => void;
+}) {
+  if (cards.length === 0) {
+    return (
+      <div className={`${uiClasses.card} text-sm text-muted`}>Nenhum treino no período.</div>
+    );
+  }
+  const byDay = new Map<string, CalendarCard[]>();
+  for (const c of cards) {
+    const list = byDay.get(c.plannedDate) ?? [];
+    list.push(c);
+    byDay.set(c.plannedDate, list);
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {[...byDay.entries()].map(([date, dayCards]) => (
+        <div key={date} className="rounded-2xl border border-line bg-petrol/70 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-faint">
+            {new Date(`${date}T00:00:00`).toLocaleDateString("pt-BR", {
+              weekday: "long",
+              day: "2-digit",
+              month: "short",
+            })}
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {dayCards.map((card) => {
+              const meta = modalityMeta(card.modality);
+              return (
+                <button
+                  key={card.id}
+                  type="button"
+                  onClick={() => onOpen(card)}
+                  style={{ borderLeftColor: meta.accent }}
+                  className="flex items-center gap-2.5 rounded-lg border-l-[3px] bg-surface px-3 py-2 text-left transition-colors hover:bg-surface-2"
+                >
+                  <span style={{ color: meta.accent }}>{meta.icon}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                    {card.title}
+                  </span>
+                  <span className="truncate text-xs text-muted">{card.athleteName ?? "—"}</span>
+                  {card.hasFeedback && (
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-turq" title="Feedback pendente" />
+                  )}
+                  <span className={`shrink-0 text-xs font-medium ${statusTone(card.status)}`}>
+                    {statusLabel(card.status)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MetricChip({
+  label,
+  value,
+  tone,
+  loading,
+}: {
+  label: string;
+  value: string;
+  tone?: string;
+  loading?: boolean;
+}) {
+  return (
+    <div className="flex min-w-[84px] flex-col rounded-lg border border-line bg-surface px-3 py-1.5">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-faint">{label}</span>
+      <span className={`tabular font-display text-lg font-bold ${tone ?? "text-ink"}`}>
+        {loading ? "…" : value}
+      </span>
+    </div>
   );
 }
 
