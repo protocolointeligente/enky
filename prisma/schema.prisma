@@ -218,6 +218,29 @@ enum DerivedMetricStatus {
   INVALID
 }
 
+// Avaliações do atleta (etapa feat/athlete-assessments-prescription-zones).
+// Ciclo de vida versionado: uma avaliação nova NÃO apaga a anterior — a antiga
+// vira SUPERSEDED e o histórico é preservado. EXPIRED é derivado de validUntil.
+enum AssessmentStatus {
+  DRAFT
+  VALID
+  SUPERSEDED
+  EXPIRED
+  INVALID
+}
+
+// Procedência do dado. MEASURED (medido) nunca é substituído silenciosamente
+// por ESTIMATED (estimado) — a diferença é sempre visível ao treinador.
+enum AssessmentSource {
+  MEASURED
+  ESTIMATED
+  IMPORTED
+  MANUAL
+  DEVICE
+  LAB
+  FIELD_TEST
+}
+
 // Ciclo de vida do Insight persistido (02H → 03). Máquina de estados completa:
 // NEW (exposto, não visto) → VIEWED (treinador abriu) → ACCEPTED/IGNORED (decisão)
 // → RESOLVED (situação encerrada, com `outcome` observado). EXPIRED é aplicado
@@ -282,6 +305,7 @@ model User {
   requestedGenerationBatches GenerationBatch[]        @relation("GenerationRequestedBy")
   auditLogs                  AuditLog[]
   resolvedInsights           Insight[]                @relation("InsightResolvedBy")
+  performedAssessments       Assessment[]             @relation("AssessmentPerformedBy")
 
   @@index([email])
 }
@@ -329,6 +353,7 @@ model Organization {
   exercises            Exercise[]
   testResults          TestResult[]
   derivedMetrics       DerivedMetric[]
+  assessments          Assessment[]
   auditLogs            AuditLog[]
   insights             Insight[]
   readinessCheckIns    ReadinessCheckIn[]
@@ -393,6 +418,7 @@ model AthleteProfile {
   generationBatches   GenerationBatch[]
   testResults         TestResult[]
   derivedMetrics      DerivedMetric[]
+  assessments         Assessment[]
   reports             Report[]
   purchases           MarketplacePurchase[]
   invitations         AthleteInvitation[]
@@ -830,6 +856,42 @@ model TestResult {
   trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, athleteId, performedAt])
+}
+
+// Avaliação fisiológica/esportiva do atleta, VERSIONADA. Uma nova avaliação do
+// mesmo tipo não apaga a anterior: a antiga vira SUPERSEDED (histórico
+// preservado). As MEDIÇÕES do protocolo (FC repouso/máx; VDOT; FTP; CSS; 1RM…)
+// vivem em `measurements` (JSON validado por Zod por protocolo — mesmo padrão de
+// Periodization.parameters, nunca lido cru); as saídas derivadas por fórmula
+// formal ficam em `derivedMetrics`. `TestResult` (genérico, sem uso) NÃO é
+// substituído aqui — ver docs/ENKY_ASSESSMENTS_AND_ZONES_CURRENT_STATE.md.
+model Assessment {
+  id                String           @id @default(uuid())
+  organizationId    String
+  athleteId         String
+  assessmentType    String // HEART_RATE | RUNNING | CYCLING | SWIMMING | STRENGTH | BODY_COMPOSITION
+  modality          Modality? // nem todo tipo tem modalidade única (FC, composição)
+  protocolCode      String
+  protocolVersion   String           @default("1.0.0")
+  assessmentDate    DateTime         @db.Date
+  performedByUserId String?
+  source            AssessmentSource @default(MANUAL)
+  status            AssessmentStatus @default(DRAFT)
+  confidence        ConfidenceLevel  @default(NOT_ASSESSED)
+  validUntil        DateTime?        @db.Date
+  measurements      Json // entradas do protocolo (Zod)
+  derivedMetrics    Json? // saídas derivadas quando há fórmula formal
+  notes             String?
+  createdAt         DateTime         @default(now()) @db.Timestamptz
+  updatedAt         DateTime         @updatedAt @db.Timestamptz
+  lockVersion       Int              @default(1)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  performedBy  User?          @relation("AssessmentPerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, athleteId, assessmentType, assessmentDate], map: "idx_assessment_athlete_type_date")
+  @@index([organizationId, athleteId, status], map: "idx_assessment_athlete_status")
 }
 
 model DerivedMetric {

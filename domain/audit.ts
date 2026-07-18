@@ -39,6 +39,12 @@ export type AuditAction =
   | "DELETE_PERIODIZATION"
   | "GENERATE_WEEK"
   | "GENERATE_CYCLE"
+  // Etapa de avaliações e zonas. Dados de saúde/performance do atleta —
+  // sempre auditados. Notas livres e valores clínicos NÃO entram no log
+  // (só ids/ação), conforme a regra de redação da etapa.
+  | "CREATE_ASSESSMENT"
+  | "UPDATE_ASSESSMENT_DRAFT"
+  | "VALIDATE_ASSESSMENT"
   // Fase 9 — Admin Operacional. Toda ação do ADMIN/SUPERADMIN é cross-tenant
   // e por isso sempre auditada, inclusive a LEITURA de detalhes de uma
   // organização: quem inspecionou os dados de qual tenant é exatamente o que
