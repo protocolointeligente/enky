@@ -106,9 +106,17 @@ interface SessionSuggestion {
   predictedLoad: number | null;
   why: string;
 }
+interface WeekAnalysis {
+  internalLoad: number;
+  qualityCount: number;
+  sessionCount: number;
+  intensity: { lowLoadPct: number | null; qualityLoadPct: number | null };
+  alerts: { code: string; severity: string; message: string }[];
+}
 interface WeekSuggestion {
   catalogVersion: string;
   sessions: SessionSuggestion[];
+  analysis: WeekAnalysis;
   confidence: string;
 }
 
@@ -714,6 +722,38 @@ export function PeriodizationStrategyModal({
                     </div>
                   ))
                 )}
+                {/* Recálculo da semana (Fase 4) */}
+                <div className="rounded-lg border border-line bg-deep/40 p-3 text-[11px]">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-faint">
+                    <span>
+                      Carga da semana <span className="tabular text-ink">{suggestions.analysis.internalLoad} UA</span>
+                    </span>
+                    {suggestions.analysis.intensity.qualityLoadPct != null && (
+                      <span>
+                        Polarização{" "}
+                        <span className="tabular text-ink">
+                          {suggestions.analysis.intensity.lowLoadPct}% fácil /{" "}
+                          {suggestions.analysis.intensity.qualityLoadPct}% qualidade
+                        </span>
+                      </span>
+                    )}
+                    <span>
+                      <span className="tabular text-ink">{suggestions.analysis.qualityCount}</span> de{" "}
+                      <span className="tabular text-ink">{suggestions.analysis.sessionCount}</span> de qualidade
+                    </span>
+                  </div>
+                  {suggestions.analysis.alerts.length > 0 && (
+                    <ul className="mt-2 flex flex-col gap-1">
+                      {suggestions.analysis.alerts.map((a, i) => (
+                        <li key={i} className={a.severity === "warning" ? "text-orange" : "text-faint"}>
+                          {a.severity === "warning" ? "⚠ " : "· "}
+                          {a.message}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
                 <p className="text-[11px] text-faint">
                   Exemplo da semana de maior carga · catálogo {suggestions.catalogVersion}. As
                   sessões só são criadas (como rascunho) quando você gerar o ciclo depois de salvar.

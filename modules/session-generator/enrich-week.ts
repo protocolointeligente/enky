@@ -10,6 +10,7 @@ import {
   recommendSessions,
 } from "@/modules/training-library/session-catalog";
 import type { CatalogSession, EnergySystem } from "@/modules/training-library/session-catalog-types";
+import { analyzeWeek, type WeekAnalysis } from "@/modules/adaptation-engine/week-analysis";
 
 // ============================================================================
 // MOTOR DE SUGESTÃO — enriquecimento de sessões (ENKY Intelligence 2.0 · Fase 3).
@@ -58,6 +59,8 @@ export interface SessionSuggestion {
 export interface WeekSuggestion {
   catalogVersion: string;
   sessions: SessionSuggestion[];
+  /** Recálculo da semana (Fase 4): carga, polarização, equilíbrio, alertas. */
+  analysis: WeekAnalysis;
   confidence: WeekPlan["confidence"];
   rationale: WeekPlan["rationale"];
 }
@@ -155,11 +158,17 @@ export function enrichSession(session: PlannedSession, context: WeekContext): Se
   };
 }
 
-/** Enriquece um plano de semana inteiro (saída do planWeek) com o catálogo. */
+/** Enriquece um plano de semana inteiro (saída do planWeek) com o catálogo e
+ *  recalcula a estrutura da semana (Fase 4). */
 export function enrichWeekPlan(plan: WeekPlan, context: WeekContext): WeekSuggestion {
+  const sessions = plan.sessions.map((s) => enrichSession(s, context));
+  const analysis = analyzeWeek(
+    sessions.map((s) => ({ modality: s.modality, kind: s.kind, load: s.predictedLoad ?? 0 })),
+  );
   return {
     catalogVersion: CATALOG_VERSION,
-    sessions: plan.sessions.map((s) => enrichSession(s, context)),
+    sessions,
+    analysis,
     confidence: plan.confidence,
     rationale: plan.rationale,
   };

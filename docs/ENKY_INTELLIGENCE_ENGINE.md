@@ -44,7 +44,7 @@ React**. O que já existe é reaproveitado — não reconstruído.
 | `modules/training-library` | Catálogo de sessões com evidência/referência/contraindicação | ✅ **entregue** (Fase 2) |
 | `modules/session-generator` | Geração/enriquecimento de sessão a partir do catálogo | ✅ **entregue** (Fase 3 — camada de enriquecimento sobre `planWeek` + catálogo) |
 | `modules/load-simulation` | Simular CTL/ATL/TSB de alterações antes de salvar | ✅ **entregue** (Fase 6 — projeção pura sobre `load-state`) |
-| `modules/adaptation-engine` | Ajuste por feedback/aderência/lesão | ⏳ Fase 5 — pendente |
+| `modules/adaptation-engine` | Recálculo da semana + alertas (Fase 4) | ✅ **entregue** (`analyzeWeek`) |
 
 > Optamos por **não** criar módulos vazios só para "bater" a lista da Fase 8:
 > scaffolding sem conteúdo é dívida, não arquitetura. Os módulos pendentes serão
@@ -59,8 +59,8 @@ React**. O que já existe é reaproveitado — não reconstruído.
 | **1 — Motor estratégico** | macrociclo/meso/micro, fases, taper, deload, onda de carga a partir da prova + estado do atleta | ✅ **entregue** (`modules/periodization-engine`, 18 testes) |
 | **2 — Biblioteca científica** | catálogo de sessões por modalidade com evidência, contraindicação, pré-requisito | ✅ **entregue** (`modules/training-library`, 10 testes, rota + página de navegação; ver [`TRAINING_LIBRARY.md`](./TRAINING_LIBRARY.md)) |
 | **3 — Motor de sugestão** | gerar plano/meso/micro/semana/dia com "por quê", sistema energético, risco, confiança | ✅ **entregue** — `modules/session-generator` casa cada sessão gerada com o catálogo (objetivo, sistema energético, adaptação, risco, carga prevista, evidência, referências); rota de preview `POST …/session-suggestions` + tie-in na UI do motor estratégico. Persistência DRAFT segue no `generate-week`; granularidade "só um dia" pendente |
-| **4 — Editor inteligente** | recálculo de volume/carga/CTL/ATL/TSB ao editar | ⏳ pendente (núcleos de cálculo já existem) |
-| **5 — Regeneração** | regenerar preservando aceitos/anotações/ajustes | ⏳ pendente |
+| **4 — Editor inteligente** | recálculo de volume/carga/polarização/equilíbrio/alertas ao editar | ✅ **entregue** — `modules/adaptation-engine` (`analyzeWeek`), surfaceado no preview; ver [`ADAPTATION_ENGINE.md`](./ADAPTATION_ENGINE.md) |
+| **5 — Regeneração** | regenerar preservando aceitos/anotações/ajustes | ✅ **já implementada** na geração assistida (`generate-week`: só refaz DRAFT+gerado+não-editado; publicados/editados/manuais e feedbacks intactos; 409 se houver conflito) — verificada e documentada |
 | **6 — Simulação** | prever CTL/ATL/TSB/volume antes de salvar | ✅ **entregue** — `modules/load-simulation` projeta CTL/ATL/TSB por cima do histórico real (mesma EWMA do `load-state`); rota `POST …/strategy/simulate` + botão "Simular carga" no modo estratégico; ver [`LOAD_SIMULATION.md`](./LOAD_SIMULATION.md) |
 | **7 — Explicabilidade** | "por quê", "e se", evidências, confiança, versão da regra | ✅ **transversal** — `rationale.rules/references/missingData/caveats` + `confidence` em toda saída dos motores |
 | **8 — Arquitetura** | módulos desacoplados, sem ciência em React | ✅ respeitada; módulos pendentes catalogados acima |
@@ -108,9 +108,9 @@ detalhada das regras.
 
 ## 6. Próxima fatia recomendada
 
-**Fase 4/5 — editor inteligente + regeneração:** ao editar uma sessão, recalcular
-volume/carga/CTL/ATL/TSB da semana (reaproveitando `load-simulation`); e regenerar
-sessão/micro/meso/plano **preservando** o que o treinador já aceitou/editou (o
-`trainerModified` já existe no `Workout` e é respeitado pela geração assistida).
-Depois, **Fase 9** (mover geração pesada para background job quando o custo
-justificar).
+**Fase 9 — performance:** mover a geração do ciclo inteiro (e a simulação, que
+enriquece todas as semanas) para um background job com cache, quando o custo
+justificar — hoje é síncrono e barato (ms), mas um plano de 30 semanas × N
+sessões cresce. Em paralelo, ligar o `analyzeWeek` (Fase 4) ao **editor de treino
+real** (recalcular a semana ao salvar uma edição) e ampliar o escopo de
+regeneração (por sessão e por mesociclo).
