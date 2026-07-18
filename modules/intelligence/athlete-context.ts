@@ -10,14 +10,21 @@ import { computeLoadState, LOAD_FORMULA_VERSION, type LoadState } from "./load-s
 
 const LOAD_WINDOW_DAYS = 90; // histórico para a EWMA da CTL (42d) fazer sentido
 const WEEKLY_LOAD_DAYS = 7;
+const ADHERENCE_DAYS = 28; // aderência das últimas 4 semanas (janela do treinador)
+const PAIN_ALERT_LEVEL = 4; // dor ≥ 4 conta como alerta (mesmo corte da página do atleta)
 // Abaixo disto a leitura de carga é fraca demais para decidir — a UI mostra
 // "histórico insuficiente" em vez de um número que finge precisão.
 const SUFFICIENT_DATA_DAYS = 14;
+
+const REVIEW_STATUSES = new Set(["COMPLETED", "PARTIAL", "MISSED"]);
 
 export interface AthleteContextMetrics {
   load: LoadState; // ctl/atl/tsb/acwr/monotonia/strain/ramp/dataDays
   weeklyLoad: number | null; // soma de sRPE dos últimos 7 dias (null se sem dado)
   readiness: { class: ReadinessClass | null; score: number | null; date: string | null };
+  adherence: { due: number; done: number; pct: number | null }; // últimas 4 semanas
+  pain: { latest: number | null; alerts: number }; // último nível + nº de alertas na janela
+  feedbackPending: number; // retornos do atleta aguardando revisão do treinador
   formulaVersion: string; // versão da fórmula de carga (rastreabilidade)
   lastUpdatedAt: string | null; // data do dado mais recente (treino realizado/check-in)
   sufficient: boolean; // há histórico suficiente para a carga ser confiável?
@@ -61,13 +68,18 @@ export async function getAthleteContextMetrics(
   loadSince.setDate(loadSince.getDate() - LOAD_WINDOW_DAYS);
   const weekSince = new Date(now);
   weekSince.setDate(weekSince.getDate() - WEEKLY_LOAD_DAYS);
+  const adherenceSince = new Date(now);
+  adherenceSince.setDate(adherenceSince.getDate() - ADHERENCE_DAYS);
 
   const workouts = await prisma.workout.findMany({
     where: { organizationId, athleteId, plannedDate: { gte: loadSince, lte: now } },
     orderBy: { plannedDate: "asc" },
     select: {
       plannedDate: true,
-      feedback: { select: { sessionRpeLoad: true, createdAt: true } },
+      status: true,
+      feedback: {
+        select: { sessionRpeLoad: true, painLevel: true, createdAt: true },
+      },
     },
   });
 
@@ -76,17 +88,48 @@ export async function getAthleteContextMetrics(
   let weeklyHasData = false;
   let lastUpdatedAt: Date | null = null;
 
+  // Aderência (últimas 4 semanas): realizados / previstos.
+  let due = 0;
+  let done = 0;
+  // Dor: nível mais recente na janela + nº de alertas (dor ≥ 4).
+  let latestPain: number | null = null;
+  let latestPainAt: Date | null = null;
+  let painAlerts = 0;
+  // Retornos aguardando revisão.
+  let feedbackPending = 0;
+
   for (const w of workouts) {
-    if (w.feedback?.sessionRpeLoad == null) continue;
-    const load = Number(w.feedback.sessionRpeLoad);
-    const day = isoDay(w.plannedDate);
-    loadByDay.set(day, (loadByDay.get(day) ?? 0) + load);
-    if (w.plannedDate >= weekSince) {
-      weeklyLoad += load;
-      weeklyHasData = true;
+    const load = w.feedback?.sessionRpeLoad != null ? Number(w.feedback.sessionRpeLoad) : null;
+    if (load != null) {
+      const day = isoDay(w.plannedDate);
+      loadByDay.set(day, (loadByDay.get(day) ?? 0) + load);
+      if (w.plannedDate >= weekSince) {
+        weeklyLoad += load;
+        weeklyHasData = true;
+      }
     }
-    const stamp = w.feedback.createdAt ?? w.plannedDate;
-    if (!lastUpdatedAt || stamp > lastUpdatedAt) lastUpdatedAt = stamp;
+
+    const stamp = w.feedback?.createdAt ?? w.plannedDate;
+    if (w.feedback && (!lastUpdatedAt || stamp > lastUpdatedAt)) lastUpdatedAt = stamp;
+
+    if (w.plannedDate >= adherenceSince) {
+      if (["COMPLETED", "PARTIAL", "MISSED"].includes(w.status)) {
+        due += 1;
+        if (w.status === "COMPLETED" || w.status === "PARTIAL") done += 1;
+      } else if (w.status === "PUBLISHED" && w.plannedDate < now) {
+        due += 1; // publicado e vencido sem retorno também estava previsto
+      }
+    }
+
+    if (w.feedback?.painLevel != null) {
+      if (w.feedback.painLevel >= PAIN_ALERT_LEVEL) painAlerts += 1;
+      if (!latestPainAt || w.plannedDate > latestPainAt) {
+        latestPain = w.feedback.painLevel;
+        latestPainAt = w.plannedDate;
+      }
+    }
+
+    if (w.feedback && REVIEW_STATUSES.has(w.status)) feedbackPending += 1;
   }
 
   const latestCheckIn = await prisma.readinessCheckIn.findFirst({
@@ -125,6 +168,9 @@ export async function getAthleteContextMetrics(
     load,
     weeklyLoad: weeklyHasData ? Math.round(weeklyLoad) : null,
     readiness,
+    adherence: { due, done, pct: due > 0 ? Math.round((done / due) * 100) : null },
+    pain: { latest: latestPain, alerts: painAlerts },
+    feedbackPending,
     formulaVersion: LOAD_FORMULA_VERSION,
     lastUpdatedAt: lastUpdatedAt ? isoDay(lastUpdatedAt) : null,
     sufficient: load.dataDays >= SUFFICIENT_DATA_DAYS,
