@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { PwaRegister } from "@/components/pwa-register";
 
 // Brand typefaces (manual §6): Space Grotesk for headings, Inter for interface
 // and body. Self-hosted by next/font — no external CDN request at runtime.
@@ -21,6 +22,14 @@ export const metadata: Metadata = {
   title: "ENKY — Inteligência para cada decisão",
   description:
     "Plataforma de performance humana para treinadores: prescreva, acompanhe e decida com dados — carga, prontidão e evolução do atleta em um só lugar. Comece grátis com 1 atleta.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "ENKY" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#04202b",
+  // Evita zoom acidental durante o treino, respeitando safe-area de aparelhos com recorte.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -39,7 +48,10 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <PwaRegister />
+      </body>
     </html>
   );
 }
