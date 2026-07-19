@@ -14,7 +14,7 @@ const SUBAREAS: { label: string; desc: string; href: string | null }[] = [
   { label: "Clientes", desc: "Base de clientes, atletas e pagadores.", href: "/treinador/gestao/clientes" },
   { label: "Planos e serviços", desc: "Produtos comerciais da assessoria.", href: "/treinador/gestao/servicos" },
   { label: "Contratos", desc: "Contratos, renovações e cancelamentos.", href: "/treinador/gestao/contratos" },
-  { label: "Mensalidades", desc: "Cobranças, vencimentos e pagamentos.", href: null },
+  { label: "Mensalidades", desc: "Cobranças, vencimentos e pagamentos.", href: "/treinador/gestao/mensalidades" },
   { label: "Financeiro", desc: "Receitas, inadimplência e indicadores.", href: null },
   { label: "Treinadores", desc: "Equipe, papéis e carteiras.", href: null },
   { label: "Grupos", desc: "Turmas e coletivos de atletas.", href: null },
