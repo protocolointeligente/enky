@@ -129,7 +129,7 @@ export default function TrainerSubscriptionPage() {
     <main className={uiClasses.page}>
       <div className={uiClasses.container}>
         <header className="flex flex-col gap-1">
-          <p className={uiClasses.eyebrow}>Assinatura</p>
+          <p className={uiClasses.eyebrow}>Assinatura ENKY</p>
           <h1 className={uiClasses.heading}>Sua assinatura</h1>
           <p className={uiClasses.hint}>
             <Link href="/treinador/planos" className={uiClasses.link}>
