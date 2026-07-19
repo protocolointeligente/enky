@@ -11,7 +11,7 @@ import { useRequireRole } from "@/app/_lib/use-session";
 // null` e aparece como "Em breve" (nunca um link morto).
 const SUBAREAS: { label: string; desc: string; href: string | null }[] = [
   { label: "Leads", desc: "Funil de captação e conversão.", href: "/treinador/gestao/leads" },
-  { label: "Clientes", desc: "Base de clientes, atletas e pagadores.", href: null },
+  { label: "Clientes", desc: "Base de clientes, atletas e pagadores.", href: "/treinador/gestao/clientes" },
   { label: "Planos e serviços", desc: "Produtos comerciais da assessoria.", href: null },
   { label: "Contratos", desc: "Contratos, renovações e cancelamentos.", href: null },
   { label: "Mensalidades", desc: "Cobranças, vencimentos e pagamentos.", href: null },
