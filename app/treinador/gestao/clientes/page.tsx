@@ -365,12 +365,30 @@ function ClientDrawer({ id, onClose, onChanged }: { id: string; onClose: () => v
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     apiFetch<{ client: ClientDetail }>(`/api/trainer/clients/${id}`)
       .then((d) => setClient(d.client))
       .catch((e: ApiClientError) => setError(e.message));
   }, [id]);
+
+  async function anonymize() {
+    if (!confirm("Anonimizar este cliente? A PII é apagada; contratos e faturas são preservados (retenção). Irreversível.")) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await apiFetch(`/api/trainer/clients/${id}/lgpd`, { method: "POST", body: JSON.stringify({ action: "anonymize" }) });
+      load();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Erro ao anonimizar.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     load();
@@ -418,6 +436,22 @@ function ClientDrawer({ id, onClose, onChanged }: { id: string; onClose: () => v
           <button type="button" className={uiClasses.button} onClick={() => setEditing(true)}>
             Editar
           </button>
+
+          <div className="flex flex-col gap-2 border-t border-line pt-3">
+            <span className={uiClasses.label}>LGPD</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className={uiClasses.buttonSecondary}
+                onClick={() => window.open(`/api/trainer/clients/${id}/lgpd`, "_blank")}
+              >
+                Exportar dados
+              </button>
+              <button type="button" className={uiClasses.buttonDanger} disabled={busy} onClick={anonymize}>
+                Anonimizar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </Overlay>
