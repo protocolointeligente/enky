@@ -64,7 +64,7 @@ React**. O que já existe é reaproveitado — não reconstruído.
 | **6 — Simulação** | prever CTL/ATL/TSB/volume antes de salvar | ✅ **entregue** — `modules/load-simulation` projeta CTL/ATL/TSB por cima do histórico real (mesma EWMA do `load-state`); rota `POST …/strategy/simulate` + botão "Simular carga" no modo estratégico; ver [`LOAD_SIMULATION.md`](./LOAD_SIMULATION.md) |
 | **7 — Explicabilidade** | "por quê", "e se", evidências, confiança, versão da regra | ✅ **transversal** — `rationale.rules/references/missingData/caveats` + `confidence` em toda saída dos motores |
 | **8 — Arquitetura** | módulos desacoplados, sem ciência em React | ✅ respeitada; módulos pendentes catalogados acima |
-| **9 — Performance** | processamento pesado em background/fila/cache | ⏳ pendente — motor é puro e barato hoje (ms); só migra p/ job quando o custo justificar |
+| **9 — Performance** | processamento pesado em background/fila/cache | 🟡 **cache entregue** — `server/cache/computation-cache` (LRU+TTL) memoiza a parte pura/cara da simulação; background job p/ `FULL_CYCLE` documentado e deferido com plano (ver [`PERFORMANCE.md`](./PERFORMANCE.md)) |
 | **10 — Testes** | modalidades, níveis, janelas, alterações, lesões | 🟡 cobertura da Fase 1 entregue (18 testes: RUNNING/STRENGTH/TRIATHLON, níveis, janelas curtas/longas, dados ausentes, erros, pipeline) |
 | **11 — Documentação** | docs dos motores | 🟡 `PERIODIZATION_ENGINE.md` + este índice; `SESSION_GENERATION_ENGINE.md`, `SCIENTIFIC_RULES.md`, `ADAPTATION_ENGINE.md` pendentes |
 
@@ -108,9 +108,9 @@ detalhada das regras.
 
 ## 6. Próxima fatia recomendada
 
-**Fase 9 — performance:** mover a geração do ciclo inteiro (e a simulação, que
-enriquece todas as semanas) para um background job com cache, quando o custo
-justificar — hoje é síncrono e barato (ms), mas um plano de 30 semanas × N
-sessões cresce. Em paralelo, ligar o `analyzeWeek` (Fase 4) ao **editor de treino
-real** (recalcular a semana ao salvar uma edição) e ampliar o escopo de
-regeneração (por sessão e por mesociclo).
+**Homologação em Preview** (banco isolado + `migrate deploy` + rodar o E2E
+`intelligent-periodization.spec.ts`) — é o que falta para fechar 10/11. Depois, em
+produto: ligar o `analyzeWeek` (Fase 4) ao **editor de treino real** (recalcular a
+semana ao salvar uma edição), ampliar o escopo de regeneração (por sessão e por
+mesociclo) e, quando o volume de uso mostrar o gargalo, o **background job** para
+o `FULL_CYCLE` já planejado em [`PERFORMANCE.md`](./PERFORMANCE.md).
