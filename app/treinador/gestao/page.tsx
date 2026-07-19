@@ -1,8 +1,47 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { apiFetch } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
+
+interface Alert {
+  key: string;
+  label: string;
+  count: number;
+  severity: "info" | "warn" | "danger";
+}
+const ALERT_TONE: Record<string, string> = {
+  info: "border-electric/40 text-electric-hi",
+  warn: "border-orange/40 text-orange-hi",
+  danger: "border-danger/40 text-danger",
+};
+
+// Alertas internos (§23) — computados on-read, sem métrica falsa. Some quando não
+// há permissão (papéis sem acesso financeiro) ou quando não há nada pendente.
+function AlertsStrip() {
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  useEffect(() => {
+    apiFetch<{ alerts: Alert[] }>("/api/trainer/alerts")
+      .then((d) => setAlerts(d.alerts))
+      .catch(() => setAlerts([]));
+  }, []);
+  if (alerts.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      {alerts.map((a) => (
+        <span
+          key={a.key}
+          className={`inline-flex items-center gap-2 rounded-lg border bg-petrol/60 px-3 py-1.5 text-sm ${ALERT_TONE[a.severity] ?? ""}`}
+        >
+          <strong>{a.count}</strong>
+          <span className="text-muted">{a.label}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 // Visão geral da Gestão (Etapa 4 §2/§36). Nesta fatia é só o mapa das subáreas
 // comerciais da assessoria — sem cards de métrica, porque os dados (leads,
@@ -41,6 +80,8 @@ export default function TrainerManagementPage() {
             Busca global
           </Link>
         </header>
+
+        <AlertsStrip />
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {SUBAREAS.map((area) => {
