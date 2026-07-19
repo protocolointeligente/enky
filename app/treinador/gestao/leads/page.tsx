@@ -168,9 +168,14 @@ export default function LeadsPage() {
             <p className={uiClasses.eyebrow}>Gestão · Leads</p>
             <h1 className={uiClasses.heading}>Funil de leads</h1>
           </div>
-          <button type="button" className={uiClasses.button} onClick={() => setCreating(true)}>
-            Novo lead
-          </button>
+          <div className="flex gap-2">
+            <button type="button" className={uiClasses.buttonSecondary} onClick={() => window.open("/api/trainer/export/leads", "_blank")}>
+              Exportar CSV
+            </button>
+            <button type="button" className={uiClasses.button} onClick={() => setCreating(true)}>
+              Novo lead
+            </button>
+          </div>
         </header>
 
         {/* Filtros */}

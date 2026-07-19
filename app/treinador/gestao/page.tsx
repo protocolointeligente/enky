@@ -29,13 +29,17 @@ export default function TrainerManagementPage() {
   return (
     <main className={uiClasses.page}>
       <div className={uiClasses.wide}>
-        <header className="flex flex-col gap-1">
-          <p className={uiClasses.eyebrow}>Gestão</p>
-          <h1 className={uiClasses.heading}>Gestão da assessoria</h1>
-          <p className={uiClasses.hint}>
-            O lado comercial do seu negócio: leads, clientes, contratos e financeiro. As áreas
-            abaixo entram em operação ao longo da Etapa 4.
-          </p>
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div className="flex flex-col gap-1">
+            <p className={uiClasses.eyebrow}>Gestão</p>
+            <h1 className={uiClasses.heading}>Gestão da assessoria</h1>
+            <p className={uiClasses.hint}>
+              O lado comercial do seu negócio: leads, clientes, contratos e financeiro.
+            </p>
+          </div>
+          <Link href="/treinador/gestao/busca" className={uiClasses.buttonSecondary}>
+            Busca global
+          </Link>
         </header>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

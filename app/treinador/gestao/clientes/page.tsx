@@ -88,9 +88,14 @@ export default function ClientsPage() {
             <p className={uiClasses.eyebrow}>Gestão · Clientes</p>
             <h1 className={uiClasses.heading}>Clientes</h1>
           </div>
-          <button type="button" className={uiClasses.button} onClick={() => setCreating(true)}>
-            Novo cliente
-          </button>
+          <div className="flex gap-2">
+            <button type="button" className={uiClasses.buttonSecondary} onClick={() => window.open("/api/trainer/export/clients", "_blank")}>
+              Exportar CSV
+            </button>
+            <button type="button" className={uiClasses.button} onClick={() => setCreating(true)}>
+              Novo cliente
+            </button>
+          </div>
         </header>
 
         <div className="flex flex-wrap items-center gap-2">

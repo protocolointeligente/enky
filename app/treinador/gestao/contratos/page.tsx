@@ -103,9 +103,14 @@ export default function ContractsPage() {
             <p className={uiClasses.eyebrow}>Gestão · Contratos</p>
             <h1 className={uiClasses.heading}>Contratos</h1>
           </div>
-          <button type="button" className={uiClasses.button} onClick={() => setCreating(true)}>
-            Novo contrato
-          </button>
+          <div className="flex gap-2">
+            <button type="button" className={uiClasses.buttonSecondary} onClick={() => window.open("/api/trainer/export/contracts", "_blank")}>
+              Exportar CSV
+            </button>
+            <button type="button" className={uiClasses.button} onClick={() => setCreating(true)}>
+              Novo contrato
+            </button>
+          </div>
         </header>
 
         <div className="flex flex-wrap items-center gap-2">

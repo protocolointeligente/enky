@@ -114,9 +114,14 @@ export default function InvoicesPage() {
             <p className={uiClasses.eyebrow}>Gestão · Mensalidades</p>
             <h1 className={uiClasses.heading}>Mensalidades</h1>
           </div>
-          <button type="button" className={uiClasses.button} onClick={() => setGenerating(true)}>
-            Gerar mensalidades
-          </button>
+          <div className="flex gap-2">
+            <button type="button" className={uiClasses.buttonSecondary} onClick={() => window.open("/api/trainer/export/invoices", "_blank")}>
+              Exportar CSV
+            </button>
+            <button type="button" className={uiClasses.button} onClick={() => setGenerating(true)}>
+              Gerar mensalidades
+            </button>
+          </div>
         </header>
 
         <div className="flex flex-wrap items-center gap-2">
