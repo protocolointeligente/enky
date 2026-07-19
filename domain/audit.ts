@@ -88,7 +88,13 @@ export type AuditAction =
   | "UPDATE_CONTRACT"
   | "CHANGE_CONTRACT_STATUS"
   | "CANCEL_CONTRACT"
-  | "ACCEPT_CONTRACT";
+  | "ACCEPT_CONTRACT"
+  // Etapa 4 §12–14/§32 — mensalidades e pagamentos da assessoria. Pagamento,
+  // cancelamento e desconto/juros/multa são sempre auditados.
+  | "GENERATE_INVOICES"
+  | "UPDATE_INVOICE"
+  | "CANCEL_INVOICE"
+  | "REGISTER_PAYMENT";
 
 export interface AuditLogInput {
   action: AuditAction;

@@ -337,6 +337,7 @@ model User {
   assignedLeads              Lead[]                   @relation("LeadAssignedTo")
   leadInteractions           LeadInteraction[]
   clients                    Client[]
+  createdCoachPayments       CoachPayment[]
 
   @@index([email])
 }
@@ -411,6 +412,8 @@ model Organization {
   clients              Client[]
   coachServicePlans    CoachServicePlan[]
   contracts            CoachClientContract[]
+  coachInvoices        CoachInvoice[]
+  coachPayments        CoachPayment[]
 }
 
 model OrganizationMembership {
@@ -1534,6 +1537,8 @@ model Client {
   sourceLead        Lead?                 @relation(fields: [sourceLeadId], references: [id], onDelete: SetNull)
   contractsAsClient CoachClientContract[] @relation("ContractClient")
   contractsAsPayer  CoachClientContract[] @relation("ContractPayer")
+  invoicesAsClient  CoachInvoice[]        @relation("InvoiceClient")
+  invoicesAsPayer   CoachInvoice[]        @relation("InvoicePayer")
 
   @@index([organizationId, status])
   @@index([organizationId])
@@ -1680,9 +1685,104 @@ model CoachClientContract {
   payer        Client           @relation("ContractPayer", fields: [payerClientId], references: [id], onDelete: Restrict)
   athlete      AthleteProfile?  @relation(fields: [athleteId], references: [id], onDelete: SetNull)
   servicePlan  CoachServicePlan @relation(fields: [servicePlanId], references: [id], onDelete: Restrict)
+  invoices     CoachInvoice[]
 
   @@index([organizationId, status])
   @@index([clientId])
   @@index([payerClientId])
   @@index([servicePlanId])
+}
+
+// ---------------------------------------------------------------------------
+// 15. MENSALIDADES E PAGAMENTOS DA ASSESSORIA (Etapa 4 §12–14)
+// ---------------------------------------------------------------------------
+// CoachInvoice = cobrança de uma competência de um contrato. Idempotência da
+// geração garantida por @@unique([contractId, referencePeriod]): gerar duas
+// vezes o mesmo mês colide no índice em vez de duplicar (não é SELECT-then-INSERT).
+// CoachPayment = baixa (parcial ou total); uma fatura pode ter vários. NÃO
+// guardamos dado de cartão (§12). Cobrança é MANUAL nesta etapa (sem gateway).
+
+enum CoachInvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+  PARTIALLY_PAID
+  CANCELLED
+  REFUNDED
+  FAILED
+}
+
+enum CoachPaymentMethod {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_SLIP
+  TRANSFER
+  CASH
+  OTHER
+}
+
+model CoachInvoice {
+  id              String   @id @default(uuid())
+  organizationId  String
+  contractId      String
+  // Denormalizados do contrato para consultas financeiras diretas (inadimplência
+  // por pagador) sem join. Snapshot no momento da geração.
+  clientId        String
+  payerClientId   String
+  // Competência "YYYY-MM". É a chave de idempotência junto do contrato.
+  referencePeriod String
+  dueDate         DateTime @db.Date
+
+  // amount = base (finalPrice do contrato no momento). finalAmount = amount -
+  // discount + interest + penalty (computeInvoiceFinalAmount).
+  amount      Decimal @db.Decimal(12, 2)
+  discount    Decimal @default(0) @db.Decimal(12, 2)
+  interest    Decimal @default(0) @db.Decimal(12, 2)
+  penalty     Decimal @default(0) @db.Decimal(12, 2)
+  finalAmount Decimal @db.Decimal(12, 2)
+  currency    String  @default("BRL") @db.VarChar(3)
+
+  status        CoachInvoiceStatus  @default(PENDING)
+  // Método predominante — informativo; a verdade das baixas está em CoachPayment.
+  paymentMethod CoachPaymentMethod?
+  paidAt        DateTime?           @db.Timestamptz
+  cancelledAt   DateTime?           @db.Timestamptz
+  notes         String?
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  lockVersion Int      @default(1)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contract     CoachClientContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  client       Client              @relation("InvoiceClient", fields: [clientId], references: [id], onDelete: Restrict)
+  payer        Client              @relation("InvoicePayer", fields: [payerClientId], references: [id], onDelete: Restrict)
+  payments     CoachPayment[]
+
+  @@unique([contractId, referencePeriod], map: "uq_invoice_contract_period")
+  @@index([organizationId, status])
+  @@index([organizationId, dueDate])
+  @@index([payerClientId])
+}
+
+model CoachPayment {
+  id                String             @id @default(uuid())
+  organizationId    String
+  invoiceId         String
+  amount            Decimal            @db.Decimal(12, 2)
+  paidAt            DateTime           @db.Timestamptz
+  method            CoachPaymentMethod
+  externalReference String?
+  notes             String?
+  createdByUserId   String?
+  createdAt         DateTime           @default(now()) @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      CoachInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([organizationId])
 }
