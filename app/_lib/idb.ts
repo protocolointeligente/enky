@@ -3,10 +3,11 @@
 // ambas com keyPath "id": a fila de sync e as execuções locais.
 
 const DB_NAME = "enky-atleta";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 export const STORE_QUEUE = "sync-queue";
 export const STORE_EXECUTIONS = "executions";
-const STORES = [STORE_QUEUE, STORE_EXECUTIONS] as const;
+export const STORE_WORKOUTS = "workouts";
+const STORES = [STORE_QUEUE, STORE_EXECUTIONS, STORE_WORKOUTS] as const;
 export type StoreName = (typeof STORES)[number];
 
 let dbPromise: Promise<IDBDatabase> | null = null;

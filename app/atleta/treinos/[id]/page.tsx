@@ -10,6 +10,7 @@ import {
   subscribePending,
   type LocalExecution,
 } from "@/app/atleta/_lib/execution-client";
+import { cacheWorkout, getCachedWorkout } from "@/app/atleta/_lib/workout-cache";
 import { loadStatusLabel, modalityLabel } from "@/app/_lib/labels";
 import { modalityMeta } from "@/app/_lib/modality";
 import { toast } from "@/app/_lib/toast";
@@ -75,16 +76,30 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
   );
   const [execution, setExecution] = useState<LocalExecution | null>(null);
   const [pendingSync, setPendingSync] = useState(0);
+  const [offlineView, setOfflineView] = useState(false);
 
   useEffect(() => {
     initSync();
     return subscribePending(setPendingSync);
   }, []);
 
-  function reload() {
-    return apiFetch<{ workout: WorkoutDetailView }>(`/api/athlete/workouts/${id}`).then((result) =>
-      setWorkout(result.workout),
-    );
+  // Online: busca e guarda a cópia local. Offline: serve a cópia salva para
+  // permitir iniciar/executar sem conexão (§16/§21). Só propaga erro se não houver cache.
+  async function reload() {
+    try {
+      const result = await apiFetch<{ workout: WorkoutDetailView }>(`/api/athlete/workouts/${id}`);
+      setWorkout(result.workout);
+      setOfflineView(false);
+      void cacheWorkout(result.workout);
+    } catch (err) {
+      const cached = await getCachedWorkout<WorkoutDetailView>(id);
+      if (cached) {
+        setWorkout(cached);
+        setOfflineView(true);
+        return;
+      }
+      throw err;
+    }
   }
 
   useEffect(() => {
@@ -187,6 +202,11 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
           </div>
           <h1 className={uiClasses.heading}>{current.title}</h1>
           <p className="text-sm capitalize text-muted">{formatDate(current.plannedDate)}</p>
+          {offlineView && (
+            <p className="text-xs text-orange-hi" role="status">
+              Offline — mostrando a cópia salva no aparelho.
+            </p>
+          )}
           {current.description && (
             <p className="mt-1 rounded-lg bg-surface/60 p-3 text-sm text-muted">
               {current.description}
