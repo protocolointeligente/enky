@@ -336,6 +336,7 @@ model User {
   updatedFeatureFlags        FeatureFlag[]            @relation("FeatureFlagUpdatedBy")
   assignedLeads              Lead[]                   @relation("LeadAssignedTo")
   leadInteractions           LeadInteraction[]
+  clients                    Client[]
 
   @@index([email])
 }
@@ -407,6 +408,7 @@ model Organization {
   externalActivities   ExternalActivity[]
   leads                Lead[]
   leadInteractions     LeadInteraction[]
+  clients              Client[]
 }
 
 model OrganizationMembership {
@@ -1449,9 +1451,10 @@ model Lead {
   updatedAt          DateTime   @updatedAt @db.Timestamptz
   lockVersion        Int        @default(1)
 
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  assignedTo   User?             @relation("LeadAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
-  interactions LeadInteraction[]
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedTo       User?             @relation("LeadAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  interactions     LeadInteraction[]
+  convertedClients Client[]
 
   @@index([organizationId, status])
   @@index([organizationId, assignedToUserId])
@@ -1478,5 +1481,55 @@ model LeadInteraction {
   actor        User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([leadId, occurredAt])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// 12. CLIENTES DA ASSESSORIA (Etapa 4 §8)
+// ---------------------------------------------------------------------------
+// Cliente = quem tem a RELAÇÃO COMERCIAL (paga ou é responsável). NÃO é o mesmo
+// que Atleta (quem treina, `AthleteProfile`) nem que Pagador. A separação é
+// deliberada: pai paga / filho treina; empresa paga / funcionário treina. Por
+// isso Client NÃO tem `athleteProfileId` — o vínculo cliente↔atleta↔pagador
+// mora no Contrato (§10: clientId/athleteId/payerClientId), onde ele é por
+// contrato e pode ser 1→N. Aqui é só o registro comercial da pessoa/entidade.
+
+enum ClientStatus {
+  PROSPECT
+  TRIAL
+  ACTIVE
+  PAUSED
+  INACTIVE
+  CANCELLED
+  ARCHIVED
+}
+
+model Client {
+  id             String       @id @default(uuid())
+  organizationId String
+  // Login no portal, se este cliente tiver acesso (ex.: o pai pagante). Muitos
+  // clientes não têm — o atleta tem o seu próprio User. ponytail: nada popula
+  // isto ainda; entra quando houver portal do cliente.
+  userId         String?
+  name           String
+  email          String?
+  phone          String?
+  document       String?
+  birthDate      DateTime?    @db.Date
+  status         ClientStatus @default(PROSPECT)
+  // Origem no funil, quando o cliente veio de um Lead convertido (§7). A
+  // conversão que popula isto é fatia posterior; SetNull para não perder o
+  // cliente se o lead for apagado.
+  sourceLeadId   String?
+  notes          String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+  updatedAt      DateTime     @updatedAt @db.Timestamptz
+  lockVersion    Int          @default(1)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sourceLead   Lead?        @relation(fields: [sourceLeadId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
   @@index([organizationId])
 }
