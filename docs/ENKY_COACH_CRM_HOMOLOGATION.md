@@ -74,13 +74,19 @@ ACCEPT_CONTRACT`, `GENERATE_INVOICES/UPDATE_INVOICE/CANCEL_INVOICE/REGISTER_PAYM
 (contrato), `invoice-math` (competências/valor/status), `finance-math` (ticket/
 churn/conversão/LTV/faixas), `alert-windows`, `csv-parse`+`validateClientImport`.
 
-### §34 Testes de integração — **DEFERIDO (precisa de DB)**
-As orquestrações transacionais (conversão, geração de faturas, pagamento,
-transferência) são I/O sobre Postgres; o ambiente atual não tem DB descartável
-(Neon cloud, sem docker). Rodar no staging após aplicar as migrations. Cenários
-no checklist (seção 4).
+### §34 Testes de integração — **FEITO e VERIFICADO**
+`tests/integration/coach-crm.test.ts` (7 cenários) roda contra o Postgres real e
+**passa** após as migrations: conversão ponta a ponta (cliente+contrato+fatura+
+lead WON), idempotência de conversão e de geração de faturas, reconciliação de
+pagamento parcial/total, inadimplência com faixa, carteira (atribuir/transferir),
+grupo idempotente, e **tenant isolation** (outra org = NotFound). Auto-limpa.
+Rodar: `npm run test:integration`.
 
-### §35 Testes E2E — **DEFERIDO (precisa de app + DB)**. Fluxos no checklist.
+### §35 Testes E2E — **ESCRITO** (`tests/e2e/coach-crm.spec.ts`)
+Dois casos: (1) todas as subáreas de Gestão carregam para um treinador real
+(pega página que quebra no load); (2) criar um plano pela UI e vê-lo na lista.
+Precisa do dev server + browser (`npm run test:e2e`) — roda pelo operador na
+validação §40. A lógica de negócio profunda já está coberta pelo §34 (runnable).
 
 ---
 
@@ -101,7 +107,7 @@ no checklist (seção 4).
 | Treinadores atribuíveis | ✅ §18–19 (carteiras) |
 | Grupos funcionam | ✅ §20 |
 | Permissões aplicadas | ✅ requireOrgRole + matriz |
-| Tenant isolation testado | ⚠️ unit (guards); integração no staging |
+| Tenant isolation testado | ✅ unit (guards) + integração (coach-crm.test.ts) |
 | Ações financeiras auditadas | ✅ §32 |
 | Import/export seguros | ✅ §26/§27 (preview; sem sobrescrever) |
 | Testes passam | ✅ 604 unit; integração/e2e no staging |
@@ -146,10 +152,10 @@ segunda vez cria 0.
 
 ## 5. Validação (§40)
 
-Rodado localmente (offline): `prisma validate` ✅, `prisma format` ✅,
-`typecheck` ✅, `eslint` ✅, `test` (unit) ✅ 604. **Pendente do operador:**
-`test:integration`, `test:e2e`, `build` completo e `migrate deploy` — todos
-dependem de DB/ambiente de staging.
+Rodado: `prisma validate` ✅, `prisma format` ✅, `typecheck` ✅, `eslint` ✅,
+`test` (unit) ✅ 604, **`test:integration` (coach-crm) ✅ 7/7 contra o banco
+migrado**. **Pendente do operador:** `test:e2e` (dev server + browser), `build`
+completo, e a suíte de integração inteira. `migrate deploy` já aplicado.
 
 ---
 
