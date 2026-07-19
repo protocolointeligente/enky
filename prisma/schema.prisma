@@ -329,15 +329,17 @@ model User {
   athleteProfile             AthleteProfile?
   memberships                OrganizationMembership[]
   sessions                   Session[]
-  requestedGenerationBatches GenerationBatch[]        @relation("GenerationRequestedBy")
+  requestedGenerationBatches GenerationBatch[]          @relation("GenerationRequestedBy")
   auditLogs                  AuditLog[]
-  resolvedInsights           Insight[]                @relation("InsightResolvedBy")
-  performedAssessments       Assessment[]             @relation("AssessmentPerformedBy")
-  updatedFeatureFlags        FeatureFlag[]            @relation("FeatureFlagUpdatedBy")
-  assignedLeads              Lead[]                   @relation("LeadAssignedTo")
+  resolvedInsights           Insight[]                  @relation("InsightResolvedBy")
+  performedAssessments       Assessment[]               @relation("AssessmentPerformedBy")
+  updatedFeatureFlags        FeatureFlag[]              @relation("FeatureFlagUpdatedBy")
+  assignedLeads              Lead[]                     @relation("LeadAssignedTo")
   leadInteractions           LeadInteraction[]
   clients                    Client[]
   createdCoachPayments       CoachPayment[]
+  assignedRelationships      CoachAthleteRelationship[] @relation("RelationshipAssignedBy")
+  addedGroupMembers          CoachGroupMember[]
 
   @@index([email])
 }
@@ -414,6 +416,8 @@ model Organization {
   contracts            CoachClientContract[]
   coachInvoices        CoachInvoice[]
   coachPayments        CoachPayment[]
+  coachGroups          CoachGroup[]
+  coachGroupMembers    CoachGroupMember[]
 }
 
 model OrganizationMembership {
@@ -421,6 +425,11 @@ model OrganizationMembership {
   userId         String
   organizationId String
   role           OrganizationRole @default(COACH)
+  // Membro pode ser desativado sem perder o histórico/vínculo (§18). O acesso
+  // real ainda depende do papel global e da org ativa; desativar aqui é o gancho
+  // de gestão de equipe. ponytail: imposição no resolveActiveOrganization fica
+  // para quando multi-org (ADR-001/Fase 6) existir de fato.
+  isActive       Boolean          @default(true)
   createdAt      DateTime         @default(now()) @db.Timestamptz
   updatedAt      DateTime         @updatedAt @db.Timestamptz
 
@@ -452,6 +461,7 @@ model TrainerProfile {
   testResults       TestResult[]
   reports           Report[]
   insights          Insight[]
+  coachGroups       CoachGroup[]
 }
 
 model AthleteProfile {
@@ -482,23 +492,39 @@ model AthleteProfile {
   externalConnections ExternalConnection[]
   externalActivities  ExternalActivity[]
   contracts           CoachClientContract[]
+  groupMemberships    CoachGroupMember[]
+}
+
+// Papel do treinador na carteira do atleta (Etapa 4 §19).
+enum CoachAthleteRole {
+  PRIMARY
+  ASSISTANT
+  TEMPORARY
+  VIEW_ONLY
 }
 
 model CoachAthleteRelationship {
-  id                String    @id @default(uuid())
+  id                String           @id @default(uuid())
   organizationId    String
   trainerId         String
   athleteId         String
-  isActive          Boolean   @default(true)
-  startedAt         DateTime  @default(now()) @db.Timestamptz
-  endedAt           DateTime? @db.Timestamptz
+  // Papel do treinador nesta carteira (Etapa 4 §19). Um atleta pode ter um
+  // PRIMARY e um ASSISTANT (pares distintos). Default PRIMARY: vínculos antigos
+  // (um treinador por atleta) já são o titular.
+  role              CoachAthleteRole @default(PRIMARY)
+  // Quem fez a atribuição (§19). SetNull para não perder o vínculo.
+  assignedByUserId  String?
+  isActive          Boolean          @default(true)
+  startedAt         DateTime         @default(now()) @db.Timestamptz
+  endedAt           DateTime?        @db.Timestamptz
   terminationReason String?
-  createdAt         DateTime  @default(now()) @db.Timestamptz
-  updatedAt         DateTime  @updatedAt @db.Timestamptz
+  createdAt         DateTime         @default(now()) @db.Timestamptz
+  updatedAt         DateTime         @updatedAt @db.Timestamptz
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
   athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  assignedBy   User?          @relation("RelationshipAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, trainerId, athleteId])
   @@index([organizationId, athleteId])
@@ -1785,4 +1811,55 @@ model CoachPayment {
 
   @@index([invoiceId])
   @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// 16. GRUPOS DA ASSESSORIA (Etapa 4 §20)
+// ---------------------------------------------------------------------------
+// Turmas/coletivos de atletas (Corrida Iniciante, Equipe Ironman…). Nesta fatia:
+// CRUD + composição (membros) + treinador do grupo. Aplicar template / criar
+// treino ou periodização PARA o grupo são cross-domínio de treino — fatia futura.
+
+enum CoachGroupStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model CoachGroup {
+  id             String           @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  modality       Modality?
+  level          String?
+  // Treinador responsável pelo grupo (opcional). SetNull para não apagar o grupo.
+  coachId        String?
+  status         CoachGroupStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @db.Timestamptz
+  updatedAt      DateTime         @updatedAt @db.Timestamptz
+  lockVersion    Int              @default(1)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  coach        TrainerProfile?    @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  members      CoachGroupMember[]
+
+  @@index([organizationId, status])
+}
+
+model CoachGroupMember {
+  id             String   @id @default(uuid())
+  organizationId String
+  groupId        String
+  athleteId      String
+  addedByUserId  String?
+  addedAt        DateTime @default(now()) @db.Timestamptz
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  group        CoachGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  addedBy      User?          @relation(fields: [addedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([groupId, athleteId], map: "uq_group_member")
+  @@index([organizationId])
+  @@index([athleteId])
 }

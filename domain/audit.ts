@@ -97,7 +97,14 @@ export type AuditAction =
   | "REGISTER_PAYMENT"
   // Etapa 4 §7 — conversão de lead em cliente (cria cliente/contrato/atleta/
   // cobrança numa transação). O lead vira WON, nunca é apagado.
-  | "CONVERT_LEAD";
+  | "CONVERT_LEAD"
+  // Etapa 4 §18–19/§32 — gestão de equipe e carteiras. Mudança de papel e
+  // transferência de atleta são sempre auditadas.
+  | "CHANGE_MEMBER_ROLE"
+  | "SET_MEMBER_ACTIVE"
+  | "ASSIGN_ATHLETE"
+  | "UNASSIGN_ATHLETE"
+  | "TRANSFER_ATHLETE";
 
 export interface AuditLogInput {
   action: AuditAction;
