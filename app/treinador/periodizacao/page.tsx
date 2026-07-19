@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
@@ -49,6 +49,16 @@ interface PlanDetail extends PlanSummary {
   weeks: Week[];
 }
 
+interface WeekAnalysisResult {
+  workoutCount: number;
+  anyEstimated: boolean;
+  analysis: {
+    internalLoad: number;
+    intensity: { lowLoadPct: number | null; qualityLoadPct: number | null };
+    alerts: { code: string; severity: string; message: string }[];
+  };
+}
+
 function fmtDay(iso: string): string {
   return new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -68,6 +78,8 @@ export default function TrainerPeriodizationPage() {
   const [generating, setGenerating] = useState<GenerationTarget | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showStrategy, setShowStrategy] = useState(false);
+  const [weekAnalysis, setWeekAnalysis] = useState<Record<string, WeekAnalysisResult | null>>({});
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!checked) return;
@@ -94,6 +106,7 @@ export default function TrainerPeriodizationPage() {
   }, [athleteId]);
 
   const loadDetail = useCallback(async () => {
+    setWeekAnalysis({});
     if (!selectedId) {
       setDetail(null);
       return;
@@ -124,6 +137,22 @@ export default function TrainerPeriodizationPage() {
       setSelectedId(id);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Plano criado, mas a lista não recarregou.");
+    }
+  }
+
+  // Recálculo da semana (Fase 4) sobre os treinos reais já agendados nela.
+  async function analyzeWeekRow(weekId: string) {
+    if (!selectedId) return;
+    setAnalyzingId(weekId);
+    try {
+      const r = await apiFetch<WeekAnalysisResult>(
+        `/api/trainer/periodizations/${selectedId}/weeks/${weekId}/analysis`,
+      );
+      setWeekAnalysis((prev) => ({ ...prev, [weekId]: r }));
+    } catch {
+      setWeekAnalysis((prev) => ({ ...prev, [weekId]: null }));
+    } finally {
+      setAnalyzingId(null);
     }
   }
 
@@ -323,48 +352,73 @@ export default function TrainerPeriodizationPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-line">
-                          {detail.weeks.map((w) => (
-                            <tr key={w.id}>
-                              <td className="py-2 pr-3 tabular text-muted">{w.sequence}</td>
-                              <td className="py-2 pr-3 text-ink">
-                                {fmtDay(w.startDate)} – {fmtDay(w.endDate)}
-                                {w.isRecoveryWeek && (
-                                  <span className={`${uiClasses.badge} ml-2 bg-turq/15 text-turq`}>
-                                    regenerativa
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-2 pr-3 text-muted">
-                                {w.phaseId ? (phaseName.get(w.phaseId) ?? "—") : "—"}
-                              </td>
-                              <td className="py-2 pr-3 text-right tabular text-ink">
-                                {w.scheduledCount}
-                              </td>
-                              <td className="py-2 text-right">
-                                <button
-                                  type="button"
-                                  className={uiClasses.buttonGhost}
-                                  onClick={() =>
-                                    setGenerating({
-                                      kind: "week",
-                                      periodizationId: detail.id,
-                                      weekId: w.id,
-                                      sequence: w.sequence,
-                                      startDate: w.startDate,
-                                      endDate: w.endDate,
-                                      phaseName: w.phaseId
-                                        ? (phaseName.get(w.phaseId) ?? null)
-                                        : null,
-                                      isRecoveryWeek: w.isRecoveryWeek,
-                                      weekCount: detail.weeks.length,
-                                    })
-                                  }
-                                >
-                                  Gerar
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
+                          {detail.weeks.map((w) => {
+                            const wa = weekAnalysis[w.id];
+                            return (
+                            <Fragment key={w.id}>
+                              <tr>
+                                <td className="py-2 pr-3 tabular text-muted">{w.sequence}</td>
+                                <td className="py-2 pr-3 text-ink">
+                                  {fmtDay(w.startDate)} – {fmtDay(w.endDate)}
+                                  {w.isRecoveryWeek && (
+                                    <span className={`${uiClasses.badge} ml-2 bg-turq/15 text-turq`}>
+                                      regenerativa
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 pr-3 text-muted">
+                                  {w.phaseId ? (phaseName.get(w.phaseId) ?? "—") : "—"}
+                                </td>
+                                <td className="py-2 pr-3 text-right tabular text-ink">
+                                  {w.scheduledCount}
+                                </td>
+                                <td className="py-2 text-right">
+                                  <button
+                                    type="button"
+                                    className={uiClasses.buttonGhost}
+                                    disabled={w.scheduledCount === 0 || analyzingId === w.id}
+                                    onClick={() => analyzeWeekRow(w.id)}
+                                    title={
+                                      w.scheduledCount === 0
+                                        ? "Sem treinos agendados para analisar"
+                                        : "Recalcular carga/polarização/alertas desta semana"
+                                    }
+                                  >
+                                    {analyzingId === w.id ? "…" : "Analisar"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={uiClasses.buttonGhost}
+                                    onClick={() =>
+                                      setGenerating({
+                                        kind: "week",
+                                        periodizationId: detail.id,
+                                        weekId: w.id,
+                                        sequence: w.sequence,
+                                        startDate: w.startDate,
+                                        endDate: w.endDate,
+                                        phaseName: w.phaseId
+                                          ? (phaseName.get(w.phaseId) ?? null)
+                                          : null,
+                                        isRecoveryWeek: w.isRecoveryWeek,
+                                        weekCount: detail.weeks.length,
+                                      })
+                                    }
+                                  >
+                                    Gerar
+                                  </button>
+                                </td>
+                              </tr>
+                              {wa !== undefined && (
+                                <tr>
+                                  <td colSpan={5} className="pb-3">
+                                    <WeekAnalysisPanel result={wa} />
+                                  </td>
+                                </tr>
+                              )}
+                            </Fragment>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -402,6 +456,47 @@ export default function TrainerPeriodizationPage() {
         </Link>
       </div>
     </main>
+  );
+}
+
+// Recálculo da semana (Fase 4): carga interna, polarização e alertas dos treinos
+// REAIS já agendados. Carga real (sRPE) quando executado; estimada da prescrição
+// quando ainda é rascunho — sinalizado.
+function WeekAnalysisPanel({ result }: { result: WeekAnalysisResult | null }) {
+  if (result === null) {
+    return <p className="text-xs text-danger">Não foi possível analisar a semana.</p>;
+  }
+  const { analysis } = result;
+  return (
+    <div className="rounded-lg border border-line bg-deep/40 p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-faint">
+        <span>
+          Carga <span className="tabular text-ink">{analysis.internalLoad} UA</span>
+        </span>
+        {analysis.intensity.qualityLoadPct != null && (
+          <span>
+            Polarização{" "}
+            <span className="tabular text-ink">
+              {analysis.intensity.lowLoadPct}% fácil / {analysis.intensity.qualityLoadPct}% qualidade
+            </span>
+          </span>
+        )}
+        <span className="tabular">{result.workoutCount} treino(s)</span>
+        {result.anyEstimated && (
+          <span className="text-orange">carga parcialmente estimada da prescrição</span>
+        )}
+      </div>
+      {analysis.alerts.length > 0 && (
+        <ul className="mt-2 flex flex-col gap-1">
+          {analysis.alerts.map((a, i) => (
+            <li key={i} className={a.severity === "warning" ? "text-orange" : "text-faint"}>
+              {a.severity === "warning" ? "⚠ " : "· "}
+              {a.message}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

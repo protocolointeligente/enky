@@ -27,9 +27,26 @@ Alertas (heurísticos, **avisos e não bloqueios**):
 - `LOAD_SPIKE` — carga > 1,5× a da semana anterior (progressão abrupta · Gabbett 2016). Só dispara com `prevWeekLoad`.
 - `SINGLE_KIND` — todas as sessões do mesmo tipo (info).
 
-**Onde já aparece:** o preview de sessões (Fase 3) devolve `analysis` junto — o
-modal "✨ Gerar com ENKY" mostra carga da semana, polarização e alertas. É a
-mesma função que o editor de sessão chamará ao recalcular a semana editada.
+**Onde aparece:**
+
+1. No **preview de sessões** (Fase 3): `enrichWeekPlan` devolve `analysis` junto —
+   o modal "✨ Gerar com ENKY" mostra carga, polarização e alertas da semana-exemplo.
+2. **Ligado aos treinos REAIS** (o editor): botão **"Analisar"** por semana em
+   `/treinador/periodizacao` → `GET …/periodizations/[id]/weeks/[weekId]/analysis`.
+   O serviço `analyze-training-week.ts` lê os treinos agendados na semana, usa o
+   **sRPE real** quando o atleta já executou e **estima** a carga da prescrição
+   quando é só rascunho, compara com a semana anterior (alerta de salto) e roda o
+   `analyzeWeek`. Assim, editar/gerar um treino e clicar "Analisar" recalcula a
+   semana de verdade.
+
+### Estimador de carga (`estimate-workout-load.ts`, `load-estimator-v1`)
+
+Quando não há sRPE (treino planejado), estima a carga interna da prescrição —
+**sem inventar pace/potência**: sRPE-like `RPE × minutos`, minutos da duração ou,
+na falta dela, de uma velocidade nominal por modalidade (aproximação
+**declarada**, marcada como estimativa na UI). Também infere o tipo da sessão
+(EASY/LONG/QUALITY/RECOVERY/STRENGTH) e o volume em km. É para **comparar semanas**
+(polarização, salto), não para prescrever.
 
 ## Fase 5 — Regeneração preservando o aceito
 
