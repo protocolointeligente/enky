@@ -189,6 +189,7 @@ export const reportWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 
 export const periodizationWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (criar/excluir periodização)
 export const assessmentWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (criar/editar/validar avaliação)
 export const billingWriteRateLimiter = createRateLimiter(10, 60 * 60 * 1000); // 10/hora por treinador (checkout/cancelamento)
+export const crmWriteRateLimiter = createRateLimiter(240, 60 * 60 * 1000); // 240/hora por usuário (leads + interações — trabalho de digitação em lote)
 // Fase 11 — Integração Strava.
 // Conectar/desconectar: 10/hora por atleta. É ato raro e cada tentativa dispara
 // um handshake OAuth com um terceiro.

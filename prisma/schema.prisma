@@ -334,6 +334,8 @@ model User {
   resolvedInsights           Insight[]                @relation("InsightResolvedBy")
   performedAssessments       Assessment[]             @relation("AssessmentPerformedBy")
   updatedFeatureFlags        FeatureFlag[]            @relation("FeatureFlagUpdatedBy")
+  assignedLeads              Lead[]                   @relation("LeadAssignedTo")
+  leadInteractions           LeadInteraction[]
 
   @@index([email])
 }
@@ -403,6 +405,8 @@ model Organization {
   readinessCheckIns    ReadinessCheckIn[]
   externalConnections  ExternalConnection[]
   externalActivities   ExternalActivity[]
+  leads                Lead[]
+  leadInteractions     LeadInteraction[]
 }
 
 model OrganizationMembership {
@@ -1364,4 +1368,115 @@ model AuditLog {
   @@index([action])
   @@index([correlationId])
   @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// 11. CRM DA ASSESSORIA (Etapa 4 §5–7)
+// ---------------------------------------------------------------------------
+// Funil de captação `assessoria → prospect`. É a PORTA DE ENTRADA comercial:
+// um Lead vira Cliente (§8) na conversão, que ainda NÃO existe (depende de
+// Client/CoachServicePlan/Contract). Enquanto isso, o Lead vive seu ciclo
+// próprio (NEW → … → WON/LOST/ARCHIVED). Isolado por `organizationId` como todo
+// dado de tenant.
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  TRIAL
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+  ARCHIVED
+}
+
+enum LeadSource {
+  INSTAGRAM
+  WHATSAPP
+  REFERRAL
+  WEBSITE
+  EVENT
+  ORGANIC
+  PAID_MEDIA
+  OTHER
+}
+
+enum LeadInteractionType {
+  NOTE
+  CALL
+  MESSAGE
+  EMAIL
+  MEETING
+  TRIAL_STARTED
+  PROPOSAL_SENT
+  FOLLOW_UP
+  STATUS_CHANGE
+}
+
+enum LeadInteractionChannel {
+  PHONE
+  WHATSAPP
+  EMAIL
+  INSTAGRAM
+  IN_PERSON
+  SYSTEM
+  OTHER
+}
+
+model Lead {
+  id                 String     @id @default(uuid())
+  organizationId     String
+  name               String
+  email              String?
+  phone              String?
+  source             LeadSource @default(OTHER)
+  // Modalidade de interesse (enum existente). O `interestedServiceId` do §5 fica
+  // para quando `CoachServicePlan` existir — sem entidade para apontar, seria
+  // uma coluna solta. ponytail: adicionar o FK na fatia de planos.
+  interestedModality Modality?
+  // Responsável pelo lead. Membro da organização (validado no serviço, não no
+  // schema). SetNull: remover o usuário não apaga o lead, só o desatribui.
+  assignedToUserId   String?
+  status             LeadStatus @default(NEW)
+  estimatedValue     Decimal?   @db.Decimal(12, 2)
+  notes              String?
+  nextActionAt       DateTime?  @db.Timestamptz
+  convertedAt        DateTime?  @db.Timestamptz
+  lostAt             DateTime?  @db.Timestamptz
+  lostReason         String?
+  createdAt          DateTime   @default(now()) @db.Timestamptz
+  updatedAt          DateTime   @updatedAt @db.Timestamptz
+  lockVersion        Int        @default(1)
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedTo   User?             @relation("LeadAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  interactions LeadInteraction[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, assignedToUserId])
+  @@index([organizationId, nextActionAt])
+}
+
+// Trilha append-only de interações do lead (§6). Mudanças de etapa geram uma
+// entrada STATUS_CHANGE automática — o histórico do funil mora aqui, não em
+// AuditLog (que é para ações sensíveis da plataforma).
+model LeadInteraction {
+  id             String                 @id @default(uuid())
+  organizationId String
+  leadId         String
+  actorUserId    String?
+  type           LeadInteractionType
+  channel        LeadInteractionChannel @default(SYSTEM)
+  summary        String
+  occurredAt     DateTime               @default(now()) @db.Timestamptz
+  nextActionAt   DateTime?              @db.Timestamptz
+  createdAt      DateTime               @default(now()) @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, occurredAt])
+  @@index([organizationId])
 }
