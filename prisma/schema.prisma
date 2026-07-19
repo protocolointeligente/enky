@@ -81,6 +81,32 @@ enum SessionRpeLoadStatus {
   INVALID
 }
 
+// Ciclo de vida de UMA tentativa de execução (WorkoutExecution). Não confundir
+// com WorkoutStatus (estado da prescrição). Os estados "intermediários" do §9
+// (STARTED/PAUSED/ABANDONED/PARTIALLY_COMPLETED) vivem aqui, não em WorkoutStatus.
+enum WorkoutExecutionStatus {
+  STARTED
+  PAUSED
+  COMPLETED
+  PARTIALLY_COMPLETED
+  ABANDONED
+}
+
+enum WorkoutExecutionEventType {
+  START
+  PAUSE
+  RESUME
+  STEP_COMPLETED
+  STEP_SKIPPED
+  BLOCK_COMPLETED
+  EXERCISE_COMPLETED
+  LAP
+  NOTE
+  ABANDON
+  COMPLETE
+  SYNC
+}
+
 enum MarketplaceStatus {
   DRAFT
   PENDING_REVIEW
@@ -394,27 +420,29 @@ model Organization {
   updatedAt   DateTime @updatedAt @db.Timestamptz
   lockVersion Int      @default(1)
 
-  memberships          OrganizationMembership[]
-  subscriptions        Subscription[]
-  invitations          AthleteInvitation[]
-  relationships        CoachAthleteRelationship[]
-  periodizations       Periodization[]
-  workouts             Workout[]
-  workoutTemplates     WorkoutTemplate[]
-  calendarEvents       CalendarEvent[]
-  generationBatches    GenerationBatch[]
-  marketplacePlans     MarketplacePlan[]
-  marketplacePurchases MarketplacePurchase[]
-  reports              Report[]
-  exercises            Exercise[]
-  testResults          TestResult[]
-  derivedMetrics       DerivedMetric[]
-  auditLogs            AuditLog[]
-  insights             Insight[]
-  readinessCheckIns    ReadinessCheckIn[]
-  marketplaceSellers   MarketplaceSellerProfile[]
-  marketplaceOrders    MarketplaceOrder[]
-  marketplaceCoupons   MarketplaceCoupon[]
+  memberships            OrganizationMembership[]
+  subscriptions          Subscription[]
+  invitations            AthleteInvitation[]
+  relationships          CoachAthleteRelationship[]
+  periodizations         Periodization[]
+  workouts               Workout[]
+  workoutTemplates       WorkoutTemplate[]
+  calendarEvents         CalendarEvent[]
+  generationBatches      GenerationBatch[]
+  marketplacePlans       MarketplacePlan[]
+  marketplacePurchases   MarketplacePurchase[]
+  reports                Report[]
+  exercises              Exercise[]
+  testResults            TestResult[]
+  derivedMetrics         DerivedMetric[]
+  auditLogs              AuditLog[]
+  insights               Insight[]
+  readinessCheckIns      ReadinessCheckIn[]
+  marketplaceSellers     MarketplaceSellerProfile[]
+  marketplaceOrders      MarketplaceOrder[]
+  marketplaceCoupons     MarketplaceCoupon[]
+  workoutExecutions      WorkoutExecution[]
+  workoutExecutionEvents WorkoutExecutionEvent[]
 }
 
 model OrganizationMembership {
@@ -479,6 +507,7 @@ model AthleteProfile {
   invitations       AthleteInvitation[]
   insights          Insight[]
   readinessCheckIns ReadinessCheckIn[]
+  workoutExecutions WorkoutExecution[]
 }
 
 model CoachAthleteRelationship {
@@ -689,6 +718,7 @@ model Workout {
   workoutTemplate     WorkoutTemplate?     @relation(fields: [workoutTemplateId], references: [id], onDelete: SetNull)
   blocks              WorkoutBlock[]
   feedback            WorkoutFeedback?
+  executions          WorkoutExecution[]
 
   @@index([organizationId, athleteId, plannedDate])
   @@index([trainerId])
@@ -855,6 +885,71 @@ model WorkoutFeedback {
   updatedAt             DateTime                 @updatedAt @db.Timestamptz
 
   workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+}
+
+// Uma execução = uma tentativa do atleta de realizar um treino. Persistida para
+// permitir retomar, calcular aderência, entender abandono, sincronizar offline e
+// auditar (§10). `workoutSnapshot` congela a prescrição no início (§19), então
+// alterações posteriores do treinador não corrompem uma execução em andamento.
+// Planejado-vs-realizado (§15): o planejado vive no snapshot; o realizado por
+// etapa vive no `payload` dos eventos; totais realizados ficam no WorkoutFeedback.
+model WorkoutExecution {
+  id                String                 @id @default(uuid())
+  organizationId    String
+  athleteId         String
+  workoutId         String
+  status            WorkoutExecutionStatus @default(STARTED)
+  startedAt         DateTime               @default(now()) @db.Timestamptz
+  pausedAt          DateTime?              @db.Timestamptz
+  resumedAt         DateTime?              @db.Timestamptz
+  completedAt       DateTime?              @db.Timestamptz
+  abandonedAt       DateTime?              @db.Timestamptz
+  // Derivados por timestamp no domínio (não por setInterval) — ver modules/workout-execution.
+  elapsedSeconds    Int                    @default(0)
+  activeSeconds     Int                    @default(0)
+  currentBlockIndex Int                    @default(0)
+  currentStepIndex  Int                    @default(0)
+  deviceId          String?
+  clientVersion     String?
+  offlineCreatedAt  DateTime?              @db.Timestamptz
+  syncedAt          DateTime?              @db.Timestamptz
+  // Idempotência de criação: o "start" vindo da fila offline não duplica execução.
+  idempotencyKey    String                 @unique
+  // Versão da prescrição no início (Workout.lockVersion) + cópia imutável (§18-19).
+  workoutVersion    Int
+  workoutSnapshot   Json
+  createdAt         DateTime               @default(now()) @db.Timestamptz
+  updatedAt         DateTime               @updatedAt @db.Timestamptz
+  lockVersion       Int                    @default(1)
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile          @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  workout      Workout                 @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  events       WorkoutExecutionEvent[]
+
+  @@index([organizationId, athleteId])
+  @@index([workoutId])
+}
+
+model WorkoutExecutionEvent {
+  id             String                    @id @default(uuid())
+  organizationId String
+  executionId    String
+  type           WorkoutExecutionEventType
+  // Ordem determinística por execução (não confia só em createdAt do servidor).
+  sequence       Int
+  payload        Json?
+  // Timestamp do CLIENTE (quando o evento realmente ocorreu, mesmo offline).
+  occurredAt     DateTime                  @db.Timestamptz
+  // Dedupe de eventos vindos da fila offline (§17).
+  idempotencyKey String                    @unique
+  createdAt      DateTime                  @default(now()) @db.Timestamptz
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  execution    WorkoutExecution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@unique([executionId, sequence])
+  @@index([executionId])
 }
 
 // ---------------------------------------------------------------------------
