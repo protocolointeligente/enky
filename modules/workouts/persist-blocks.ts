@@ -7,11 +7,23 @@ async function upsertExercise(
   organizationId: string,
   name: string,
   category: string,
-) {
-  return tx.exercise.upsert({
-    where: { name_organizationId: { name, organizationId } },
-    update: {},
-    create: { name, category, organizationId, targetMuscles: [] },
+): Promise<{ id: string }> {
+  // O banco tem um índice único NATIVO sobre LOWER(name) por org (migration
+  // 20260710104346), mas o `@@unique([name, organizationId])` do Prisma é
+  // sensível a caixa. Um upsert por nome exato NÃO enxerga um exercício já
+  // existente com caixa diferente (ex.: a biblioteca importada usa "Agachamento
+  // Livre" e o gerador pede "Agachamento livre") — o create então viola o índice
+  // LOWER(name) (P2002) e, dentro de uma transação, envenena a transação inteira.
+  // Por isso: busca case-insensitive PRIMEIRO e só cria se realmente não houver.
+  const existing = await tx.exercise.findFirst({
+    where: { organizationId, name: { equals: name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existing) return existing;
+
+  return tx.exercise.create({
+    data: { name, category, organizationId, targetMuscles: [] },
+    select: { id: true },
   });
 }
 
