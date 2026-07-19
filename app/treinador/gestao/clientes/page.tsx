@@ -60,9 +60,13 @@ export default function ClientsPage() {
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkStatus, setBulkStatus] = useState("ACTIVE");
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
+    setPicked(new Set());
     const params = new URLSearchParams();
     if (filterStatus) params.set("status", filterStatus);
     if (q.trim()) params.set("q", q.trim());
@@ -71,6 +75,33 @@ export default function ClientsPage() {
       .catch((e: ApiClientError) => setError(e))
       .finally(() => setLoading(false));
   }, [filterStatus, q]);
+
+  function togglePick(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function applyBulk() {
+    if (picked.size === 0) return;
+    if (bulkStatus === "ARCHIVED" && !confirm(`Arquivar ${picked.size} cliente(s)?`)) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await apiFetch("/api/trainer/clients/bulk", {
+        method: "POST",
+        body: JSON.stringify({ clientIds: [...picked], status: bulkStatus }),
+      });
+      load();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!checked) return;
@@ -119,6 +150,25 @@ export default function ClientsPage() {
           </select>
         </div>
 
+        {picked.size > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-petrol/60 px-3 py-2">
+            <span className="text-sm text-muted">{picked.size} selecionado(s)</span>
+            <select className={uiClasses.select} value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value)}>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+            <button type="button" className={uiClasses.button} disabled={bulkBusy} onClick={applyBulk}>
+              Alterar status
+            </button>
+            <button type="button" className="text-sm text-muted hover:text-ink" onClick={() => setPicked(new Set())}>
+              Limpar
+            </button>
+          </div>
+        ) : null}
+
         <ErrorNotice error={error} />
         {loading ? (
           <p className={uiClasses.hint}>Carregando…</p>
@@ -129,6 +179,7 @@ export default function ClientsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-line text-left text-faint">
+                  <th className="w-8 px-4 py-2"></th>
                   <th className="px-4 py-2 font-medium">Nome</th>
                   <th className="px-4 py-2 font-medium">Status</th>
                   <th className="px-4 py-2 font-medium">Contato</th>
@@ -139,10 +190,17 @@ export default function ClientsPage() {
                 {clients.map((c) => (
                   <tr
                     key={c.id}
-                    onClick={() => setSelectedId(c.id)}
-                    className="cursor-pointer border-b border-line/50 hover:bg-surface/40"
+                    className="border-b border-line/50 hover:bg-surface/40"
                   >
-                    <td className="px-4 py-2 font-medium text-ink">{c.name}</td>
+                    <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="accent-electric"
+                        checked={picked.has(c.id)}
+                        onChange={() => togglePick(c.id)}
+                      />
+                    </td>
+                    <td className="cursor-pointer px-4 py-2 font-medium text-ink" onClick={() => setSelectedId(c.id)}>{c.name}</td>
                     <td className="px-4 py-2">
                       <span className={badge(c.status)}>{STATUS_LABELS[c.status] ?? c.status}</span>
                     </td>

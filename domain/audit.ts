@@ -104,7 +104,14 @@ export type AuditAction =
   | "SET_MEMBER_ACTIVE"
   | "ASSIGN_ATHLETE"
   | "UNASSIGN_ATHLETE"
-  | "TRANSFER_ATHLETE";
+  | "TRANSFER_ATHLETE"
+  // Etapa 4 §21 — ação em massa. Uma linha de auditoria por lote (com a
+  // contagem), não por registro afetado.
+  | "BULK_UPDATE_CLIENTS"
+  // Etapa 4 §26/§29 — importação CSV e LGPD (exportar/anonimizar dado comercial).
+  | "IMPORT_CLIENTS"
+  | "EXPORT_CLIENT_DATA"
+  | "ANONYMIZE_CLIENT";
 
 export interface AuditLogInput {
   action: AuditAction;
