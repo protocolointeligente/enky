@@ -410,6 +410,7 @@ model Organization {
   leadInteractions     LeadInteraction[]
   clients              Client[]
   coachServicePlans    CoachServicePlan[]
+  contracts            CoachClientContract[]
 }
 
 model OrganizationMembership {
@@ -477,6 +478,7 @@ model AthleteProfile {
   readinessCheckIns   ReadinessCheckIn[]
   externalConnections ExternalConnection[]
   externalActivities  ExternalActivity[]
+  contracts           CoachClientContract[]
 }
 
 model CoachAthleteRelationship {
@@ -1527,9 +1529,11 @@ model Client {
   updatedAt      DateTime     @updatedAt @db.Timestamptz
   lockVersion    Int          @default(1)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-  sourceLead   Lead?        @relation(fields: [sourceLeadId], references: [id], onDelete: SetNull)
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user              User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sourceLead        Lead?                 @relation(fields: [sourceLeadId], references: [id], onDelete: SetNull)
+  contractsAsClient CoachClientContract[] @relation("ContractClient")
+  contractsAsPayer  CoachClientContract[] @relation("ContractPayer")
 
   @@index([organizationId, status])
   @@index([organizationId])
@@ -1592,7 +1596,93 @@ model CoachServicePlan {
   updatedAt             DateTime              @updatedAt @db.Timestamptz
   lockVersion           Int                   @default(1)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contracts    CoachClientContract[]
 
   @@index([organizationId, isActive])
+}
+
+// ---------------------------------------------------------------------------
+// 14. CONTRATOS DA ASSESSORIA (Etapa 4 §10–11)
+// ---------------------------------------------------------------------------
+// É AQUI que nasce o vínculo cliente↔atleta↔pagador (clientId/athleteId/
+// payerClientId) — deliberadamente três campos distintos, porque coincidem
+// frequentemente mas nem sempre (empresa paga / funcionário treina). O contrato
+// CONGELA o preço do plano no momento (§10): editar/trocar o plano depois nunca
+// retroage sobre um contrato já feito. Ações sensíveis (preço/desconto/
+// cancelamento/aceite) são auditadas (§32).
+
+enum ContractStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  ACTIVE
+  PAUSED
+  OVERDUE
+  CANCELLED
+  EXPIRED
+  COMPLETED
+}
+
+enum ContractAcceptanceMethod {
+  MANUAL
+  CHECKBOX
+  DIGITAL_SIGNATURE_PROVIDER
+  IMPORTED
+}
+
+model CoachClientContract {
+  id             String         @id @default(uuid())
+  organizationId String
+  clientId       String
+  // Quem treina — opcional (o cliente pode ser só o pagador). SetNull para
+  // preservar o contrato se o perfil do atleta sumir.
+  athleteId      String?
+  servicePlanId  String
+  // Quem paga — default = clientId no serviço quando omitido (caso comum
+  // cliente=pagador), mas modelado à parte para os casos em que difere.
+  payerClientId  String
+  status         ContractStatus @default(DRAFT)
+
+  startDate        DateTime  @db.Date
+  endDate          DateTime? @db.Date
+  billingStartDate DateTime? @db.Date
+  billingDay       Int       @default(1)
+
+  // Preço CONGELADO na assinatura. finalPrice = price - discount
+  // (computeFinalPrice, clampeado ≥ 0). `price` pode ser personalizado na
+  // criação (valor avulso), não precisa ser igual ao do plano.
+  price      Decimal @default(0) @db.Decimal(12, 2)
+  discount   Decimal @default(0) @db.Decimal(12, 2)
+  finalPrice Decimal @default(0) @db.Decimal(12, 2)
+  currency   String  @default("BRL") @db.VarChar(3)
+
+  autoRenew              Boolean   @default(false)
+  gracePeriodDays        Int       @default(0)
+  cancellationNoticeDays Int       @default(0)
+  cancellationReason     String?
+  cancelledAt            DateTime? @db.Timestamptz
+
+  // Documento e aceite (§11). Sem assinatura digital avançada nesta etapa —
+  // MANUAL/CHECKBOX registram quem/quando/IP; o HTML é gerado do template.
+  templateCode     String?
+  templateVersion  Int?
+  acceptedAt       DateTime?                 @db.Timestamptz
+  acceptedBy       String?
+  acceptanceMethod ContractAcceptanceMethod?
+  acceptanceIp     String?
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  lockVersion Int      @default(1)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client           @relation("ContractClient", fields: [clientId], references: [id], onDelete: Restrict)
+  payer        Client           @relation("ContractPayer", fields: [payerClientId], references: [id], onDelete: Restrict)
+  athlete      AthleteProfile?  @relation(fields: [athleteId], references: [id], onDelete: SetNull)
+  servicePlan  CoachServicePlan @relation(fields: [servicePlanId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, status])
+  @@index([clientId])
+  @@index([payerClientId])
+  @@index([servicePlanId])
 }

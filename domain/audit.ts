@@ -80,7 +80,15 @@ export type AuditAction =
   // trilha não pode depender de qual via trouxe a atividade.
   | "CONNECT_EXTERNAL_PROVIDER"
   | "DISCONNECT_EXTERNAL_PROVIDER"
-  | "IMPORT_EXTERNAL_ACTIVITY";
+  | "IMPORT_EXTERNAL_ACTIVITY"
+  // Etapa 4 §10–11/§32 — contratos da assessoria. Ações comerciais sensíveis
+  // (preço/desconto/cancelamento/aceite) são sempre auditadas. Nunca passar o
+  // preço/nota livre em `reason` — só ids e ação.
+  | "CREATE_CONTRACT"
+  | "UPDATE_CONTRACT"
+  | "CHANGE_CONTRACT_STATUS"
+  | "CANCEL_CONTRACT"
+  | "ACCEPT_CONTRACT";
 
 export interface AuditLogInput {
   action: AuditAction;
