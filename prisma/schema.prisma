@@ -97,6 +97,122 @@ enum MarketplacePurchaseStatus {
   REFUNDED
 }
 
+// --- Etapa 5: marketplace público (família MarketplaceProduct) -------------
+// Enums novos, distintos de MarketplaceStatus (usado pelo MarketplacePlan legado).
+
+enum MarketplaceProductType {
+  TRAINING_PLAN
+  COACHING_SERVICE
+  ASSESSMENT_SERVICE
+  PERIODIZATION_TEMPLATE
+  WORKOUT_TEMPLATE_PACK
+  EXERCISE_LIBRARY_PACK
+  EDUCATIONAL_CONTENT
+  CONSULTATION
+  EVENT_PROGRAM
+}
+
+enum MarketplaceProductStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  PUBLISHED
+  REJECTED
+  SUSPENDED
+  ARCHIVED
+}
+
+enum MarketplaceVisibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+enum MarketplaceDeliveryType {
+  DIGITAL_AUTOMATIC
+  COACH_ASSIGNED
+  MANUAL_SCHEDULING
+  HYBRID
+}
+
+enum MarketplaceSellerStatus {
+  DRAFT
+  PENDING_REVIEW
+  VERIFIED
+  PUBLISHED
+  SUSPENDED
+  REJECTED
+}
+
+enum MarketplaceSellerKind {
+  TRAINER
+  ASSESSORIA
+  ENKY_OFFICIAL
+}
+
+enum MarketplaceOrderStatus {
+  DRAFT
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  FAILED
+}
+
+enum MarketplaceDeliveryStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+}
+
+enum MarketplaceEntitlementStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum MarketplaceReviewStatus {
+  PENDING
+  PUBLISHED
+  HIDDEN
+  REJECTED
+}
+
+enum MarketplaceLedgerEntryType {
+  SALE
+  PLATFORM_FEE
+  GATEWAY_FEE
+  REFUND
+  CHARGEBACK
+  PAYOUT
+  ADJUSTMENT
+}
+
+enum MarketplaceLedgerEntryStatus {
+  PENDING
+  AVAILABLE
+  HELD
+  PAID
+  REVERSED
+}
+
+enum MarketplaceRefundPolicy {
+  NON_REFUNDABLE
+  REFUND_WITHIN_DAYS
+  REFUND_BEFORE_DELIVERY
+  MANUAL_REVIEW
+}
+
+enum MarketplaceCouponType {
+  PERCENTAGE
+  FIXED
+}
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -242,6 +358,10 @@ model User {
   requestedGenerationBatches GenerationBatch[]        @relation("GenerationRequestedBy")
   auditLogs                  AuditLog[]
   resolvedInsights           Insight[]                @relation("InsightResolvedBy")
+  marketplaceOrders          MarketplaceOrder[]
+  marketplaceEntitlements    MarketplaceEntitlement[]
+  marketplaceCarts           MarketplaceCart[]
+  marketplaceReviews         MarketplaceReview[]
 
   @@index([email])
 }
@@ -292,6 +412,9 @@ model Organization {
   auditLogs            AuditLog[]
   insights             Insight[]
   readinessCheckIns    ReadinessCheckIn[]
+  marketplaceSellers   MarketplaceSellerProfile[]
+  marketplaceOrders    MarketplaceOrder[]
+  marketplaceCoupons   MarketplaceCoupon[]
 }
 
 model OrganizationMembership {
@@ -981,8 +1104,11 @@ model PaymentTransaction {
   createdAt          DateTime      @default(now()) @db.Timestamptz
   updatedAt          DateTime      @updatedAt @db.Timestamptz
 
-  purchase     MarketplacePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
-  subscription Subscription?        @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  marketplaceOrderId String?
+
+  purchase         MarketplacePurchase? @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  subscription     Subscription?        @relation(fields: [subscriptionId], references: [id], onDelete: Restrict)
+  marketplaceOrder MarketplaceOrder?    @relation(fields: [marketplaceOrderId], references: [id], onDelete: Restrict)
 }
 
 // ---------------------------------------------------------------------------
@@ -1013,4 +1139,459 @@ model AuditLog {
   @@index([action])
   @@index([correlationId])
   @@index([organizationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// 10. MARKETPLACE PÚBLICO (Etapa 5) — família MarketplaceProduct
+// ---------------------------------------------------------------------------
+// Distinto de MarketplacePlan (venda estreita treinador→atleta, §8) e de
+// Subscription (SaaS). Comprador = User qualquer. Snapshots (order item,
+// entitlement, ledger) guardam ids como String, sem FK, por design de
+// imutabilidade: a compra não muda se o produto/vendedor mudar depois.
+// Detalhes: docs/ENKY_MARKETPLACE_PRODUCT_MODEL.md e docs/adr.
+
+model MarketplaceSellerProfile {
+  id                String                  @id @default(uuid())
+  organizationId    String
+  userId            String? // treinador responsável (id cru; sem FK)
+  kind              MarketplaceSellerKind   @default(TRAINER)
+  displayName       String
+  slug              String                  @unique
+  headline          String?
+  bio               String?
+  profileImageUrl   String?
+  coverImageUrl     String?
+  modalities        Modality[]              @default([])
+  specialties       String[]                @default([])
+  experienceYears   Int?
+  certifications    String[]                @default([]) // declaradas; validação é processo à parte
+  location          String?
+  remoteService     Boolean                 @default(true)
+  languages         String[]                @default([])
+  website           String?
+  socialLinks       Json?
+  averageRating     Decimal                 @default(0) @db.Decimal(3, 2)
+  reviewCount       Int                     @default(0)
+  salesCount        Int                     @default(0)
+  status            MarketplaceSellerStatus @default(DRAFT)
+  verificationNotes String?
+  verifiedByUserId  String?
+  verifiedAt        DateTime?               @db.Timestamptz
+  rejectedAt        DateTime?               @db.Timestamptz
+  rejectionReason   String?
+  lockVersion       Int                     @default(1)
+  createdAt         DateTime                @default(now()) @db.Timestamptz
+  updatedAt         DateTime                @updatedAt @db.Timestamptz
+
+  organization  Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  products      MarketplaceProduct[]
+  ledgerEntries MarketplaceLedgerEntry[]
+  balance       MarketplaceSellerBalance?
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
+}
+
+model MarketplaceProduct {
+  id                     String                   @id @default(uuid())
+  sellerProfileId        String
+  sellerOrganizationId   String // denormalizado p/ tenant isolation (id cru)
+  sellerUserId           String?
+  productType            MarketplaceProductType
+  title                  String
+  slug                   String                   @unique
+  shortDescription       String?
+  fullDescription        String?
+  modality               Modality?
+  level                  String?
+  goal                   String?
+  durationWeeks          Int?
+  sessionsPerWeek        Int?
+  deliveryType           MarketplaceDeliveryType  @default(DIGITAL_AUTOMATIC)
+  price                  Decimal                  @db.Decimal(12, 2) // valor em edição da próxima versão; checkout usa priceSnapshot
+  compareAtPrice         Decimal?                 @db.Decimal(12, 2)
+  currency               String                   @default("BRL") @db.VarChar(3)
+  status                 MarketplaceProductStatus @default(DRAFT)
+  visibility             MarketplaceVisibility    @default(PUBLIC)
+  isFeatured             Boolean                  @default(false)
+  isEnkyOfficial         Boolean                  @default(false)
+  officialCode           String?                  @unique // seed idempotente dos 20 planos oficiais
+  requiresCoachApproval  Boolean                  @default(false)
+  requiresAthleteProfile Boolean                  @default(false)
+  refundPolicy           MarketplaceRefundPolicy  @default(NON_REFUNDABLE)
+  refundWindowDays       Int?
+  thumbnailUrl           String?
+  coverImageUrl          String?
+  previewVideoUrl        String?
+  averageRating          Decimal                  @default(0) @db.Decimal(3, 2)
+  reviewCount            Int                      @default(0)
+  salesCount             Int                      @default(0)
+  publishedVersionId     String?                  @unique
+  commercialVersion      Int                      @default(1)
+  lockVersion            Int                      @default(1)
+  publishedAt            DateTime?                @db.Timestamptz
+  createdAt              DateTime                 @default(now()) @db.Timestamptz
+  updatedAt              DateTime                 @updatedAt @db.Timestamptz
+
+  sellerProfile    MarketplaceSellerProfile     @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  versions         MarketplaceProductVersion[]  @relation("ProductVersions")
+  publishedVersion MarketplaceProductVersion?   @relation("PublishedProductVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+  variants         MarketplaceProductVariant[]
+  categories       MarketplaceProductCategory[]
+  orderItems       MarketplaceOrderItem[]
+  reviews          MarketplaceReview[]
+  entitlements     MarketplaceEntitlement[]
+  cartItems        MarketplaceCartItem[]
+
+  @@index([sellerOrganizationId])
+  @@index([status, visibility])
+  @@index([productType])
+}
+
+model MarketplaceProductVariant {
+  id              String   @id @default(uuid())
+  productId       String
+  name            String
+  description     String?
+  price           Decimal  @db.Decimal(12, 2)
+  compareAtPrice  Decimal? @db.Decimal(12, 2)
+  currency        String   @default("BRL") @db.VarChar(3)
+  durationWeeks   Int?
+  sessionsPerWeek Int?
+  supportLevel    String?
+  maxAthletes     Int?
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+
+  product    MarketplaceProduct     @relation(fields: [productId], references: [id], onDelete: Cascade)
+  orderItems MarketplaceOrderItem[]
+  cartItems  MarketplaceCartItem[]
+
+  @@index([productId])
+}
+
+// Snapshot comercial imutável (mesmo padrão de MarketplacePlanVersion).
+model MarketplaceProductVersion {
+  id                String    @id @default(uuid())
+  productId         String
+  commercialVersion Int
+  titleSnapshot     String
+  priceSnapshot     Decimal   @db.Decimal(12, 2)
+  currency          String    @default("BRL") @db.VarChar(3)
+  contentSnapshot   Json // periodizationTemplateId, workoutTemplateIds, exerciseIds, contentAssetIds, coachServicePlanId, variantes
+  changeLog         String?
+  createdByUserId   String?
+  publishedAt       DateTime? @db.Timestamptz
+  createdAt         DateTime  @default(now()) @db.Timestamptz
+
+  product            MarketplaceProduct       @relation("ProductVersions", fields: [productId], references: [id], onDelete: Cascade)
+  publishedByProduct MarketplaceProduct?      @relation("PublishedProductVersion")
+  orderItems         MarketplaceOrderItem[]
+  entitlements       MarketplaceEntitlement[]
+
+  @@unique([productId, commercialVersion])
+}
+
+model MarketplaceCategory {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  parentId  String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  parent   MarketplaceCategory?         @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children MarketplaceCategory[]        @relation("CategoryTree")
+  products MarketplaceProductCategory[]
+
+  @@index([parentId])
+}
+
+model MarketplaceProductCategory {
+  productId  String
+  categoryId String
+
+  product  MarketplaceProduct  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category MarketplaceCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([productId, categoryId])
+  @@index([categoryId])
+}
+
+model MarketplaceOrder {
+  id                  String                    @id @default(uuid())
+  buyerUserId         String
+  buyerOrganizationId String?
+  currency            String                    @default("BRL") @db.VarChar(3)
+  subtotal            Decimal                   @db.Decimal(12, 2)
+  discount            Decimal                   @default(0) @db.Decimal(12, 2)
+  platformFee         Decimal                   @default(0) @db.Decimal(12, 2)
+  gatewayFee          Decimal                   @default(0) @db.Decimal(12, 2)
+  sellerAmount        Decimal                   @default(0) @db.Decimal(12, 2)
+  total               Decimal                   @db.Decimal(12, 2)
+  status              MarketplaceOrderStatus    @default(DRAFT)
+  paymentStatus       PaymentStatus             @default(PENDING)
+  deliveryStatus      MarketplaceDeliveryStatus @default(PENDING)
+  gateway             String?
+  gatewayReference    String?
+  idempotencyKey      String                    @unique
+  couponId            String?
+  lockVersion         Int                       @default(1)
+  createdAt           DateTime                  @default(now()) @db.Timestamptz
+  updatedAt           DateTime                  @updatedAt @db.Timestamptz
+  paidAt              DateTime?                 @db.Timestamptz
+  cancelledAt         DateTime?                 @db.Timestamptz
+  refundedAt          DateTime?                 @db.Timestamptz
+
+  buyer         User                      @relation(fields: [buyerUserId], references: [id], onDelete: Restrict)
+  buyerOrg      Organization?             @relation(fields: [buyerOrganizationId], references: [id], onDelete: SetNull)
+  coupon        MarketplaceCoupon?        @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  items         MarketplaceOrderItem[]
+  transactions  PaymentTransaction[]
+  entitlements  MarketplaceEntitlement[]
+  paymentEvents MarketplacePaymentEvent[]
+  ledgerEntries MarketplaceLedgerEntry[]
+  reviews       MarketplaceReview[]
+
+  @@index([buyerUserId])
+  @@index([buyerOrganizationId])
+  @@index([status])
+}
+
+// Snapshot imutável do item comprado (ids sem FK são snapshots).
+model MarketplaceOrderItem {
+  id                   String                 @id @default(uuid())
+  orderId              String
+  productId            String?
+  productVersionId     String?
+  variantId            String?
+  sellerProfileId      String?
+  sellerOrganizationId String
+  sellerUserId         String?
+  title                String
+  productType          MarketplaceProductType
+  quantity             Int                    @default(1)
+  unitPrice            Decimal                @db.Decimal(12, 2)
+  platformFee          Decimal                @default(0) @db.Decimal(12, 2)
+  sellerAmount         Decimal                @default(0) @db.Decimal(12, 2)
+  commissionSnapshot   Json? // regra de comissão aplicada no momento da venda
+  deliveryPayload      Json?
+  createdAt            DateTime               @default(now()) @db.Timestamptz
+
+  order          MarketplaceOrder           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        MarketplaceProduct?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productVersion MarketplaceProductVersion? @relation(fields: [productVersionId], references: [id], onDelete: SetNull)
+  variant        MarketplaceProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  entitlements   MarketplaceEntitlement[]
+  reviews        MarketplaceReview[]
+  ledgerEntries  MarketplaceLedgerEntry[]
+
+  @@index([orderId])
+  @@index([sellerOrganizationId])
+}
+
+model MarketplaceCart {
+  id        String    @id @default(uuid())
+  userId    String
+  currency  String    @default("BRL") @db.VarChar(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz
+  updatedAt DateTime  @updatedAt @db.Timestamptz
+  expiresAt DateTime? @db.Timestamptz
+
+  user  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items MarketplaceCartItem[]
+
+  @@index([userId])
+}
+
+model MarketplaceCartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  productId String
+  variantId String?
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  cart    MarketplaceCart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product MarketplaceProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant MarketplaceProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  // ponytail: unique ignora linhas com variantId NULL (semântica NULL do Postgres);
+  // dedupe de item sem variante fica na camada de serviço, não vale índice parcial agora.
+  @@unique([cartId, productId, variantId])
+  @@index([cartId])
+}
+
+model MarketplaceEntitlement {
+  id                  String                       @id @default(uuid())
+  buyerUserId         String
+  buyerOrganizationId String?
+  orderId             String?
+  orderItemId         String?                      @unique // idempotência de entrega: 1 entitlement por item
+  productId           String?
+  productVersionId    String?
+  entitlementType     MarketplaceProductType
+  status              MarketplaceEntitlementStatus @default(PENDING)
+  deliveryPayload     Json?
+  startsAt            DateTime?                    @db.Timestamptz
+  expiresAt           DateTime?                    @db.Timestamptz
+  revokedAt           DateTime?                    @db.Timestamptz
+  createdAt           DateTime                     @default(now()) @db.Timestamptz
+  updatedAt           DateTime                     @updatedAt @db.Timestamptz
+
+  buyer          User                       @relation(fields: [buyerUserId], references: [id], onDelete: Restrict)
+  order          MarketplaceOrder?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderItem      MarketplaceOrderItem?      @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  product        MarketplaceProduct?        @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productVersion MarketplaceProductVersion? @relation(fields: [productVersionId], references: [id], onDelete: SetNull)
+
+  @@index([buyerUserId])
+}
+
+model MarketplaceReview {
+  id               String                  @id @default(uuid())
+  orderItemId      String                  @unique // 1 avaliação por item comprado
+  orderId          String?
+  productId        String
+  sellerProfileId  String?
+  reviewerUserId   String
+  rating           Int // validação 1..5 na camada de serviço (Zod)
+  title            String?
+  comment          String?
+  status           MarketplaceReviewStatus @default(PENDING)
+  verifiedPurchase Boolean                 @default(true)
+  createdAt        DateTime                @default(now()) @db.Timestamptz
+  updatedAt        DateTime                @updatedAt @db.Timestamptz
+
+  orderItem MarketplaceOrderItem       @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  order     MarketplaceOrder?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  product   MarketplaceProduct         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  reviewer  User                       @relation(fields: [reviewerUserId], references: [id], onDelete: Restrict)
+  response  MarketplaceReviewResponse?
+
+  @@index([productId, status])
+}
+
+model MarketplaceReviewResponse {
+  id              String   @id @default(uuid())
+  reviewId        String   @unique
+  responderUserId String
+  comment         String
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+
+  review MarketplaceReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+}
+
+model MarketplaceCommissionRule {
+  id             String                  @id @default(uuid())
+  sellerKind     MarketplaceSellerKind?
+  productType    MarketplaceProductType?
+  percentage     Decimal                 @default(0) @db.Decimal(5, 2)
+  fixedFee       Decimal                 @default(0) @db.Decimal(12, 2)
+  currency       String                  @default("BRL") @db.VarChar(3)
+  effectiveFrom  DateTime                @db.Timestamptz
+  effectiveUntil DateTime?               @db.Timestamptz
+  isActive       Boolean                 @default(true)
+  createdAt      DateTime                @default(now()) @db.Timestamptz
+
+  @@index([sellerKind, productType, isActive])
+}
+
+// Fonte de verdade do saldo do vendedor (§28). O saldo em MarketplaceSellerBalance
+// é cache derivável — nunca mutar sem lançar aqui.
+model MarketplaceLedgerEntry {
+  id                   String                       @id @default(uuid())
+  sellerProfileId      String
+  sellerOrganizationId String
+  orderId              String?
+  orderItemId          String?
+  type                 MarketplaceLedgerEntryType
+  amount               Decimal                      @db.Decimal(12, 2) // sinal: +crédito / -débito
+  currency             String                       @default("BRL") @db.VarChar(3)
+  status               MarketplaceLedgerEntryStatus @default(PENDING)
+  availableAt          DateTime?                    @db.Timestamptz
+  description          String?
+  createdAt            DateTime                     @default(now()) @db.Timestamptz
+
+  sellerProfile MarketplaceSellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+  order         MarketplaceOrder?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderItem     MarketplaceOrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+
+  @@index([sellerProfileId, status])
+  @@index([orderId])
+}
+
+model MarketplaceSellerBalance {
+  id              String   @id @default(uuid())
+  sellerProfileId String   @unique
+  currency        String   @default("BRL") @db.VarChar(3)
+  pendingAmount   Decimal  @default(0) @db.Decimal(12, 2) // cache derivável do ledger
+  availableAmount Decimal  @default(0) @db.Decimal(12, 2)
+  paidAmount      Decimal  @default(0) @db.Decimal(12, 2)
+  lockVersion     Int      @default(1)
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+
+  sellerProfile MarketplaceSellerProfile @relation(fields: [sellerProfileId], references: [id], onDelete: Cascade)
+}
+
+// Log cru de webhook do gateway (§21) — dedupe + reprocesso; separado de
+// PaymentTransaction (que carrega o dinheiro e sua própria idempotência).
+model MarketplacePaymentEvent {
+  id              String    @id @default(uuid())
+  gateway         String
+  externalEventId String
+  eventType       String
+  payloadHash     String
+  status          String    @default("RECEIVED") // RECEIVED / PROCESSED / FAILED / IGNORED
+  orderId         String?
+  processedAt     DateTime? @db.Timestamptz
+  failureReason   String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz
+
+  order MarketplaceOrder? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([gateway, externalEventId]) // idempotência do webhook
+  @@index([orderId])
+}
+
+model MarketplaceCoupon {
+  id                   String                @id @default(uuid())
+  code                 String                @unique
+  discountType         MarketplaceCouponType
+  discountValue        Decimal               @db.Decimal(12, 2)
+  minimumAmount        Decimal?              @db.Decimal(12, 2)
+  maximumDiscount      Decimal?              @db.Decimal(12, 2)
+  currency             String                @default("BRL") @db.VarChar(3)
+  startsAt             DateTime?             @db.Timestamptz
+  endsAt               DateTime?             @db.Timestamptz
+  usageLimit           Int?
+  usageLimitPerUser    Int?
+  usageCount           Int                   @default(0)
+  sellerOrganizationId String?
+  productId            String?
+  isActive             Boolean               @default(true)
+  createdAt            DateTime              @default(now()) @db.Timestamptz
+
+  organization Organization?                 @relation(fields: [sellerOrganizationId], references: [id], onDelete: Cascade)
+  orders       MarketplaceOrder[]
+  redemptions  MarketplaceCouponRedemption[]
+
+  @@index([code])
+}
+
+model MarketplaceCouponRedemption {
+  id        String   @id @default(uuid())
+  couponId  String
+  userId    String
+  orderId   String?
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  coupon MarketplaceCoupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+
+  @@index([couponId, userId])
 }
