@@ -127,6 +127,10 @@ interface RunArgs {
   resolved: { modality: NonNullable<GenerateInput["modality"]>; availableWeekdays: number[] };
   inference: InferredInput | null;
   actor: PeriodizationActor;
+  /** Fase 9 — quando o job de background já criou o GenerationBatch (PENDING),
+   *  a transação ADOTA essa linha em vez de criar outra. Ausente = caminho
+   *  síncrono homologado, comportamento idêntico. */
+  existingBatchId?: string;
 }
 
 async function runGeneration(args: RunArgs) {
@@ -282,44 +286,53 @@ async function runGeneration(args: RunArgs) {
         await tx.workout.deleteMany({ where: { id: { in: staleDrafts.map((d) => d.id) } } });
       }
 
-      const batch = await tx.generationBatch.create({
-        data: {
-          organizationId: actor.organizationId,
-          periodizationId,
-          athleteId,
-          trainerId: actor.trainerProfileId,
-          requestedByUserId: actor.userId,
-          generationMode: input.mode,
-          generationVersion: previousBatches + 1,
-          algorithmVersion: ALGORITHM_VERSION,
-          generationRationaleVersion: RATIONALE_VERSION,
-          scope,
-          status: "PROCESSING",
-          startedAt: new Date(),
-          // contextSnapshot = exatamente o que o motor viu. Sem isto, um treino
-          // gerado hoje é inexplicável amanhã: o alvo da semana pode ter mudado,
-          // a fase pode ter sido renomeada. O snapshot congela a entrada, o
-          // rationale congela o raciocínio.
-          contextSnapshot: {
-            mode: input.mode,
-            scope,
-            resolvedInput: { ...resolved, level: input.level ?? null },
-            inference: inference ? { ...inference } : null,
-            confidence: batchConfidence,
-            weeks: outcomes.map((outcome) => ({
-              weekId: outcome.weekId,
-              sequence: outcome.sequence,
-              confidence: outcome.confidence,
-              // `context` é a ENTRADA congelada, `rationale` o raciocínio. Sem
-              // a entrada, um treino gerado hoje é inexplicável amanhã: o alvo
-              // da semana pode mudar, a fase pode ser renomeada.
-              context: outcome.context,
-              rationale: outcome.rationale,
-              workoutCount: outcome.workoutCount,
-            })),
-          } as unknown as Prisma.InputJsonObject,
-        },
-      });
+      // contextSnapshot = exatamente o que o motor viu. Sem isto, um treino
+      // gerado hoje é inexplicável amanhã: o alvo da semana pode ter mudado,
+      // a fase pode ter sido renomeada. O snapshot congela a entrada, o
+      // rationale congela o raciocínio.
+      const contextSnapshot = {
+        mode: input.mode,
+        scope,
+        resolvedInput: { ...resolved, level: input.level ?? null },
+        inference: inference ? { ...inference } : null,
+        confidence: batchConfidence,
+        weeks: outcomes.map((outcome) => ({
+          weekId: outcome.weekId,
+          sequence: outcome.sequence,
+          confidence: outcome.confidence,
+          context: outcome.context,
+          rationale: outcome.rationale,
+          workoutCount: outcome.workoutCount,
+        })),
+      } as unknown as Prisma.InputJsonObject;
+
+      // Fase 9 — quando um job de background pré-criou o batch (PENDING), a
+      // transação o ADOTA (update); senão cria como sempre. O caminho síncrono
+      // (sem existingBatchId) fica idêntico ao homologado. A adoção conta a
+      // própria linha PENDING, então não soma +1 na versão.
+      const generationVersion = args.existingBatchId ? previousBatches : previousBatches + 1;
+      const batchFields = {
+        generationMode: input.mode,
+        generationVersion,
+        algorithmVersion: ALGORITHM_VERSION,
+        generationRationaleVersion: RATIONALE_VERSION,
+        scope,
+        status: "PROCESSING" as const,
+        startedAt: new Date(),
+        contextSnapshot,
+      };
+      const batch = args.existingBatchId
+        ? await tx.generationBatch.update({ where: { id: args.existingBatchId }, data: batchFields })
+        : await tx.generationBatch.create({
+            data: {
+              organizationId: actor.organizationId,
+              periodizationId,
+              athleteId,
+              trainerId: actor.trainerProfileId,
+              requestedByUserId: actor.userId,
+              ...batchFields,
+            },
+          });
 
       if (workoutRows.length > 0) {
         // Batelado: um ciclo inteiro são dezenas de treinos e centenas de
@@ -427,11 +440,14 @@ export async function generateWeekDrafts(
   });
 }
 
-/** Gera os rascunhos do CICLO INTEIRO — todas as semanas do plano. */
+/** Gera os rascunhos do CICLO INTEIRO — todas as semanas do plano.
+ *  `options.existingBatchId` (Fase 9) faz a geração ADOTAR um GenerationBatch
+ *  já criado pelo job de background; ausente = caminho síncrono homologado. */
 export async function generateCycleDrafts(
   periodizationId: string,
   input: GenerateInput,
   actor: PeriodizationActor,
+  options?: { existingBatchId?: string },
 ) {
   const periodization = await loadPeriodization(periodizationId, actor);
 
@@ -457,5 +473,6 @@ export async function generateCycleDrafts(
     resolved,
     inference,
     actor,
+    existingBatchId: options?.existingBatchId,
   });
 }

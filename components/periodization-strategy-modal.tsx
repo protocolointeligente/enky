@@ -183,7 +183,6 @@ export function PeriodizationStrategyModal({
   const [eventDate, setEventDate] = useState(() => toISODate(addDays(new Date(), 111)));
   const [weekdays, setWeekdays] = useState<number[]>([2, 4, 6]);
   const [baseVolume, setBaseVolume] = useState("");
-  const [includeStrength, setIncludeStrength] = useState(false);
   const [notes, setNotes] = useState("");
 
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -209,7 +208,6 @@ export function PeriodizationStrategyModal({
       startDate: start,
       eventDate,
       availableWeekdays: weekdays,
-      includeStrength,
     };
     if (level) body.level = level;
     if (baseVolume.trim() && isEndurance(modality)) body.baseWeeklyVolumeKm = Number(baseVolume);
@@ -288,7 +286,6 @@ export function PeriodizationStrategyModal({
         isRecoveryWeek: week.isRecoveryWeek,
         weekStartDate: week.startDate,
         weekEndDate: week.endDate,
-        includeStrength,
       };
       const engineLevel = level ? LEVEL_TO_ENGINE[level] : undefined;
       if (engineLevel) body.level = engineLevel;
@@ -530,19 +527,6 @@ export function PeriodizationStrategyModal({
           />
         </div>
       )}
-
-      <label className="flex items-center gap-2 text-sm text-muted">
-        <input
-          type="checkbox"
-          className="accent-electric"
-          checked={includeStrength}
-          onChange={(e) => {
-            setPreview(null);
-            setIncludeStrength(e.target.checked);
-          }}
-        />
-        Incluir força complementar nos dias leves
-      </label>
 
       <div>
         <label htmlFor="s-notes" className={uiClasses.label}>

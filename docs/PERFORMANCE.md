@@ -42,23 +42,30 @@ Limites conscientes:
 - `maxEntries` + `ttlMs` evitam crescer sem teto e servir resultado velho entre
   deploys (regras/versões podem mudar).
 
-## 3. O que fica para depois (e por quê)
+## 3. Background job para o `FULL_CYCLE` (entregue)
 
-**Background job + fila para o `FULL_CYCLE`.** Tornar a geração do ciclo inteiro
-assíncrona (responder na hora, processar em segundo plano, cliente consulta o
-status) é a evolução natural — o modelo `GenerationBatch` já tem `status`/
-`startedAt`/`completedAt`/`failedAt` prontos para isso. **Deferido de propósito:**
+A geração do ciclo inteiro agora tem um caminho **assíncrono** que não faz a
+interface esperar a persistência:
 
-1. exige `waitUntil` (Fluid Compute) + polling de status na UI + tratamento de
-   falha parcial — superfície nova e não trivial;
-2. mexeria no fluxo de geração **já homologado** (Fase 6), contra a diretriz de
-   "não alterar o que está homologado sem necessidade";
-3. hoje o custo real (segundos, em lote) **não justifica** — a otimização
-   prematura seria o erro. Liga-se quando o volume de uso mostrar o gargalo.
+1. `POST …/periodizations/[id]/generate/async` — `startCycleGeneration` cria o
+   `GenerationBatch` como **PENDING** (falhando cedo em acesso/plano sem semanas),
+   responde **202** com o `batchId`, e o processamento roda **depois da resposta**
+   via Next `after()` (`processCycleGeneration`).
+2. O processador chama a MESMA geração homologada, que **ADOTA** o batch PENDING
+   (`generateCycleDrafts(..., { existingBatchId })`) em vez de criar outro. Erro →
+   batch marcado `FAILED` com `failureCode`.
+3. `GET …/periodizations/[id]/batches/[batchId]` — status; a UI faz polling
+   (2,5 s) até `COMPLETED`/`FAILED` e então recarrega o plano.
 
-Quando ligar: criar o `GenerationBatch` como `PENDING`, responder 202 com o
-`batchId`, processar em `waitUntil`, e a UI faz polling em
-`GET …/batches/[id]` até `COMPLETED`/`FAILED`.
+**Segurança da mudança:** o caminho **síncrono** (`generateCycleDrafts` sem
+`existingBatchId`, botão "Gerar rascunhos") ficou **byte-idêntico** — a adoção do
+batch é um ramo backward-compatible. O botão "Gerar em segundo plano" é aditivo e
+opcional. Nada publica: os treinos nascem DRAFT nos dois caminhos.
+
+**Fila real (SQS/Vercel Queues) e retry** seguem desnecessários no volume atual —
+`after()` sobre Fluid Compute cobre o caso. Migra-se para fila dedicada só se a
+taxa de geração concorrente crescer a ponto de exigir throttling/durabilidade
+além do batch.
 
 ## 4. Postura
 

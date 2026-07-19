@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { MODALITY_META, MODALITY_ORDER } from "@/app/_lib/modality";
@@ -72,6 +72,13 @@ export interface GenerationTarget {
   weekCount: number;
 }
 
+interface CycleBatchStatus {
+  batchId: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  failureCode: string | null;
+  workoutCount: number;
+}
+
 interface Props {
   target: GenerationTarget | null;
   onClose: () => void;
@@ -129,11 +136,25 @@ export function WeekGenerationModal({ target, onClose, onGenerated }: Props) {
   // substituição é uma decisão consciente, não um checkbox ligado por padrão.
   const [conflict, setConflict] = useState(false);
   const [result, setResult] = useState<GenerateResult | null>(null);
+  // Geração em segundo plano (Fase 9): dispara o job e acompanha por polling.
+  const [asyncBatch, setAsyncBatch] = useState<CycleBatchStatus | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+  // Garante que o polling pare se o componente desmontar.
+  useEffect(() => stopPolling, []);
 
   function reset() {
     setError(null);
     setConflict(false);
     setResult(null);
+    setAsyncBatch(null);
+    stopPolling();
   }
 
   function toggleDay(iso: number) {
@@ -178,6 +199,52 @@ export function WeekGenerationModal({ target, onClose, onGenerated }: Props) {
     }
   }
 
+  function startPolling(batchId: string, periodizationId: string) {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const s = await apiFetch<CycleBatchStatus>(
+          `/api/trainer/periodizations/${periodizationId}/batches/${batchId}`,
+        );
+        setAsyncBatch(s);
+        if (s.status === "COMPLETED" || s.status === "FAILED") {
+          stopPolling();
+          if (s.status === "COMPLETED") await onGenerated();
+        }
+      } catch {
+        // Erro transitório de rede — mantém o polling.
+      }
+    }, 2500);
+  }
+
+  async function generateAsync() {
+    if (!target) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { batchId } = await apiFetch<{ batchId: string }>(
+        `/api/trainer/periodizations/${target.periodizationId}/generate/async`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            mode,
+            modality: mode === "ASSISTED" ? modality : undefined,
+            availableWeekdays: mode === "ASSISTED" ? weekdays : undefined,
+            level: level || undefined,
+            includeStrength,
+            replaceExisting: false,
+          }),
+        },
+      );
+      setAsyncBatch({ batchId, status: "PENDING", failureCode: null, workoutCount: 0 });
+      startPolling(batchId, target.periodizationId);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Não foi possível iniciar a geração.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function close() {
     reset();
     onClose();
@@ -203,7 +270,42 @@ export function WeekGenerationModal({ target, onClose, onGenerated }: Props) {
             }${target.isRecoveryWeek ? " · semana regenerativa" : ""}`
       }
     >
-      {result ? (
+      {asyncBatch ? (
+        <div className="flex flex-col gap-4">
+          {asyncBatch.status === "FAILED" ? (
+            <p className={uiClasses.error}>
+              A geração em segundo plano falhou
+              {asyncBatch.failureCode ? `: ${asyncBatch.failureCode}` : "."}
+            </p>
+          ) : asyncBatch.status === "COMPLETED" ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`${uiClasses.badge} bg-turq/15 text-turq`}>Concluído</span>
+              <span className="text-sm text-muted">
+                {asyncBatch.workoutCount} rascunho(s) criado(s)
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`${uiClasses.badge} bg-electric/15 text-electric-hi`}>Gerando…</span>
+              <span className="text-sm text-muted">
+                Processando em segundo plano — pode fechar esta janela; os rascunhos aparecem no
+                plano quando prontos.
+              </span>
+            </div>
+          )}
+          <p className={uiClasses.hint}>
+            Tudo nasce <strong className="text-ink">rascunho</strong>. Nada é publicado
+            automaticamente.
+          </p>
+          <div className="flex justify-end">
+            <button type="button" className={uiClasses.button} onClick={close}>
+              {asyncBatch.status === "COMPLETED" || asyncBatch.status === "FAILED"
+                ? "Concluir"
+                : "Fechar"}
+            </button>
+          </div>
+        </div>
+      ) : result ? (
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`${uiClasses.badge} ${confidence!.chip}`}>{confidence!.label}</span>
@@ -485,14 +587,27 @@ export function WeekGenerationModal({ target, onClose, onGenerated }: Props) {
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              className={uiClasses.button}
-              onClick={() => generate(false)}
-              disabled={busy || !canSubmit}
-            >
-              {busy ? "Gerando…" : "Gerar rascunhos"}
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                className={uiClasses.button}
+                onClick={() => generate(false)}
+                disabled={busy || !canSubmit}
+              >
+                {busy ? "Gerando…" : "Gerar rascunhos"}
+              </button>
+              {isCycle && (
+                <button
+                  type="button"
+                  className={uiClasses.buttonSecondary}
+                  onClick={generateAsync}
+                  disabled={busy || !canSubmit}
+                  title="Dispara a geração e libera a interface — acompanhe o progresso aqui"
+                >
+                  Gerar em segundo plano
+                </button>
+              )}
+            </div>
           )}
 
           <p className="text-xs text-faint">
