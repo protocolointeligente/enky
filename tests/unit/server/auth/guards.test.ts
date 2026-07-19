@@ -34,6 +34,7 @@ const {
   getCurrentSession,
   requireAuthenticatedUser,
   requireGlobalRole,
+  requireOrgRole,
   requireOrganizationMembership,
   requireTrainerAccessToAthlete,
   resolveActiveOrganization,
@@ -180,6 +181,35 @@ describe("server/auth/guards", () => {
       { organizationId: "org2", organization: { isActive: true } },
     ]);
     await expect(resolveAthleteOrganization("u1")).rejects.toThrow();
+  });
+
+  // Etapa 4 §4 — papel organizacional. OWNER passa sempre; ADMIN legado conta
+  // como MANAGER; o resto é allow-list explícita.
+  it("requireOrgRole lets OWNER through even when not listed", () => {
+    expect(() =>
+      requireOrgRole({ organizationId: "org1", organizationRole: "OWNER" }, ["FINANCE"]),
+    ).not.toThrow();
+  });
+
+  it("requireOrgRole allows a listed role", () => {
+    expect(() =>
+      requireOrgRole({ organizationId: "org1", organizationRole: "FINANCE" }, ["FINANCE", "MANAGER"]),
+    ).not.toThrow();
+  });
+
+  it("requireOrgRole throws for a role not in the allow-list", () => {
+    expect(() =>
+      requireOrgRole({ organizationId: "org1", organizationRole: "COACH" }, ["FINANCE"]),
+    ).toThrow();
+  });
+
+  it("requireOrgRole treats legacy ADMIN as MANAGER", () => {
+    expect(() =>
+      requireOrgRole({ organizationId: "org1", organizationRole: "ADMIN" }, ["MANAGER"]),
+    ).not.toThrow();
+    expect(() =>
+      requireOrgRole({ organizationId: "org1", organizationRole: "ADMIN" }, ["COACH"]),
+    ).toThrow();
   });
 
   it("requireOrganizationMembership throws when the user isn't a member", async () => {

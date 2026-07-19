@@ -50,11 +50,22 @@ enum Role {
   ATHLETE
 }
 
+// Papel do usuário DENTRO da organização (distinto de `Role`, o papel global).
+// Etapa 4 §4: a assessoria real precisa de papéis operacionais/financeiros
+// separados. Valores novos são ANEXADOS (migração aditiva) — a ordem no enum
+// não implica hierarquia; a autoridade é modelada em `modules/organizations/
+// org-roles.ts` e imposta por `requireOrgRole`. `ADMIN` é legado (nunca
+// atribuído a vínculos novos — o cadastro cria OWNER) e é tratado como MANAGER.
 enum OrganizationRole {
   OWNER
   COACH
   ADMIN
   SUPPORT
+  MANAGER
+  HEAD_COACH
+  ASSISTANT_COACH
+  FINANCE
+  VIEWER
 }
 
 enum WorkoutStatus {
@@ -270,13 +281,13 @@ enum ExternalProvider {
 // de flag não vaza por acidente. Escopo global no MVP (não por organização);
 // `enabledOrganizationIds` permite habilitação gradual (canário) sem schema novo.
 model FeatureFlag {
-  key                   String   @id
-  description           String
-  enabled               Boolean  @default(false)
+  key                    String   @id
+  description            String
+  enabled                Boolean  @default(false)
   enabledOrganizationIds String[] @default([])
-  updatedById           String?
-  createdAt             DateTime @default(now()) @db.Timestamptz
-  updatedAt             DateTime @updatedAt @db.Timestamptz
+  updatedById            String?
+  createdAt              DateTime @default(now()) @db.Timestamptz
+  updatedAt              DateTime @updatedAt @db.Timestamptz
 
   updatedBy User? @relation("FeatureFlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 }
@@ -351,6 +362,22 @@ model Organization {
   slug        String   @unique
   timezone    String   @default("America/Sao_Paulo")
   isActive    Boolean  @default(true)
+  // Identidade comercial da assessoria (Etapa 4 §3). Todos opcionais — o
+  // cadastro mínimo (name/slug) segue válido; o editor "Configurações da
+  // assessoria" (fatia posterior) preenche o resto. `document` = CNPJ/CPF sem
+  // máscara. NOTA: `TrainerProfile.companyName/crefCode` são a identidade
+  // PROFISSIONAL do treinador — não confundir; a consolidação (quando a org
+  // vira multi-treinador de fato) é trabalho futuro.
+  // ponytail: `status` (lifecycle 4-estados) e defaults de faturamento
+  // (defaultBillingDay/gracePeriod/…) ficam para as fatias que os consomem —
+  // hoje `isActive` já é o gate de suspensão (guards) e não há cobrança da
+  // assessoria ainda. Adicionar antes seria coluna morta.
+  legalName   String?
+  document    String?
+  email       String?
+  phone       String?
+  website     String?
+  logoUrl     String?
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
   lockVersion Int      @default(1)

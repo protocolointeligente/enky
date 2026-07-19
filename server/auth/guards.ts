@@ -56,6 +56,24 @@ export function requireGlobalRole(identity: CurrentIdentity, allowedRoles: reado
   }
 }
 
+// Impõe o papel ORGANIZACIONAL (Etapa 4 §4), distinto de `requireGlobalRole`
+// (papel global). Toda rota de Gestão valida os DOIS eixos: primeiro o papel
+// global (TRAINER), depois este. Regras:
+//   - OWNER tem acesso total à organização (§4) — nunca precisa ser listado.
+//   - ADMIN é legado e conta como MANAGER (o cadastro atual só cria OWNER).
+// A matriz completa vive em docs/ENKY_CRM_PERMISSIONS.md; os papéis atribuíveis
+// e seus rótulos em modules/organizations/org-roles.ts.
+export function requireOrgRole(
+  active: ActiveOrganization,
+  allowedRoles: readonly OrganizationRole[],
+): void {
+  if (active.organizationRole === "OWNER") return;
+  const effective = active.organizationRole === "ADMIN" ? "MANAGER" : active.organizationRole;
+  if (!allowedRoles.includes(effective)) {
+    throw new AuthorizationError("Papel na organização não autorizado para esta ação.");
+  }
+}
+
 // MVP: cada TRAINER tem exatamente uma OrganizationMembership (a
 // organização pessoal do ADR-001) — "ativa" é trivial hoje. Esta função é
 // o único ponto de extensão para quando a Fase 6 introduzir múltiplas
