@@ -442,6 +442,7 @@ function LeadDrawer({ id, onClose, onChanged }: { id: string; onClose: () => voi
   // Mudança de etapa.
   const [newStatus, setNewStatus] = useState("");
   const [lostReason, setLostReason] = useState("");
+  const [converting, setConverting] = useState(false);
 
   const load = useCallback(() => {
     apiFetch<{ lead: LeadDetail }>(`/api/trainer/leads/${id}`)
@@ -521,6 +522,24 @@ function LeadDrawer({ id, onClose, onChanged }: { id: string; onClose: () => voi
             <Info label="Próxima ação" value={formatDate(lead.nextActionAt)} />
           </dl>
           {lead.notes ? <p className="text-sm text-muted">{lead.notes}</p> : null}
+
+          {lead.status !== "WON" && lead.status !== "ARCHIVED" ? (
+            <button type="button" className={uiClasses.button} onClick={() => setConverting(true)}>
+              Converter em cliente
+            </button>
+          ) : null}
+
+          {converting ? (
+            <ConvertLeadModal
+              leadId={id}
+              onClose={() => setConverting(false)}
+              onConverted={() => {
+                setConverting(false);
+                load();
+                onChanged();
+              }}
+            />
+          ) : null}
 
           {/* Mudança de etapa */}
           <div className="flex flex-col gap-2 border-t border-line pt-3">
@@ -611,3 +630,139 @@ function LeadDrawer({ id, onClose, onChanged }: { id: string; onClose: () => voi
   );
 }
 
+
+interface PlanOpt {
+  id: string;
+  name: string;
+  price: string;
+}
+
+// Conversão lead → cliente (§7). Escolhe o plano, condições e (opcional) cria o
+// atleta com convite ao portal + a 1ª mensalidade.
+function ConvertLeadModal({
+  leadId,
+  onClose,
+  onConverted,
+}: {
+  leadId: string;
+  onClose: () => void;
+  onConverted: () => void;
+}) {
+  const [plans, setPlans] = useState<PlanOpt[]>([]);
+  const [servicePlanId, setServicePlanId] = useState("");
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [billingDay, setBillingDay] = useState("1");
+  const [discount, setDiscount] = useState("0");
+  const [withAthlete, setWithAthlete] = useState(false);
+  const [athleteEmail, setAthleteEmail] = useState("");
+  const [athleteName, setAthleteName] = useState("");
+  const [firstInvoice, setFirstInvoice] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiFetch<{ plans: PlanOpt[] }>("/api/trainer/service-plans?activeOnly=true")
+      .then((d) => setPlans(d.plans))
+      .catch(() => {});
+  }, []);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await apiFetch<{ alreadyConverted: boolean; invoiceCreated: boolean }>(
+        `/api/trainer/leads/${leadId}/convert`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            servicePlanId,
+            startDate,
+            billingDay: Number(billingDay) || 1,
+            discount: Number(discount) || 0,
+            athleteEmail: withAthlete && athleteEmail.trim() ? athleteEmail.trim() : null,
+            athleteName: withAthlete && athleteName.trim() ? athleteName.trim() : null,
+            generateFirstInvoice: firstInvoice,
+          }),
+        },
+      );
+      setDone(r.alreadyConverted ? "Este lead já havia sido convertido." : "Lead convertido em cliente.");
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Erro ao converter.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Overlay onClose={onClose}>
+      <h2 className={uiClasses.subheading}>Converter em cliente</h2>
+      {error ? <p className={uiClasses.error}>{error}</p> : null}
+      {done ? <p className={uiClasses.success}>{done}</p> : null}
+      {done ? (
+        <div className="flex justify-end">
+          <button type="button" className={uiClasses.button} onClick={onConverted}>
+            Fechar
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-col gap-3">
+            <Field label="Plano *">
+              <select className={uiClasses.select} value={servicePlanId} onChange={(e) => setServicePlanId(e.target.value)}>
+                <option value="">Selecione…</option>
+                {plans.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="grid grid-cols-3 gap-3">
+              <Field label="Início">
+                <input className={uiClasses.input} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </Field>
+              <Field label="Dia venc.">
+                <input className={uiClasses.input} type="number" min="1" max="31" value={billingDay} onChange={(e) => setBillingDay(e.target.value)} />
+              </Field>
+              <Field label="Desconto">
+                <input className={uiClasses.input} type="number" min="0" value={discount} onChange={(e) => setDiscount(e.target.value)} />
+              </Field>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input type="checkbox" className="accent-electric" checked={firstInvoice} onChange={(e) => setFirstInvoice(e.target.checked)} />
+              Gerar a primeira mensalidade
+            </label>
+            <label className="flex items-center gap-2 text-sm text-muted">
+              <input type="checkbox" className="accent-electric" checked={withAthlete} onChange={(e) => setWithAthlete(e.target.checked)} />
+              Criar atleta e enviar convite ao portal
+            </label>
+            {withAthlete ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="E-mail do atleta">
+                  <input className={uiClasses.input} value={athleteEmail} onChange={(e) => setAthleteEmail(e.target.value)} />
+                </Field>
+                <Field label="Nome do atleta">
+                  <input className={uiClasses.input} value={athleteName} onChange={(e) => setAthleteName(e.target.value)} />
+                </Field>
+              </div>
+            ) : null}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" className={uiClasses.buttonSecondary} onClick={onClose}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              className={uiClasses.button}
+              disabled={busy || !servicePlanId || (withAthlete && !athleteEmail.trim())}
+              onClick={submit}
+            >
+              {busy ? "Convertendo…" : "Converter"}
+            </button>
+          </div>
+        </>
+      )}
+    </Overlay>
+  );
+}

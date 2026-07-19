@@ -94,7 +94,10 @@ export type AuditAction =
   | "GENERATE_INVOICES"
   | "UPDATE_INVOICE"
   | "CANCEL_INVOICE"
-  | "REGISTER_PAYMENT";
+  | "REGISTER_PAYMENT"
+  // Etapa 4 §7 — conversão de lead em cliente (cria cliente/contrato/atleta/
+  // cobrança numa transação). O lead vira WON, nunca é apagado.
+  | "CONVERT_LEAD";
 
 export interface AuditLogInput {
   action: AuditAction;
