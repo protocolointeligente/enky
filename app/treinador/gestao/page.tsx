@@ -12,7 +12,7 @@ import { useRequireRole } from "@/app/_lib/use-session";
 const SUBAREAS: { label: string; desc: string; href: string | null }[] = [
   { label: "Leads", desc: "Funil de captação e conversão.", href: "/treinador/gestao/leads" },
   { label: "Clientes", desc: "Base de clientes, atletas e pagadores.", href: "/treinador/gestao/clientes" },
-  { label: "Planos e serviços", desc: "Produtos comerciais da assessoria.", href: null },
+  { label: "Planos e serviços", desc: "Produtos comerciais da assessoria.", href: "/treinador/gestao/servicos" },
   { label: "Contratos", desc: "Contratos, renovações e cancelamentos.", href: null },
   { label: "Mensalidades", desc: "Cobranças, vencimentos e pagamentos.", href: null },
   { label: "Financeiro", desc: "Receitas, inadimplência e indicadores.", href: null },
