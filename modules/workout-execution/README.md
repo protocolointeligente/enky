@@ -27,6 +27,15 @@ verdade do treino). Estados: `STARTED → PAUSED ↔ STARTED → COMPLETED | PAR
 `tests/unit/modules/workout-execution/execution-state.test.ts` — tempo com pausa/background,
 conclusão parcial, idempotência de terminal, ordenação, formatação.
 
+## Cliente / UI
+
+- `components/use-execution-timer.ts` — cronômetro (número vem de `computeTime`).
+- `app/atleta/_lib/execution-client.ts` — cliente offline-first (start/eventos + fila).
+- `components/workout-execution.tsx` — tela de execução (emite eventos, mostra o timer).
+
+Fluxo offline end-to-end: [`docs/ENKY_OFFLINE_SYNC_ARCHITECTURE.md`](../../docs/ENKY_OFFLINE_SYNC_ARCHITECTURE.md).
+
 ## Pendências
 
-Hook `useExecutionTimer` (glue React) e UI por modalidade vêm com a tela de execução.
+UI por modalidade (§12) + descanso de musculação (§14) + cache do detalhe do treino
+para início 100% offline.

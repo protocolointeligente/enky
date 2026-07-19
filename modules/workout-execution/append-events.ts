@@ -50,16 +50,27 @@ export async function appendExecutionEvents(
       orderBy: { sequence: "asc" },
     });
 
-    const domainEvents: ExecEvent[] = stored.map((e) => {
-      const payload = (e.payload ?? {}) as { partial?: boolean };
-      return {
-        type: e.type,
-        at: e.occurredAt.getTime(),
-        sequence: e.sequence,
-        idempotencyKey: e.idempotencyKey,
-        partial: payload.partial,
-      };
-    });
+    // START sintético ancorado em startedAt: o endpoint /start cria a execução
+    // sem inserir um evento START, então o tempo é ancorado aqui (o cliente só
+    // envia PAUSE/RESUME/STEP/COMPLETE/ABANDON). sequence mínimo garante 1º lugar.
+    const domainEvents: ExecEvent[] = [
+      {
+        type: "START",
+        at: execution.startedAt.getTime(),
+        sequence: Number.MIN_SAFE_INTEGER,
+        idempotencyKey: "__synthetic_start__",
+      },
+      ...stored.map((e) => {
+        const payload = (e.payload ?? {}) as { partial?: boolean };
+        return {
+          type: e.type,
+          at: e.occurredAt.getTime(),
+          sequence: e.sequence,
+          idempotencyKey: e.idempotencyKey,
+          partial: payload.partial,
+        };
+      }),
+    ];
 
     const snap = reduce(domainEvents, now);
 

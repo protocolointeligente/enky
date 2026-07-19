@@ -3,6 +3,13 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import {
+  initSync,
+  recordEvent,
+  startExecution,
+  subscribePending,
+  type LocalExecution,
+} from "@/app/atleta/_lib/execution-client";
 import { loadStatusLabel, modalityLabel } from "@/app/_lib/labels";
 import { modalityMeta } from "@/app/_lib/modality";
 import { toast } from "@/app/_lib/toast";
@@ -60,11 +67,19 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
   const [editingFeedback, setEditingFeedback] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // Ephemeral execution flow (client-only): view -> executing -> feedback.
+  // Execution flow: view -> executing -> feedback. Agora persistido offline-first
+  // via execution-client (IndexedDB + fila de sync), não mais só efêmero.
   const [mode, setMode] = useState<"view" | "executing" | "feedback">("view");
   const [initialCompletion, setInitialCompletion] = useState<"COMPLETED" | "PARTIAL" | "MISSED">(
     "COMPLETED",
   );
+  const [execution, setExecution] = useState<LocalExecution | null>(null);
+  const [pendingSync, setPendingSync] = useState(0);
+
+  useEffect(() => {
+    initSync();
+    return subscribePending(setPendingSync);
+  }, []);
 
   function reload() {
     return apiFetch<{ workout: WorkoutDetailView }>(`/api/athlete/workouts/${id}`).then((result) =>
@@ -186,7 +201,12 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
             <button
               type="button"
               className={`${uiClasses.button} sm:flex-[2]`}
-              onClick={() => setMode("executing")}
+              onClick={async () => {
+                // Funciona offline: cria a execução localmente e enfileira o start.
+                const exec = await startExecution(id);
+                setExecution(exec);
+                setMode("executing");
+              }}
             >
               Iniciar treino
             </button>
@@ -206,15 +226,27 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
         {canSubmitFeedback && mode === "executing" && (
           <WorkoutExecution
             blocks={current.blocks}
+            timerEvents={execution?.events}
+            onStepComplete={(blockIndex, stepIndex) => {
+              if (execution) void recordEvent(execution.id, "STEP_COMPLETED", { blockIndex, stepIndex });
+            }}
             onFinish={(status) => {
+              if (execution) void recordEvent(execution.id, "COMPLETE", undefined, status === "PARTIAL");
               setInitialCompletion(status);
               setMode("feedback");
             }}
             onAbandon={() => {
+              if (execution) void recordEvent(execution.id, "ABANDON");
               setInitialCompletion("MISSED");
               setMode("feedback");
             }}
           />
+        )}
+
+        {pendingSync > 0 && (
+          <p className="text-center text-xs text-muted" role="status">
+            {pendingSync} {pendingSync === 1 ? "registro pendente" : "registros pendentes"} de sincronização.
+          </p>
         )}
 
         {canSubmitFeedback && mode === "feedback" && (

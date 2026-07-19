@@ -23,7 +23,8 @@ cada um com `idempotencyKey` (o servidor deduplica). Status: `PENDING → SYNCIN
 
 `tests/unit/modules/offline-sync/sync-queue.test.ts`.
 
-## Pendências (fatia da UI de execução offline)
+## Adapter
 
-Adapter IndexedDB (store versionado), loop de envio, e limpeza no logout. A política
-aqui é agnóstica de storage — o adapter só persiste e chama estas funções.
+O adapter de browser vive em `app/atleta/_lib/execution-client.ts` (store em
+`app/_lib/idb.ts`). Fluxo end-to-end: [`docs/ENKY_OFFLINE_SYNC_ARCHITECTURE.md`](../../docs/ENKY_OFFLINE_SYNC_ARCHITECTURE.md).
+A política aqui é agnóstica de storage — o adapter persiste e chama estas funções.
