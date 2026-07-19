@@ -18,7 +18,7 @@ const SUBAREAS: { label: string; desc: string; href: string | null }[] = [
   { label: "Financeiro", desc: "Receitas, inadimplência e indicadores.", href: "/treinador/gestao/financeiro" },
   { label: "Treinadores", desc: "Equipe, papéis e carteiras.", href: "/treinador/gestao/treinadores" },
   { label: "Grupos", desc: "Turmas e coletivos de atletas.", href: "/treinador/gestao/grupos" },
-  { label: "Comunicação", desc: "Avisos, lembretes e mensagens.", href: null },
+  { label: "Comunicação", desc: "Avisos, lembretes e mensagens.", href: "/treinador/gestao/comunicacao" },
   { label: "Configurações da assessoria", desc: "Dados da organização e políticas.", href: null },
 ];
 

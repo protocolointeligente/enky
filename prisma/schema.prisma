@@ -340,6 +340,7 @@ model User {
   createdCoachPayments       CoachPayment[]
   assignedRelationships      CoachAthleteRelationship[] @relation("RelationshipAssignedBy")
   addedGroupMembers          CoachGroupMember[]
+  createdCommunications      CommunicationLog[]
 
   @@index([email])
 }
@@ -418,6 +419,7 @@ model Organization {
   coachPayments        CoachPayment[]
   coachGroups          CoachGroup[]
   coachGroupMembers    CoachGroupMember[]
+  communications       CommunicationLog[]
 }
 
 model OrganizationMembership {
@@ -1862,4 +1864,56 @@ model CoachGroupMember {
   @@unique([groupId, athleteId], map: "uq_group_member")
   @@index([organizationId])
   @@index([athleteId])
+}
+
+// ---------------------------------------------------------------------------
+// 17. COMUNICAÇÃO (Etapa 4 §22)
+// ---------------------------------------------------------------------------
+// Registro de comunicações internas (anotação, lembrete, aviso de vencimento,
+// mensagem geral). Nesta fatia é um LIVRO-RAZÃO: registra que a comunicação
+// aconteceu (quem/quando/canal). Disparo real de e-mail para mensagem avulsa
+// depende de um mailer geral — fatia futura; por ora status = LOGGED.
+// `recipientId` é referência SOLTA (polimórfica sobre cliente/lead/atleta), sem
+// FK — o tipo diz a que entidade pertence.
+
+enum CommunicationRecipientType {
+  CLIENT
+  LEAD
+  ATHLETE
+}
+
+enum CommunicationChannel {
+  EMAIL
+  IN_APP
+  MANUAL
+}
+
+enum CommunicationStatus {
+  LOGGED
+  SENT
+  FAILED
+}
+
+model CommunicationLog {
+  id              String                     @id @default(uuid())
+  organizationId  String
+  recipientType   CommunicationRecipientType
+  recipientId     String
+  channel         CommunicationChannel       @default(MANUAL)
+  templateCode    String?
+  subject         String?
+  // Conteúdo da anotação/mensagem. Opcional (§22: não guardar conteúdo sensível
+  // desnecessário) — para um log de e-mail transacional, subject basta.
+  body            String?
+  status          CommunicationStatus        @default(LOGGED)
+  sentAt          DateTime?                  @db.Timestamptz
+  failureReason   String?
+  createdByUserId String?
+  createdAt       DateTime                   @default(now()) @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, recipientType, recipientId])
 }
