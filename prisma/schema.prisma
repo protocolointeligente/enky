@@ -409,6 +409,7 @@ model Organization {
   leads                Lead[]
   leadInteractions     LeadInteraction[]
   clients              Client[]
+  coachServicePlans    CoachServicePlan[]
 }
 
 model OrganizationMembership {
@@ -1532,4 +1533,66 @@ model Client {
 
   @@index([organizationId, status])
   @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// 13. PLANOS E SERVIÇOS DA ASSESSORIA (Etapa 4 §9)
+// ---------------------------------------------------------------------------
+// Produto comercial que a assessoria VENDE ao cliente (mensalidade, pacote,
+// avulso). NÃO confundir com `SubscriptionPlan` (assinatura SaaS ENKY↔treinador)
+// nem com `MarketplacePlan` (venda avulsa de CONTEÚDO de treino — outra coisa,
+// fora de escopo). O contrato (§10) aponta para um destes e CONGELA o preço no
+// momento — alterar o plano depois não mexe em contrato já assinado.
+
+enum CoachBillingType {
+  RECURRING
+  ONE_TIME
+  PACKAGE
+  FREE
+  CUSTOM
+}
+
+enum CoachBillingInterval {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+  CUSTOM
+}
+
+model CoachServicePlan {
+  id                    String                @id @default(uuid())
+  organizationId        String
+  name                  String
+  description           String?
+  // Nulo = plano multi/sem modalidade específica.
+  modality              Modality?
+  billingType           CoachBillingType      @default(RECURRING)
+  price                 Decimal               @default(0) @db.Decimal(12, 2)
+  currency              String                @default("BRL") @db.VarChar(3)
+  // Só faz sentido em RECURRING; nulo nos demais tipos (validado no Zod).
+  billingInterval       CoachBillingInterval?
+  // Duração do compromisso; nulo = indeterminado / não aplicável (avulso).
+  durationMonths        Int?
+  trialDays             Int                   @default(0)
+  // Benefícios do plano (§9). Descritivos — mostrados na comparação de planos e
+  // congelados no contrato. Nada os IMPÕE ainda (enforcement é fatia futura):
+  // por ora definem a proposta de valor, não um limite técnico.
+  maxSessionsPerWeek    Int?
+  includedAssessments   Int?
+  includedReports       Boolean               @default(false)
+  includedCommunication Boolean               @default(false)
+  includedFeatures      String[]              @default([])
+  // Listagem pública (checkout) é fatia futura — marketplace público está fora
+  // de escopo. Fica default false até existir superfície pública.
+  isPublic              Boolean               @default(false)
+  isActive              Boolean               @default(true)
+  createdAt             DateTime              @default(now()) @db.Timestamptz
+  updatedAt             DateTime              @updatedAt @db.Timestamptz
+  lockVersion           Int                   @default(1)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, isActive])
 }
