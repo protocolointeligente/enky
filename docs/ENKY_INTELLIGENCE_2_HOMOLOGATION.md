@@ -62,9 +62,13 @@ session-generator (6) + load-simulation (7) + adaptation-engine (10) = **60
 testes novos**; suíte total **543 / 50 arquivos**. Núcleos científicos são
 **puros e testados sem banco**.
 
+**E2E:** `tests/e2e/intelligent-periodization.spec.ts` dirige o fluxo "✨ Gerar com
+ENKY" ponta a ponta (simular → porquê → sessões-exemplo → recálculo → carga →
+salvar rascunho → assertivas de que nada foi publicado). Colecionável pelo
+Playwright; **execução pendente de banco/app** (mesma fronteira de ambiente).
+
 **Pendente de ambiente (não de código):** integração (Vitest+Postgres) e E2E
-(Playwright) exigem banco isolado; os fluxos novos ainda não têm spec de E2E
-próprio — ver checklist.
+(Playwright) exigem banco isolado — ver checklist.
 
 ## 7. Performance
 
@@ -99,7 +103,7 @@ prontos; integração/E2E/Preview pendentes de banco).
 - [ ] Subir a branch em **Preview** com banco isolado
 - [ ] `prisma migrate deploy` aplica `20260718170000_periodization_strategy_rationale` no banco de Preview
 - [ ] `npm run test:integration` verde contra o Postgres de Preview
-- [ ] `npm run test:e2e` verde (e, idealmente, novo spec dirigindo "✨ Gerar com ENKY")
+- [ ] `npm run test:e2e` verde — inclui `intelligent-periodization.spec.ts` ("✨ Gerar com ENKY"); execução pendente de banco/app
 - [ ] Homologação visual do fluxo: gerar → ver "porquê" → sessões-exemplo → recálculo → simular carga → salvar rascunho → gerar ciclo → revisar rascunhos
 - [ ] Confirmar que **nada** é publicado automaticamente em nenhum passo
 - [ ] Verificar isolamento cross-tenant nas rotas novas (treinador só acessa atleta vinculado)
