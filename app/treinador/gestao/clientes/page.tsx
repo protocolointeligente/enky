@@ -63,6 +63,7 @@ export default function ClientsPage() {
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [bulkStatus, setBulkStatus] = useState("ACTIVE");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -120,6 +121,9 @@ export default function ClientsPage() {
             <h1 className={uiClasses.heading}>Clientes</h1>
           </div>
           <div className="flex gap-2">
+            <button type="button" className={uiClasses.buttonSecondary} onClick={() => setImporting(true)}>
+              Importar CSV
+            </button>
             <button type="button" className={uiClasses.buttonSecondary} onClick={() => window.open("/api/trainer/export/clients", "_blank")}>
               Exportar CSV
             </button>
@@ -221,6 +225,16 @@ export default function ClientsPage() {
           onClose={() => setCreating(false)}
           onSaved={() => {
             setCreating(false);
+            load();
+          }}
+        />
+      ) : null}
+
+      {importing ? (
+        <ImportModal
+          onClose={() => setImporting(false)}
+          onDone={() => {
+            setImporting(false);
             load();
           }}
         />
@@ -405,6 +419,139 @@ function ClientDrawer({ id, onClose, onChanged }: { id: string; onClose: () => v
             Editar
           </button>
         </div>
+      )}
+    </Overlay>
+  );
+}
+
+interface PreviewRow {
+  line: number;
+  data: { name: string; email: string | null; phone: string | null; document: string | null };
+  error: string | null;
+}
+interface Preview {
+  headerError: string | null;
+  rows: PreviewRow[];
+  summary: { total: number; valid: number; invalid: number };
+}
+
+// Importação CSV de clientes (§26). Preview (valida, não escreve) → confirmar →
+// importa só as linhas válidas. Nunca sobrescreve.
+function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [csv, setCsv] = useState("");
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setCsv(String(reader.result ?? ""));
+    reader.readAsText(file);
+  }
+
+  async function doPreview() {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const p = await apiFetch<Preview>("/api/trainer/clients/import", {
+        method: "POST",
+        body: JSON.stringify({ csv, preview: true }),
+      });
+      setPreview(p);
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Erro ao pré-visualizar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doImport() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await apiFetch<{ imported: number; skipped: number }>("/api/trainer/clients/import", {
+        method: "POST",
+        body: JSON.stringify({ csv }),
+      });
+      setResult(`${r.imported} importado(s), ${r.skipped} ignorado(s).`);
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Erro ao importar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const errorRows = preview?.rows.filter((r) => r.error) ?? [];
+
+  return (
+    <Overlay onClose={onClose}>
+      <h2 className={uiClasses.subheading}>Importar clientes (CSV)</h2>
+      <p className={uiClasses.hint}>
+        Cabeçalho esperado: <code>nome, email, telefone, documento</code> (só <code>nome</code> é obrigatório).
+      </p>
+      {error ? <p className={uiClasses.error}>{error}</p> : null}
+      {result ? <p className={uiClasses.success}>{result}</p> : null}
+
+      {result ? (
+        <div className="flex justify-end">
+          <button type="button" className={uiClasses.button} onClick={onDone}>
+            Fechar
+          </button>
+        </div>
+      ) : (
+        <>
+          <input type="file" accept=".csv,text/csv" onChange={onFile} className="text-sm text-muted" />
+          <textarea
+            className={`${uiClasses.textarea} font-mono text-xs`}
+            rows={6}
+            placeholder="nome,email,telefone,documento&#10;Maria,maria@x.com,11999,..."
+            value={csv}
+            onChange={(e) => {
+              setCsv(e.target.value);
+              setPreview(null);
+            }}
+          />
+
+          {preview ? (
+            preview.headerError ? (
+              <p className={uiClasses.error}>{preview.headerError}</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className={uiClasses.hint}>
+                  {preview.summary.valid} válido(s), {preview.summary.invalid} com erro de {preview.summary.total}.
+                </p>
+                {errorRows.length > 0 ? (
+                  <ul className="max-h-40 overflow-y-auto text-xs text-danger">
+                    {errorRows.map((r) => (
+                      <li key={r.line}>
+                        Linha {r.line}: {r.error}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            )
+          ) : null}
+
+          <div className="flex justify-end gap-2">
+            <button type="button" className={uiClasses.buttonSecondary} onClick={onClose}>
+              Cancelar
+            </button>
+            {preview && !preview.headerError ? (
+              <button type="button" className={uiClasses.button} disabled={busy || preview.summary.valid === 0} onClick={doImport}>
+                {busy ? "Importando…" : `Importar ${preview.summary.valid}`}
+              </button>
+            ) : (
+              <button type="button" className={uiClasses.button} disabled={busy || !csv.trim()} onClick={doPreview}>
+                {busy ? "Validando…" : "Pré-visualizar"}
+              </button>
+            )}
+          </div>
+        </>
       )}
     </Overlay>
   );
