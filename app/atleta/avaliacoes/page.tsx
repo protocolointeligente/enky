@@ -5,12 +5,22 @@ import { ApiClientError, apiFetch } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
 import type { AssessmentView } from "@/modules/assessments/assessment-service";
-import type { Zone } from "@/modules/assessments/zones";
+import { formatSecondsAsPace, isPaceUnit, type Zone } from "@/modules/assessments/zones";
+
+function unitLabel(unit: string): string {
+  return unit === "s/km" ? "/km" : unit === "s/100m" ? "/100m" : unit;
+}
+
+function formatResult(value: number, unit: string): string {
+  return isPaceUnit(unit) ? `${formatSecondsAsPace(value)} ${unitLabel(unit)}` : `${value} ${unit}`;
+}
 
 function zoneRange(z: Zone, unit: string): string {
-  if (z.min === null) return `≤ ${z.max} ${unit}`;
-  if (z.max === null) return `≥ ${z.min} ${unit}`;
-  return `${z.min}–${z.max} ${unit}`;
+  const fmt = (v: number) => (isPaceUnit(unit) ? formatSecondsAsPace(v) : String(v));
+  const label = unitLabel(unit);
+  if (z.min === null) return `≤ ${fmt(z.max as number)} ${label}`;
+  if (z.max === null) return `≥ ${fmt(z.min)} ${label}`;
+  return `${fmt(z.min)}–${fmt(z.max)} ${label}`;
 }
 
 // Avaliações do atleta (§28): histórico de testes físicos registrados pelo
@@ -59,7 +69,7 @@ export default function AthleteAssessmentsPage() {
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="font-medium text-ink">{a.testType}</span>
                   <span className="font-display text-lg font-semibold text-ink">
-                    {a.resultValue} {a.unit}
+                    {formatResult(a.resultValue, a.unit)}
                   </span>
                 </div>
                 <span className="text-xs text-muted">

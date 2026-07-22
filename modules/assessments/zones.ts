@@ -3,7 +3,7 @@
 // limiar (FTP em W, LTHR em bpm), devolve as faixas absolutas. Derivado na
 // leitura — nunca persistido — então trocar o esquema não deixa dado velho.
 
-export type ZoneScheme = "POWER_COGGAN" | "HR_FRIEL";
+export type ZoneScheme = "POWER_COGGAN" | "HR_FRIEL" | "PACE_RUNNING" | "PACE_SWIM";
 
 export interface Zone {
   label: string;
@@ -66,6 +66,35 @@ export function computeHrZones(lthrBpm: number): ZoneSet {
   return applyBands(lthrBpm, FRIEL_HR, "HR_FRIEL", "bpm");
 }
 
+// Zonas de pace (corrida/natação), por % da VELOCIDADE de limiar (threshold pace
+// / CSS). Pace é inverso: mais rápido = menos segundos. Para uma faixa de
+// velocidade [lo, hi], o pace mais rápido (min segundos) = limiar/hi e o mais
+// lento (max segundos) = limiar/lo. Base: pace/CSS em SEGUNDOS por km / por 100m.
+const PACE_BANDS: Band[] = [
+  { label: "Z1 · Recuperação", loPct: 0, hiPct: 0.8 },
+  { label: "Z2 · Endurance", loPct: 0.8, hiPct: 0.9 },
+  { label: "Z3 · Tempo", loPct: 0.9, hiPct: 0.95 },
+  { label: "Z4 · Limiar", loPct: 0.95, hiPct: 1.0 },
+  { label: "Z5 · VO2máx", loPct: 1.0, hiPct: null },
+];
+
+function applyPaceBands(thresholdSec: number, scheme: ZoneScheme, unit: string): ZoneSet {
+  const zones: Zone[] = PACE_BANDS.map((b) => ({
+    label: b.label,
+    min: b.hiPct === null ? null : Math.round(thresholdSec / b.hiPct), // pace mais rápido
+    max: b.loPct === 0 ? null : Math.round(thresholdSec / b.loPct), // pace mais lento
+  }));
+  return { scheme, unit, threshold: thresholdSec, zones };
+}
+
+export function computeRunningPaceZones(thresholdSecPerKm: number): ZoneSet {
+  return applyPaceBands(thresholdSecPerKm, "PACE_RUNNING", "s/km");
+}
+
+export function computeSwimPaceZones(cssSecPer100m: number): ZoneSet {
+  return applyPaceBands(cssSecPer100m, "PACE_SWIM", "s/100m");
+}
+
 // Resolve o esquema pela UNIDADE do teste (mais robusto que o texto livre do
 // testType). Só limiares numéricos diretos por ora — pace/CSS entram quando o
 // input for mm:ss. Valor inválido → sem zonas.
@@ -74,5 +103,24 @@ export function computeZonesForTest(unit: string, value: number): ZoneSet | null
   const u = unit.trim().toLowerCase();
   if (u === "w" || u === "watts" || u === "watt") return computePowerZones(value);
   if (u === "bpm") return computeHrZones(value);
+  if (u === "s/km") return computeRunningPaceZones(value);
+  if (u === "s/100m") return computeSwimPaceZones(value);
   return null;
+}
+
+// mm:ss ↔ segundos, para input/exibição de pace.
+export function parsePaceToSeconds(text: string): number | null {
+  const m = text.trim().match(/^(\d{1,2}):([0-5]?\d)$/);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
+export function formatSecondsAsPace(totalSeconds: number): string {
+  const s = Math.round(totalSeconds);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+export function isPaceUnit(unit: string): boolean {
+  const u = unit.trim().toLowerCase();
+  return u === "s/km" || u === "s/100m";
 }

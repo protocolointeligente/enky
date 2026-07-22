@@ -7,12 +7,27 @@ import { ApiClientError, apiFetch } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
 import type { AssessmentView } from "@/modules/assessments/assessment-service";
-import type { Zone } from "@/modules/assessments/zones";
+import {
+  formatSecondsAsPace,
+  isPaceUnit,
+  parsePaceToSeconds,
+  type Zone,
+} from "@/modules/assessments/zones";
+
+function unitLabel(unit: string): string {
+  return unit === "s/km" ? "/km" : unit === "s/100m" ? "/100m" : unit;
+}
+
+function formatResult(value: number, unit: string): string {
+  return isPaceUnit(unit) ? `${formatSecondsAsPace(value)} ${unitLabel(unit)}` : `${value} ${unit}`;
+}
 
 function zoneRange(z: Zone, unit: string): string {
-  if (z.min === null) return `≤ ${z.max} ${unit}`;
-  if (z.max === null) return `≥ ${z.min} ${unit}`;
-  return `${z.min}–${z.max} ${unit}`;
+  const fmt = (v: number) => (isPaceUnit(unit) ? formatSecondsAsPace(v) : String(v));
+  const label = unitLabel(unit);
+  if (z.min === null) return `≤ ${fmt(z.max as number)} ${label}`;
+  if (z.max === null) return `≥ ${fmt(z.min)} ${label}`;
+  return `${fmt(z.min)}–${fmt(z.max)} ${label}`;
 }
 
 // Sugestões comuns — texto livre, o treinador pode digitar outro.
@@ -42,8 +57,11 @@ export default function TrainerAssessmentsPage() {
     if (checked) load();
   }, [checked, load]);
 
-  const value = Number(resultValue.replace(",", "."));
-  const valid = testType.trim().length >= 2 && Number.isFinite(value) && unit.trim().length >= 1;
+  // Pace (s/km, s/100m) entra como mm:ss e vira segundos; o resto é número.
+  const pace = isPaceUnit(unit);
+  const value = pace ? parsePaceToSeconds(resultValue) : Number(resultValue.replace(",", "."));
+  const valid =
+    testType.trim().length >= 2 && value !== null && Number.isFinite(value) && value > 0 && unit.trim().length >= 1;
 
   async function record() {
     setBusy(true);
@@ -100,18 +118,27 @@ export default function TrainerAssessmentsPage() {
         <div className="flex gap-3">
           <input
             className={uiClasses.input}
-            inputMode="decimal"
-            placeholder="Resultado"
+            placeholder={pace ? "Resultado (mm:ss)" : "Resultado"}
             value={resultValue}
             onChange={(e) => setResultValue(e.target.value)}
           />
           <input
             className={uiClasses.input}
-            placeholder="Unidade (bpm, W, min/km...)"
+            list="assessment-units"
+            placeholder="Unidade"
             value={unit}
             onChange={(e) => setUnit(e.target.value)}
           />
+          <datalist id="assessment-units">
+            <option value="W" />
+            <option value="bpm" />
+            <option value="s/km" />
+            <option value="s/100m" />
+          </datalist>
         </div>
+        {pace && (
+          <p className={uiClasses.hint}>Pace em mm:ss (ex.: 4:15). Zonas: s/km = corrida, s/100m = natação.</p>
+        )}
         <input
           className={uiClasses.input}
           placeholder="Protocolo (opcional)"
@@ -138,9 +165,7 @@ export default function TrainerAssessmentsPage() {
                       {a.protocol && ` · ${a.protocol}`}
                     </span>
                   </div>
-                  <span className="font-semibold text-ink">
-                    {a.resultValue} {a.unit}
-                  </span>
+                  <span className="font-semibold text-ink">{formatResult(a.resultValue, a.unit)}</span>
                 </div>
                 {a.zones && (
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-2 text-xs">
