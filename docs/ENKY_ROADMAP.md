@@ -37,15 +37,14 @@ biblioteca do comprador, painel do vendedor, gateway Asaas split 90/10.
 - ✅ `/atleta/biblioteca` integrada ao shell do atleta.
 - Pendente: merge do PR #2 (aguarda decisão de gating). Fora do plano do atleta: payouts, moderação, avaliações de produto, cupons, carrinho, busca, seed, agendamento de plano no calendário.
 
-### Fase B — avaliação física do atleta (em andamento)
-- ✅ **Slice 1:** `modules/assessments` sobre o `TestResult` existente — registrar/listar/apagar; `/treinador/atletas/[id]/avaliacoes` + `/atleta/avaliacoes`; auditado; sem migração.
-- Pendente: cálculo de zonas (pace/FC/potência) a partir dos testes — **precisa decidir o esquema de zonas**; validade/reavaliação; edição.
+### Fase B — avaliação física do atleta ✅
+- ✅ Registrar/listar/apagar avaliações (`modules/assessments` sobre `TestResult`; sem migração; auditado).
+- ✅ **Zonas padrão da indústria:** potência (Coggan %FTP), FC (Friel %LTHR), pace corrida (s/km) e natação/CSS (s/100m, input mm:ss). Derivadas na leitura.
+- Pendente (menor): validade/reavaliação, edição de avaliação.
 
-### Fase C — completar o app do atleta (Etapa 6)
-- Telas: métricas (§25), objetivos (§27), mensagens (§29-30), notificações in-app
-  (§31), perfil (§36), configurações (§37).
-- Modalidades de execução (corrida/ciclismo/natação/funcional/triatlo, §12).
-- Ícones PWA 192/512, Lighthouse, testes de acessibilidade.
+### Fase C — métricas (paridade intervals.icu/TrainingPeaks) + resto do app atleta (em andamento)
+- ✅ **Slice 1:** `computePmcSeries` — série CTL/ATL/TSB do PMC (a matemática de carga já existia em `computeLoadState`).
+- Pendente: agregar sRPE diário real (feedback/execução/Strava) → série; página `/atleta/metricas` com gráfico do PMC + tiles; TSS/IF, curva de potência, PRs; depois telas objetivos/mensagens/notificações/perfil/config; modalidades de execução; ícones PWA/Lighthouse/a11y.
 
 ### Fase D — CRM da assessoria
 - Auditar e recuperar/mergear `feat/coach-crm-business-management` (tem UI de
