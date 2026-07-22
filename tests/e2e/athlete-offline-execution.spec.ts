@@ -119,7 +119,7 @@ test("atleta executa e conclui um treino offline e sincroniza ao reconectar", as
 
     await page.getByRole("button", { name: "Concluir treino" }).click();
     // Vai para o fluxo de feedback; o evento COMPLETE já está na fila.
-    await expect(page.getByText("Como foi o treino?")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Como foi o treino?" })).toBeVisible();
 
     // Nada sincronizou ainda: não há execução no servidor.
     expect(await prisma.workoutExecution.count({ where: { workoutId: workout.id } })).toBe(0);
