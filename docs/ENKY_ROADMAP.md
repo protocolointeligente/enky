@@ -32,18 +32,14 @@ biblioteca do comprador, painel do vendedor, gateway Asaas split 90/10.
 
 ## Roadmap (ordem de execução acordada)
 
-### Fase A — fechar fatia B do marketplace (em andamento)
-- Merge do PR #2 (MVP) quando o gating estiver decidido.
-- **Execução da entrega** (interseção com §48 do plano do atleta): compra vira
-  conteúdo acessível na conta do comprador.
-- Integrar `/atleta/biblioteca` no shell do atleta (Meus treinos / Biblioteca / Compras).
-- **Decisão de modelo de comprador** (trainer clona / atleta agenda / read-only) — pendente.
-- Fora desta fase (fatia B restante, não no plano do atleta): payouts, moderação,
-  avaliações de produto, cupons, carrinho multi-item, busca, seed dos 20 produtos.
+### Fase A — fechar fatia B do marketplace ✅ (execução da entrega + biblioteca)
+- ✅ Execução da entrega: comprador treinador recebe cópia dos templates comprados; atleta puro fica com o entitlement (read-only). Decisão de modelo tomada.
+- ✅ `/atleta/biblioteca` integrada ao shell do atleta.
+- Pendente: merge do PR #2 (aguarda decisão de gating). Fora do plano do atleta: payouts, moderação, avaliações de produto, cupons, carrinho, busca, seed, agendamento de plano no calendário.
 
-### Fase B — avaliação física do atleta (maior buraco funcional)
-- `modules/assessments` + zonas de treino, protocolos, resultados, validade,
-  reavaliação; telas de treinador e `/atleta/avaliacoes` (§28 do plano).
+### Fase B — avaliação física do atleta (em andamento)
+- ✅ **Slice 1:** `modules/assessments` sobre o `TestResult` existente — registrar/listar/apagar; `/treinador/atletas/[id]/avaliacoes` + `/atleta/avaliacoes`; auditado; sem migração.
+- Pendente: cálculo de zonas (pace/FC/potência) a partir dos testes — **precisa decidir o esquema de zonas**; validade/reavaliação; edição.
 
 ### Fase C — completar o app do atleta (Etapa 6)
 - Telas: métricas (§25), objetivos (§27), mensagens (§29-30), notificações in-app
