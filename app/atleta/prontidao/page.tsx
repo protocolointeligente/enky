@@ -18,6 +18,9 @@ interface ReadinessView {
   soreness: number | null;
   stress: number | null;
   motivation: number | null;
+  mood: number | null;
+  disposition: number | null;
+  localizedPain: string | null;
   notes: string | null;
   readiness: { class: ReadinessClass; score: number | null; signalsUsed: number };
 }
@@ -36,6 +39,8 @@ const SCALES = [
   { key: "soreness", label: "Dor muscular", low: "nenhuma", high: "muita" },
   { key: "stress", label: "Estresse", low: "calmo", high: "muito" },
   { key: "motivation", label: "Motivação", low: "baixa", high: "alta" },
+  { key: "mood", label: "Humor", low: "ruim", high: "ótimo" },
+  { key: "disposition", label: "Disposição", low: "baixa", high: "alta" },
 ] as const;
 
 type ScaleKey = (typeof SCALES)[number]["key"];
@@ -59,7 +64,10 @@ export default function AthleteReadinessPage() {
     soreness: 0,
     stress: 5,
     motivation: 5,
+    mood: 5,
+    disposition: 5,
   });
+  const [localizedPain, setLocalizedPain] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -81,7 +89,10 @@ export default function AthleteReadinessPage() {
             soreness: today.soreness ?? 0,
             stress: today.stress ?? 5,
             motivation: today.motivation ?? 5,
+            mood: today.mood ?? 5,
+            disposition: today.disposition ?? 5,
           });
+          setLocalizedPain(today.localizedPain ?? "");
           setNotes(today.notes ?? "");
         }
       })
@@ -95,6 +106,7 @@ export default function AthleteReadinessPage() {
     try {
       const body: Record<string, number | string> = { ...scales };
       if (sleepHours.trim() !== "") body.sleepHours = Number(sleepHours);
+      if (localizedPain.trim() !== "") body.localizedPain = localizedPain.trim();
       if (notes.trim() !== "") body.notes = notes.trim();
 
       const result = await apiFetch<{ checkIn: ReadinessView }>("/api/athlete/readiness", {
@@ -184,6 +196,21 @@ export default function AthleteReadinessPage() {
               </div>
             </div>
           ))}
+
+          <div>
+            <label htmlFor="localizedPain" className={uiClasses.label}>
+              Dor localizada (opcional)
+            </label>
+            <input
+              id="localizedPain"
+              type="text"
+              className={uiClasses.input}
+              maxLength={500}
+              placeholder="Onde dói? Ex.: joelho direito ao correr"
+              value={localizedPain}
+              onChange={(e) => setLocalizedPain(e.target.value)}
+            />
+          </div>
 
           <div>
             <label htmlFor="notes" className={uiClasses.label}>

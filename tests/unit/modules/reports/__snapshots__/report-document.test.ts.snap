@@ -1,0 +1,426 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`buildReportDocument — dados insuficientes > monta o documento declarando cada lacuna 1`] = `
+{
+  "athleteName": "Marina Duarte",
+  "disclaimer": "Este documento é uma leitura de contexto do que foi registrado no período. Não é diagnóstico, avaliação clínica nem prescrição de saúde. Os números descrevem os registros; a interpretação é do treinador que assina.",
+  "generatedLabel": "Gerado em 29/06/2026",
+  "periodLabel": "01/06/2026 a 28/06/2026",
+  "reportId": "report-1",
+  "sections": [
+    {
+      "id": "resumo-executivo",
+      "notice": null,
+      "paragraphs": [
+        "Não houve sessões previstas no período, então não há aderência a medir.",
+        "Nenhuma sessão com volume registrado no período.",
+        "Carga interna acumulada de 0 UA. O histórico ainda não sustenta a leitura de CTL/ATL/TSB/ACWR (2 de 10 dias com registro).",
+        "Prontidão com 1 check-in no período — abaixo dos 3 necessários para uma leitura estável.",
+      ],
+      "rows": [],
+      "stats": [
+        {
+          "label": "Aderência",
+          "value": "—",
+        },
+        {
+          "label": "Sessões",
+          "value": "0",
+        },
+        {
+          "label": "Carga interna",
+          "value": "0 UA",
+        },
+        {
+          "label": "Prontidão",
+          "value": "—",
+        },
+      ],
+      "title": "Resumo executivo",
+    },
+    {
+      "id": "aderencia",
+      "notice": "Sem sessões previstas na janela escolhida — não há aderência a calcular.",
+      "paragraphs": [],
+      "rows": [],
+      "stats": [
+        {
+          "label": "Previstas",
+          "value": "0",
+        },
+        {
+          "label": "Concluídas",
+          "value": "0",
+        },
+        {
+          "label": "Parciais",
+          "value": "0",
+        },
+        {
+          "label": "Perdidas",
+          "value": "0",
+        },
+      ],
+      "title": "Aderência",
+    },
+    {
+      "id": "volume",
+      "notice": "Nenhuma sessão com volume registrado — sem dado de tempo ou distância para reportar.",
+      "paragraphs": [],
+      "rows": [],
+      "stats": [
+        {
+          "label": "Sessões",
+          "value": "0",
+        },
+        {
+          "label": "Tempo",
+          "value": "—",
+        },
+        {
+          "label": "Distância",
+          "value": "—",
+        },
+      ],
+      "title": "Volume",
+    },
+    {
+      "id": "carga-interna",
+      "notice": "2 sessões realizadas não têm sRPE registrado e ficaram de fora deste total.",
+      "paragraphs": [
+        "Carga interna usa o sRPE da sessão (esforço percebido × duração), em unidades arbitrárias (UA). É a percepção do atleta, não uma medida fisiológica direta.",
+      ],
+      "rows": [],
+      "stats": [
+        {
+          "label": "Total",
+          "value": "0 UA",
+        },
+        {
+          "label": "Média semanal",
+          "value": "—",
+        },
+        {
+          "label": "Sessões com sRPE",
+          "value": "0",
+        },
+      ],
+      "title": "Carga interna",
+    },
+    {
+      "id": "estado-de-carga",
+      "notice": "Dados insuficientes para esta leitura. CTL/ATL/TSB/ACWR derivam de uma média móvel de 42 dias e exigem pelo menos 10 dias com carga registrada na janela — há 2. Os valores não são exibidos porque seriam instáveis, não porque são zero.",
+      "paragraphs": [],
+      "rows": [],
+      "stats": [],
+      "title": "Estado de carga (CTL · ATL · TSB · ACWR)",
+    },
+    {
+      "id": "prontidao",
+      "notice": "Dados insuficientes: 1 check-in no período, abaixo dos 3 necessários para uma leitura estável de prontidão.",
+      "paragraphs": [],
+      "rows": [],
+      "stats": [],
+      "title": "Prontidão",
+    },
+    {
+      "id": "sessoes",
+      "notice": "Nenhuma sessão prevista no período.",
+      "paragraphs": [],
+      "rows": [
+        {
+          "label": "Concluídas",
+          "value": "0",
+        },
+        {
+          "label": "Parciais",
+          "value": "0",
+        },
+        {
+          "label": "Perdidas",
+          "value": "0",
+        },
+      ],
+      "stats": [],
+      "title": "Treinos concluídos, parciais e perdidos",
+    },
+    {
+      "id": "comentarios",
+      "notice": "Nenhum comentário registrado no período.",
+      "paragraphs": [],
+      "rows": [],
+      "stats": [],
+      "title": "Comentários do atleta",
+    },
+    {
+      "id": "limitacoes",
+      "notice": null,
+      "paragraphs": [
+        "Este documento é uma leitura de contexto do que foi registrado no período. Não é diagnóstico, avaliação clínica nem prescrição de saúde. Os números descrevem os registros; a interpretação é do treinador que assina.",
+        "Neste período: não havia sessões previstas para medir aderência; o histórico de carga (2 dias com registro) não sustenta CTL/ATL/TSB/ACWR; houve 1 check-in de prontidão; 2 sessões realizadas ficaram sem sRPE. Onde o dado não sustenta a leitura, o relatório declara a lacuna em vez de estimar.",
+        "A qualidade de toda a leitura depende da constância com que o atleta registra sessões, sRPE e check-ins. Ausência de registro não é ausência de treino.",
+      ],
+      "rows": [],
+      "stats": [],
+      "title": "Limitações desta leitura",
+    },
+  ],
+  "statusLabel": "Compartilhado",
+  "trainerName": "Ricardo Pace",
+}
+`;
+
+exports[`buildReportDocument — período com dados suficientes > monta o documento premium completo 1`] = `
+{
+  "athleteName": "Marina Duarte",
+  "disclaimer": "Este documento é uma leitura de contexto do que foi registrado no período. Não é diagnóstico, avaliação clínica nem prescrição de saúde. Os números descrevem os registros; a interpretação é do treinador que assina.",
+  "generatedLabel": "Gerado em 29/06/2026",
+  "periodLabel": "01/06/2026 a 28/06/2026",
+  "reportId": "report-1",
+  "sections": [
+    {
+      "id": "resumo-executivo",
+      "notice": null,
+      "paragraphs": [
+        "No período foram previstas 16 sessões, com 11 concluídas, 3 parciais e 2 perdidas. A aderência registrada foi de 88%.",
+        "Volume realizado: 14 sessões, 840 min registrados, 62,4 km.",
+        "Carga interna acumulada de 4200 UA, com CTL 48 e ACWR 1,10 ao fim do período.",
+        "Prontidão auto-relatada em 19 check-ins, com leitura mais recente "boa".",
+      ],
+      "rows": [],
+      "stats": [
+        {
+          "label": "Aderência",
+          "value": "88%",
+        },
+        {
+          "label": "Sessões",
+          "value": "14",
+        },
+        {
+          "label": "Carga interna",
+          "value": "4200 UA",
+        },
+        {
+          "label": "Prontidão",
+          "value": "boa",
+        },
+      ],
+      "title": "Resumo executivo",
+    },
+    {
+      "id": "aderencia",
+      "notice": null,
+      "paragraphs": [
+        "Aderência de 88% considera concluídas e parciais sobre o total previsto no período (14 de 16).",
+      ],
+      "rows": [],
+      "stats": [
+        {
+          "label": "Previstas",
+          "value": "16",
+        },
+        {
+          "label": "Concluídas",
+          "value": "11",
+        },
+        {
+          "label": "Parciais",
+          "value": "3",
+        },
+        {
+          "label": "Perdidas",
+          "value": "2",
+        },
+      ],
+      "title": "Aderência",
+    },
+    {
+      "id": "volume",
+      "notice": null,
+      "paragraphs": [
+        "Volume conta apenas o que o atleta registrou como realizado (tempo e distância do feedback da sessão).",
+      ],
+      "rows": [
+        {
+          "label": "Corrida",
+          "value": "9 sessões · 540 min",
+        },
+        {
+          "label": "Força",
+          "value": "5 sessões · 300 min",
+        },
+      ],
+      "stats": [
+        {
+          "label": "Sessões",
+          "value": "14",
+        },
+        {
+          "label": "Tempo",
+          "value": "840 min",
+        },
+        {
+          "label": "Distância",
+          "value": "62,4 km",
+        },
+      ],
+      "title": "Volume",
+    },
+    {
+      "id": "carga-interna",
+      "notice": null,
+      "paragraphs": [
+        "Carga interna usa o sRPE da sessão (esforço percebido × duração), em unidades arbitrárias (UA). É a percepção do atleta, não uma medida fisiológica direta.",
+      ],
+      "rows": [],
+      "stats": [
+        {
+          "label": "Total",
+          "value": "4200 UA",
+        },
+        {
+          "label": "Média semanal",
+          "value": "1050 UA",
+        },
+        {
+          "label": "Sessões com sRPE",
+          "value": "14",
+        },
+      ],
+      "title": "Carga interna",
+    },
+    {
+      "id": "estado-de-carga",
+      "notice": null,
+      "paragraphs": [
+        "Valores calculados a partir da série diária de carga interna do próprio atleta. São descrições do histórico registrado, não faixas-alvo nem limites de segurança.",
+      ],
+      "rows": [
+        {
+          "label": "Monotonia (7d)",
+          "value": "1,42",
+        },
+        {
+          "label": "Strain (7d)",
+          "value": "1490",
+        },
+        {
+          "label": "Variação da CTL (7d)",
+          "value": "6,3%",
+        },
+        {
+          "label": "Dias com registro",
+          "value": "22 de 28",
+        },
+      ],
+      "stats": [
+        {
+          "label": "CTL",
+          "note": "crônica · 42d",
+          "value": "48,2",
+        },
+        {
+          "label": "ATL",
+          "note": "aguda · 7d",
+          "value": "52,9",
+        },
+        {
+          "label": "TSB",
+          "note": "CTL − ATL",
+          "value": "-4,7",
+        },
+        {
+          "label": "ACWR",
+          "note": "ATL / CTL",
+          "value": "1,10",
+        },
+      ],
+      "title": "Estado de carga (CTL · ATL · TSB · ACWR)",
+    },
+    {
+      "id": "prontidao",
+      "notice": null,
+      "paragraphs": [
+        "Prontidão é um composto do auto-relato diário (sono, fadiga, dores, estresse, motivação). É uma hipótese de disposição para treinar no dia, marcada como experimental — entra como sinal, nunca como decisão isolada.",
+      ],
+      "rows": [],
+      "stats": [
+        {
+          "label": "Check-ins",
+          "value": "19",
+        },
+        {
+          "label": "Última leitura",
+          "value": "boa",
+        },
+        {
+          "label": "Escore recente",
+          "value": "78",
+        },
+        {
+          "label": "Escore médio",
+          "value": "74",
+        },
+      ],
+      "title": "Prontidão",
+    },
+    {
+      "id": "sessoes",
+      "notice": null,
+      "paragraphs": [
+        "Uma sessão é "parcial" quando o atleta registrou execução incompleta, e "perdida" quando não houve execução registrada até o fim do período.",
+      ],
+      "rows": [
+        {
+          "label": "Concluídas",
+          "value": "11",
+        },
+        {
+          "label": "Parciais",
+          "value": "3",
+        },
+        {
+          "label": "Perdidas",
+          "value": "2",
+        },
+      ],
+      "stats": [],
+      "title": "Treinos concluídos, parciais e perdidos",
+    },
+    {
+      "id": "comentarios",
+      "notice": null,
+      "paragraphs": [
+        "Transcrição literal do que o atleta escreveu no feedback das sessões, sem edição nem interpretação.",
+      ],
+      "rows": [
+        {
+          "label": "18/06/2026 · Intervalado 6x800m",
+          "value": "Senti a panturrilha direita apertada nas últimas séries. (dor relatada: 4/10)",
+        },
+        {
+          "label": "24/06/2026 · Longão 18km",
+          "value": "Ritmo confortável do início ao fim.",
+        },
+      ],
+      "stats": [],
+      "title": "Comentários do atleta",
+    },
+    {
+      "id": "limitacoes",
+      "notice": null,
+      "paragraphs": [
+        "Este documento é uma leitura de contexto do que foi registrado no período. Não é diagnóstico, avaliação clínica nem prescrição de saúde. Os números descrevem os registros; a interpretação é do treinador que assina.",
+        "Neste período os registros cobriram aderência, carga e prontidão nos limiares mínimos de leitura.",
+        "A qualidade de toda a leitura depende da constância com que o atleta registra sessões, sRPE e check-ins. Ausência de registro não é ausência de treino.",
+      ],
+      "rows": [],
+      "stats": [],
+      "title": "Limitações desta leitura",
+    },
+  ],
+  "statusLabel": "Compartilhado",
+  "trainerName": "Ricardo Pace",
+}
+`;

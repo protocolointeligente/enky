@@ -43,4 +43,17 @@ describe("classifyReadiness", () => {
     expect(r.score).toBeLessThanOrEqual(100);
     expect(r.class).toBe("boa");
   });
+
+  it("humor e disposição contam como sinais 'bons' (viabilizam o mínimo de 3)", () => {
+    const r = classifyReadiness({ mood: 8, disposition: 9, sleepHours: 8 });
+    expect(r.signalsUsed).toBe(3);
+    expect(r.class).not.toBe("insuficiente");
+    expect(r.score).toBeGreaterThanOrEqual(70);
+  });
+
+  it("humor baixo derruba a prontidão (direção correta)", () => {
+    const bom = classifyReadiness({ sleepHours: 8, sleepQuality: 8, mood: 9 });
+    const ruim = classifyReadiness({ sleepHours: 8, sleepQuality: 8, mood: 1 });
+    expect(bom.score).toBeGreaterThan(ruim.score!);
+  });
 });

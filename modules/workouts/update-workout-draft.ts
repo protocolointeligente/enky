@@ -15,14 +15,22 @@ export async function updateWorkoutDraft(
 
   // Cross-organization/cross-trainer access is reported as 404, not 403 —
   // never confirm that a workout exists in a tenant the caller can't see.
-  if (!current || current.organizationId !== actor.organizationId || current.trainerId !== actor.trainerProfileId) {
+  if (
+    !current ||
+    current.organizationId !== actor.organizationId ||
+    current.trainerId !== actor.trainerProfileId
+  ) {
     throw new NotFoundError("Treino não encontrado.");
   }
   if (current.status !== "DRAFT") {
     throw new ConflictError("Somente treinos em rascunho podem ser editados.");
   }
   if (input.athleteId !== current.athleteId) {
-    await requireTrainerAccessToAthlete(actor.organizationId, actor.trainerProfileId, input.athleteId);
+    await requireTrainerAccessToAthlete(
+      actor.organizationId,
+      actor.trainerProfileId,
+      input.athleteId,
+    );
   }
 
   return prisma.$transaction(async (tx) => {
@@ -42,11 +50,20 @@ export async function updateWorkoutDraft(
         plannedEndAt: input.plannedEndAt ? new Date(input.plannedEndAt) : null,
         timezone: input.timezone,
         lockVersion: { increment: 1 },
+        // Marca que a mão do treinador passou por aqui. É isto que protege o
+        // treino de ser descartado numa regeração da semana
+        // (modules/periodization/generate-week.ts só apaga rascunhos gerados e
+        // NÃO tocados). Sem esta marca, editar e regerar perderia o trabalho.
+        trainerModified: true,
+        trainerModifiedAt: new Date(),
+        trainerModifiedBy: actor.userId,
       },
     });
 
     if (result.count === 0) {
-      throw new ConflictError("O treino foi modificado por outra pessoa. Recarregue e tente novamente.");
+      throw new ConflictError(
+        "O treino foi modificado por outra pessoa. Recarregue e tente novamente.",
+      );
     }
 
     // WorkoutBlock has onDelete: Cascade from Workout; WorkoutExercise/

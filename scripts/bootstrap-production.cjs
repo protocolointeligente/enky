@@ -12,9 +12,15 @@
 //
 // Passos (todos podem rodar de novo sem duplicar nada):
 //   1. migrate  — prisma migrate deploy (usa DIRECT_URL, sem pooler)
-//   2. plans    — plano Grátis (upsert por nome)
-//   3. admin    — usuário ADMIN (upsert por e-mail)
-//   4. videos   — biblioteca de vídeos ENKY (upsert global por nome)
+//   2. admin    — usuário ADMIN (upsert por e-mail)
+//   3. videos   — biblioteca de vídeos ENKY (upsert global por nome)
+//
+// O catálogo de planos NÃO tem passo próprio: quem o semeia é a migração
+// 20260716140000_subscription_billing (item 4), por slug. Existiu aqui um
+// `prisma/seed-plans.mjs` que semeava por nome — duas fontes de verdade para o
+// mesmo catálogo, que brigavam: o seed reverteria os limites do plano grátis a
+// cada execução, e a linha que ele criou fez a migração da Fase 10 falhar com
+// 23505 em produção. Uma fonte só: a migração.
 //
 // Pule passos com --skip-<nome>, ex.: --skip-videos.
 
@@ -50,7 +56,6 @@ function run(label, command, commandArgs) {
 
 const STEPS = [
   { name: "migrate", label: "Migrations (prisma migrate deploy)", exec: () => run("Migrations", "npx", ["prisma", "migrate", "deploy"]) },
-  { name: "plans", label: "Planos de assinatura (Grátis)", exec: () => run("Planos", "node", ["prisma/seed-plans.mjs"]) },
   { name: "admin", label: "Usuário ADMIN", exec: () => run("Admin", "node", ["scripts/create-admin.cjs"]) },
   { name: "videos", label: "Biblioteca de vídeos ENKY", exec: () => run("Vídeos", "node", ["scripts/import-enky-videos.cjs"]) },
 ];

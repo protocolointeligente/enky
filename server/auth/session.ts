@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { env } from "@/lib/env";
 import { prisma } from "@/infrastructure/database/prisma";
 
@@ -68,10 +69,16 @@ export async function revokeSession(token: string): Promise<void> {
   });
 }
 
-// Called on password change / suspected compromise — invalidates every
-// device the user is logged in on, not just the current one.
-export async function revokeAllSessionsForUser(userId: string): Promise<void> {
-  await prisma.session.updateMany({
+// Called on password change / suspected compromise / bloqueio administrativo —
+// invalidates every device the user is logged in on, not just the current one.
+// Accepts a transaction client so the caller can make the revocation atomic
+// with whatever caused it (ex.: bloquear o usuário e derrubar as sessões dele
+// têm de acontecer juntos, ou o bloqueado segue navegando com a sessão viva).
+export async function revokeAllSessionsForUser(
+  userId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<void> {
+  await client.session.updateMany({
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   });

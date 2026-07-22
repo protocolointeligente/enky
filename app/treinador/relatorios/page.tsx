@@ -6,7 +6,7 @@ import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { addDays, toISODate } from "@/app/_lib/calendar";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
-import { ReportView, type ReportItem } from "@/components/report-view";
+import { ReportView, type ReportEntry } from "@/components/report-view";
 
 interface RosterEntry {
   athleteProfileId: string;
@@ -20,7 +20,7 @@ export default function TrainerReportsPage() {
   const [athleteId, setAthleteId] = useState("");
   const [start, setStart] = useState(() => toISODate(addDays(new Date(), -30)));
   const [end, setEnd] = useState(() => toISODate(new Date()));
-  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [reports, setReports] = useState<ReportEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export default function TrainerReportsPage() {
       setReports([]);
       return;
     }
-    apiFetch<{ reports: ReportItem[] }>(`/api/trainer/athletes/${athleteId}/reports`)
+    apiFetch<{ reports: ReportEntry[] }>(`/api/trainer/athletes/${athleteId}/reports`)
       .then((r) => setReports(r.reports))
       .catch(() => setReports([]));
   }, [athleteId]);
@@ -52,11 +52,11 @@ export default function TrainerReportsPage() {
     setBusy(true);
     setError(null);
     try {
-      const result = await apiFetch<{ report: ReportItem }>(
-        `/api/trainer/athletes/${athleteId}/reports`,
-        { method: "POST", body: JSON.stringify({ periodStart: start, periodEnd: end }) },
-      );
-      setReports((prev) => [result.report, ...prev]);
+      const result = await apiFetch<ReportEntry>(`/api/trainer/athletes/${athleteId}/reports`, {
+        method: "POST",
+        body: JSON.stringify({ periodStart: start, periodEnd: end }),
+      });
+      setReports((prev) => [result, ...prev]);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Não foi possível gerar.");
     } finally {
@@ -64,15 +64,18 @@ export default function TrainerReportsPage() {
     }
   }
 
-  async function share(id: string) {
+  // Compartilhar e revogar devolvem o relatório E o documento já redigido de
+  // novo — a tela não recalcula rótulo nenhum, só troca a entrada da lista.
+  async function transition(id: string, action: "share" | "revoke", failure: string) {
+    setError(null);
     try {
-      const result = await apiFetch<{ report: ReportItem }>(
-        `/api/trainer/reports/${id}/share`,
-        { method: "POST", body: JSON.stringify({}) },
-      );
-      setReports((prev) => prev.map((r) => (r.id === id ? result.report : r)));
+      const result = await apiFetch<ReportEntry>(`/api/trainer/reports/${id}/${action}`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setReports((prev) => prev.map((entry) => (entry.report.id === id ? result : entry)));
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Não foi possível compartilhar.");
+      setError(err instanceof ApiClientError ? err.message : failure);
     }
   }
 
@@ -162,11 +165,22 @@ export default function TrainerReportsPage() {
               {reports.length === 0 ? (
                 <p className="text-sm text-muted">Nenhum relatório para este atleta ainda.</p>
               ) : (
-                reports.map((report) => (
+                reports.map((entry) => (
                   <ReportView
-                    key={report.id}
-                    report={report}
-                    onShare={report.status === "DRAFT" ? () => share(report.id) : undefined}
+                    key={entry.report.id}
+                    entry={entry}
+                    pdfHref={`/api/trainer/reports/${entry.report.id}/pdf`}
+                    onShare={
+                      entry.report.status === "DRAFT" || entry.report.status === "REVOKED"
+                        ? () =>
+                            transition(entry.report.id, "share", "Não foi possível compartilhar.")
+                        : undefined
+                    }
+                    onRevoke={
+                      entry.report.status === "PUBLISHED"
+                        ? () => transition(entry.report.id, "revoke", "Não foi possível revogar.")
+                        : undefined
+                    }
                   />
                 ))
               )}

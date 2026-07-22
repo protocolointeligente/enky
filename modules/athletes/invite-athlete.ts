@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { recordAuditLog } from "@/domain/audit";
 import { normalizeEmail } from "@/modules/identity/normalize-email";
+import { assertCanAddAthlete } from "@/modules/subscriptions/entitlements";
 import { prisma } from "@/infrastructure/database/prisma";
 import {
   generateInvitationToken,
@@ -39,6 +40,17 @@ export async function inviteAthlete(
   const email = normalizeEmail(input.email);
   const rawToken = generateInvitationToken();
   const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
+
+  // Limite de atletas do plano (Fase 10). Antes de abrir a transação, e antes
+  // de qualquer escrita: um convite que estoura o limite não deixa
+  // AthleteProfile órfão nem vínculo pela metade.
+  //
+  // Fora da transação de propósito. Dentro não compraria exclusão mútua (ver
+  // a nota de LIMITE SUAVE em assertCanAddAthlete: no READ COMMITTED as
+  // contagens concorrentes não bloqueiam), e custaria três round-trips a mais
+  // dentro de uma transação interativa que tem teto de tempo — o preço seria
+  // real, a garantia não.
+  await assertCanAddAthlete(actor.organizationId);
 
   const result = await prisma.$transaction(async (tx) => {
     const athlete = await tx.athleteProfile.create({ data: {} });

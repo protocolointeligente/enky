@@ -15,6 +15,13 @@ export const duplicateWorkoutInputSchema = z.object({
 });
 export type DuplicateWorkoutInputParsed = z.infer<typeof duplicateWorkoutInputSchema>;
 
+export const copyWeekInputSchema = z.object({
+  sourceWeekStart: isoDate, // Must be a Monday
+  targetWeekStart: isoDate, // Must be a Monday
+  athleteId: z.string().uuid("Atleta inválido.").optional(),
+});
+export type CopyWeekInputParsed = z.infer<typeof copyWeekInputSchema>;
+
 // Calendar range comes from query params. Cap the window so a single request
 // can't scan an unbounded date range (max ~3 months covers month/week views).
 const MAX_RANGE_DAYS = 92;

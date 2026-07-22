@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getAthleteReport } from "@/modules/reports/report-service";
+import { getAthleteReport, getAthleteReportDocument } from "@/modules/reports/report-service";
 import {
   requireAuthenticatedUser,
   requireGlobalRole,
@@ -17,7 +17,8 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const { id } = await params;
 
     const report = await getAthleteReport(id, organizationId, athleteProfileId);
-    return apiSuccess({ report });
+    const document = await getAthleteReportDocument(id, organizationId, athleteProfileId);
+    return apiSuccess({ report, document });
   } catch (error) {
     return apiError(error);
   }

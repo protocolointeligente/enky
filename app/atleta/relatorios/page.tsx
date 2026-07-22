@@ -6,17 +6,19 @@ import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { EmptyState } from "@/components/ui/empty-state";
-import { ReportView, type ReportItem } from "@/components/report-view";
+import { ReportView, type ReportEntry } from "@/components/report-view";
 
 export default function AthleteReportsPage() {
   const { checked } = useRequireRole("ATHLETE");
-  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [reports, setReports] = useState<ReportEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!checked) return;
-    apiFetch<{ reports: ReportItem[] }>("/api/athlete/reports")
+    // A API já devolve só os PUBLISHED: um relatório revogado simplesmente
+    // deixa de vir nesta lista.
+    apiFetch<{ reports: ReportEntry[] }>("/api/athlete/reports")
       .then((r) => setReports(r.reports))
       .catch((err) => setError(err instanceof ApiClientError ? err.message : "Erro inesperado."))
       .finally(() => setLoading(false));
@@ -46,7 +48,13 @@ export default function AthleteReportsPage() {
             description="Quando seu treinador compartilhar um relatório, ele aparece aqui."
           />
         ) : (
-          reports.map((report) => <ReportView key={report.id} report={report} />)
+          reports.map((entry) => (
+            <ReportView
+              key={entry.report.id}
+              entry={entry}
+              pdfHref={`/api/athlete/reports/${entry.report.id}/pdf`}
+            />
+          ))
         )}
 
         <Link href="/atleta" className={uiClasses.link}>

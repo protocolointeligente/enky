@@ -1,6 +1,10 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { listCoachAthletes } from "@/modules/athletes/list-coach-athletes";
-import { requireAuthenticatedUser, requireGlobalRole, resolveActiveOrganization } from "@/server/auth/guards";
+import {
+  requireAuthenticatedUser,
+  requireGlobalRole,
+  resolveActiveOrganization,
+} from "@/server/auth/guards";
 import { apiError, apiSuccess } from "@/server/http/response";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +18,10 @@ export async function GET() {
       where: { userId: identity.userId },
     });
 
-    const athletes = await listCoachAthletes({ organizationId, trainerProfileId: trainerProfile.id });
+    const athletes = await listCoachAthletes({
+      organizationId,
+      trainerProfileId: trainerProfile.id,
+    });
 
     return apiSuccess({ athletes });
   } catch (error) {

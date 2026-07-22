@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { toast } from "@/app/_lib/toast";
 import { useExerciseOptions } from "@/app/_lib/use-exercise-options";
@@ -21,14 +21,20 @@ interface CreateWorkoutResponse {
   workoutId: string;
 }
 
-export default function NewWorkoutPage() {
+function NewWorkoutInner() {
   const { checked } = useRequireRole("TRAINER");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefilledAthleteId = searchParams.get("athleteId") ?? "";
   const [athletes, setAthletes] = useState<AthleteOption[]>([]);
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const exerciseOptions = useExerciseOptions(checked);
+  const initialValues = useMemo(
+    () => ({ ...emptyPrescriptionForm(), athleteId: prefilledAthleteId }),
+    [prefilledAthleteId],
+  );
 
   useEffect(() => {
     if (!checked) return;
@@ -85,7 +91,7 @@ export default function NewWorkoutPage() {
           mode="create"
           athletes={athletes}
           templates={templates}
-          initialValues={emptyPrescriptionForm()}
+          initialValues={initialValues}
           submitting={submitting}
           error={error}
           onSaveDraft={handleSaveDraft}
@@ -94,5 +100,19 @@ export default function NewWorkoutPage() {
         />
       </div>
     </main>
+  );
+}
+
+export default function NewWorkoutPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className={uiClasses.page}>
+          <p className="text-muted">Carregando...</p>
+        </main>
+      }
+    >
+      <NewWorkoutInner />
+    </Suspense>
   );
 }

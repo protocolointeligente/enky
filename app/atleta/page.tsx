@@ -97,6 +97,20 @@ export default function AthleteHomePage() {
               </section>
             )}
 
+            {/* Integrações (Fase 11) */}
+            <Link
+              href="/atleta/integracoes"
+              className="flex items-center justify-between rounded-xl border border-line bg-petrol/70 p-4 transition-colors hover:border-line-strong"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-ink">Conectar Strava</p>
+                <p className="truncate text-xs text-muted">
+                  Suas atividades entram sozinhas, sem digitar nada
+                </p>
+              </div>
+              <ChevronRightIcon className="shrink-0 text-faint" />
+            </Link>
+
             {/* Próximos treinos (§8.4) */}
             <section className="flex flex-col gap-2">
               <div className="flex items-center justify-between">

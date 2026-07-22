@@ -188,3 +188,23 @@ export const intelligenceWriteRateLimiter = createRateLimiter(120, 60 * 60 * 100
 export const readinessWriteRateLimiter = createRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta (check-in de prontidão)
 export const reportWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (gerar/compartilhar relatório)
 export const periodizationWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador (criar/excluir periodização)
+export const billingWriteRateLimiter = createRateLimiter(10, 60 * 60 * 1000); // 10/hora por treinador (checkout/cancelamento)
+// Fase 11 — Integração Strava.
+// Conectar/desconectar: 10/hora por atleta. É ato raro e cada tentativa dispara
+// um handshake OAuth com um terceiro.
+export const integrationWriteRateLimiter = createRateLimiter(10, 60 * 60 * 1000);
+// Importação manual: 6/hora por atleta. Baixo porque cada clique gasta cota da
+// API do Strava (100 req/15min por APLICAÇÃO, compartilhada entre TODOS os
+// atletas): um atleta clicando sem parar deixaria os outros sem importação.
+export const activityImportRateLimiter = createRateLimiter(6, 60 * 60 * 1000);
+// Webhook do gateway, por IP. Teto ALTO de propósito: o limitador aqui é
+// anti-flood, não controle de acesso — quem autentica o webhook é o segredo
+// verificado pelo adapter. Apertar isso derrubaria confirmação de pagamento
+// legítima em pico de cobrança (o Asaas enfileira e dispara em lote), e um
+// evento recusado com 429 é reenviado, não perdido — mas atrasa a liberação
+// do plano de quem pagou.
+export const webhookRateLimiter = createRateLimiter(600, 60 * 1000); // 600/min por IP
+// 30/hora por admin (bloquear usuário, suspender organização). Baixo de
+// propósito: são ações raras e de alto impacto — uma rajada aqui é engano ou
+// conta comprometida, nunca uso normal.
+export const adminWriteRateLimiter = createRateLimiter(30, 60 * 60 * 1000);

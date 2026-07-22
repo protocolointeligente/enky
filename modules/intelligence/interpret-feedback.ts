@@ -46,6 +46,20 @@ function evidence(input: FeedbackInterpretationInput): InsightEvidence[] {
   return out;
 }
 
+// O que faltou no retorno desta sessão. A ausência é informação: um insight
+// de sessão com metade dos campos vazios não pode ser lido como um cheio.
+function absent(input: FeedbackInterpretationInput): string[] {
+  const f = input.feedback;
+  const out: string[] = [];
+  if (f.sessionRpe == null) out.push("Esforço percebido (RPE) não informado");
+  if (f.painLevel == null) out.push("Dor não informada nesta sessão");
+  if (f.actualDurationMinutes == null) out.push("Duração real não informada");
+  if (input.plannedDurationMinutes == null) out.push("Duração planejada não registrada no treino");
+  if (f.recoveryLevel == null) out.push("Recuperação não informada");
+  out.push("Sono e HRV objetivos (o sistema não recebe dados de wearable)");
+  return out;
+}
+
 export function interpretFeedback(input: FeedbackInterpretationInput): Insight {
   const f = input.feedback;
   const base = {
@@ -54,6 +68,8 @@ export function interpretFeedback(input: FeedbackInterpretationInput): Insight {
     engine: "feedback",
     confianca: confidence(input),
     dadosUsados: evidence(input),
+    sinaisAusentes: absent(input),
+    janela: "Uma sessão — o retorno deste treino, sem tendência",
   };
   const planned = input.plannedDurationMinutes;
   const actual = f.actualDurationMinutes;
@@ -71,7 +87,8 @@ export function interpretFeedback(input: FeedbackInterpretationInput): Insight {
         "Avalie conversar com o atleta e, se necessário, orientar avaliação profissional.",
       ],
       confianca: base.confianca === "BAIXA" ? "MEDIA" : base.confianca,
-      limitacoes: "Não é um diagnóstico. Sem sono/HRV para contextualizar.",
+      limitacoes:
+        "Não é um diagnóstico e não estima lesão. O sistema só sabe o que o atleta relatou nesta sessão.",
       regras: ["seguranca:dor-relatada"],
     };
   }
@@ -95,9 +112,10 @@ export function interpretFeedback(input: FeedbackInterpretationInput): Insight {
       ...base,
       risk: "revisar",
       observacao: `Esforço percebido muito alto (RPE ${f.sessionRpe}/10) para esta sessão.`,
-      interpretacao: "Pode sinalizar fadiga ou que a sessão foi mais dura que o planejado.",
+      interpretacao:
+        "Pode sinalizar fadiga ou que a sessão foi mais dura que o planejado. É um sinal de atenção sobre esta sessão.",
       acoesSugeridas: ["Considere confirmar recuperação e ajustar a próxima sessão intensa."],
-      limitacoes: "Sinal isolado; sem HRV/sono para confirmar fadiga.",
+      limitacoes: "Sinal isolado e subjetivo (percepção do atleta); não confirma fadiga.",
       regras: ["carga:rpe-alto"],
     };
   }

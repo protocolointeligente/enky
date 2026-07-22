@@ -1,15 +1,11 @@
 import { NotFoundError } from "@/domain/errors";
 import { prisma } from "@/infrastructure/database/prisma";
+import { ATHLETE_VISIBLE_STATUSES } from "./workout-visibility";
 
 export interface AthleteScope {
   organizationId: string;
   athleteProfileId: string;
 }
-
-// DRAFT/IN_PROGRESS are never athlete-visible: a draft is still being
-// authored by the trainer, and IN_PROGRESS only exists transiently between
-// an athlete starting a session and submitting feedback for it.
-const ATHLETE_VISIBLE_STATUSES = ["PUBLISHED", "COMPLETED", "PARTIAL", "MISSED", "ARCHIVED", "CANCELLED"] as const;
 
 const workoutDetailSelect = {
   id: true,

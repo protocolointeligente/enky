@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
-import { getTrainerReport } from "@/modules/reports/report-service";
+import { getTrainerReport, getTrainerReportDocument } from "@/modules/reports/report-service";
 import {
   requireAuthenticatedUser,
   requireGlobalRole,
@@ -20,12 +20,14 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     });
     const { id } = await params;
 
-    const report = await getTrainerReport(id, {
+    const actor = {
       userId: identity.userId,
       organizationId,
       trainerProfileId: trainerProfile.id,
-    });
-    return apiSuccess({ report });
+    };
+    const report = await getTrainerReport(id, actor);
+    const document = await getTrainerReportDocument(id, actor);
+    return apiSuccess({ report, document });
   } catch (error) {
     return apiError(error);
   }

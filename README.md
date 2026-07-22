@@ -9,19 +9,33 @@ Plataforma de inteligência esportiva para treinadores, assessorias e atletas: g
 
 ## Status
 
-**Fase 02G — Experiência do atleta (02F) + ENKY Intelligence Fase I (02G).** Sobre a base 02A–02E (identidade/auth, convite de atleta, calendário, biblioteca de exercícios, templates e prescrição de treinos), estão implementados: o portal do atleta (calendário, treinos, feedback/sRPE) e o motor de **atenção** da ENKY Intelligence — regras determinísticas e explicáveis sobre workouts + feedback, expostas ao treinador via `InsightCard`, sem LLM e sem diagnóstico.
+**Fase 12 — Homologação e preparação para produção (piloto controlado).** Sobre a base operacional
+(identidade/auth, convite de atleta, calendário, biblioteca de exercícios, templates, prescrição de
+treinos, portal do atleta e feedback/sRPE) e a ENKY Intelligence (motor de atenção determinístico +
+persistência de insight + check-in de prontidão), estão implementadas as Fases 6, 8, 9, 10 e 11:
+periodização assistida multiesporte, relatórios premium com PDF, painel administrativo, planos e
+pagamentos (Asaas atrás de `PaymentProvider`) e integração Strava v1. O estado auditado completo está
+em **`docs/ENKY_CURRENT_STATE.md`**.
 
-Homologado no nível de motor, cálculo, prioridade, confiança, linguagem e UX-código: **143/143** testes unitários + build ok, 10 cenários de homologação controlada. Ver `docs/ENKY_02F_02G_HOMOLOGATION_REPORT.md`.
+Validação nesta branch: `npm run validate` verde (**lint + typecheck + 417 testes unitários + build**).
+Integração (Vitest + Postgres) e E2E (Playwright) têm specs escritos, mas exigem um banco de teste
+isolado para rodar. Ver `docs/PRODUCTION_READINESS.md` para o gate de go-live.
 
-> **Ainda em branch (`feat/fase-02d-calendar-library`) — sem merge para `main`, sem Production, sem migration.** Falta a homologação visual humana no Preview (recomendada pelo relatório antes do 02H) e a integração/E2E contra banco de teste isolado. A inteligência calcula on-the-fly; a persistência de insights (tabela `Insight`, ciclo aceito/ignorado/resultado) e o questionário de prontidão/recuperação são o **02H**. Marketplace, pagamentos, periodização, relatórios e admin permanecem como fundação/especificação, sem produto funcional.
+> **Sem merge para `main`, sem Production, sem migration contra banco real.** O que resta para o piloto
+> são tarefas do operador (env de produção, banco Preview/Production isolados, backup testado, smoke e
+> homologação visual no Preview, ensaio de rollback) — enumeradas como `[ ]` em
+> `docs/PRODUCTION_READINESS.md`. **Marketplace** e **Metric Registry** permanecem especificados, sem
+> produto funcional.
 
-**Rotas implementadas:**
+**Rotas implementadas** (inventário completo em `docs/ENKY_CURRENT_STATE.md` §4):
 
 - **Auth:** `register`, `login`, `logout`, `session`, `password-reset/request`, `password-reset/confirm`
 - **Convite de atleta:** `athletes/invitations` (criar/ativar/reenviar/revogar)
-- **Treinador:** `trainer/athletes` + `roster`, `trainer/calendar`, `trainer/exercises` (CRUD + arquivar/reativar), `trainer/templates` (CRUD + aplicar/duplicar/arquivar), `trainer/workouts` (CRUD + publicar/mover/cancelar/duplicar/salvar-como-template/feedback/insight)
-- **Atleta:** `athlete/calendar`, `athlete/workouts` + `[id]` + `[id]/feedback`
-- **Intelligence:** `trainer/intelligence/attention`
+- **Treinador:** `trainer/athletes` (+ `roster`, detalhe, periodizações, planned-vs-actual, readiness, reports), `trainer/calendar`, `trainer/exercises` (CRUD + arquivar/reativar), `trainer/templates` (CRUD + aplicar/duplicar/arquivar), `trainer/workouts` (CRUD + publicar/mover/cancelar/arquivar/duplicar/salvar-como-template/feedback/insight), `trainer/periodizations`, `trainer/reports` (PDF/share/revoke), `trainer/billing` (checkout/plans/subscription/cancel), `trainer/intelligence/attention` + `insights/[id]/decision`
+- **Atleta:** `athlete/calendar`, `athlete/workouts` (+ `[id]`, `[id]/feedback`), `athlete/readiness`, `athlete/reports` (+ PDF), `athlete/integrations/strava`
+- **Admin:** `admin/{stats,users,trainers,athletes,organizations,audit}`
+- **Webhooks:** `webhooks/payment-provider`, `webhooks/strava`
+- **Infra:** `health`, `novidades`, `exercise-media/[id]`
 
 ## Documentos oficiais (fonte única de verdade)
 

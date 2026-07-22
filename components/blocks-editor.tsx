@@ -2,6 +2,7 @@
 
 import { stepTypeLabel } from "@/app/_lib/labels";
 import { uiClasses } from "@/app/_lib/ui";
+import { ExerciseDemo } from "@/components/exercise-demo";
 
 // The single canonical block/step/exercise editor. Reused by the workout
 // prescription form AND the workout-template form so the two never drift.
@@ -105,6 +106,7 @@ export interface BlockFormState {
 export interface ExerciseOption {
   name: string;
   category: string;
+  videoUrl?: string | null;
 }
 
 export function newKey(): string {
@@ -562,6 +564,21 @@ export function BlocksEditor({
                       />
                     </div>
                   </div>
+
+                  {/* Miniatura da demonstração do exercício da biblioteca —
+                      confirmação visual de que é o movimento certo. */}
+                  {(() => {
+                    const opt = optionByName.get(exercise.exerciseName.trim().toLowerCase());
+                    if (!opt?.videoUrl) return null;
+                    return (
+                      <div className="mb-2 flex items-center gap-2">
+                        <ExerciseDemo size="sm" name={opt.name} url={opt.videoUrl} />
+                        <span className="text-[11px] text-faint">
+                          Demonstração da biblioteca — clique para conferir
+                        </span>
+                      </div>
+                    );
+                  })()}
 
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
                     <div>

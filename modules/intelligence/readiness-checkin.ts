@@ -24,6 +24,9 @@ export interface ReadinessCheckInView {
   soreness: number | null;
   stress: number | null;
   motivation: number | null;
+  mood: number | null;
+  disposition: number | null;
+  localizedPain: string | null;
   notes: string | null;
   readiness: ReadinessResult;
 }
@@ -44,6 +47,9 @@ function toView(row: ReadinessCheckIn): ReadinessCheckInView {
     soreness: row.soreness,
     stress: row.stress,
     motivation: row.motivation,
+    mood: row.mood,
+    disposition: row.disposition,
+    localizedPain: row.localizedPain,
     notes: row.notes,
     readiness: classifyReadiness({
       sleepHours,
@@ -52,6 +58,8 @@ function toView(row: ReadinessCheckIn): ReadinessCheckInView {
       soreness: row.soreness,
       stress: row.stress,
       motivation: row.motivation,
+      mood: row.mood,
+      disposition: row.disposition,
     }),
   };
 }
@@ -70,6 +78,9 @@ export async function submitReadinessCheckIn(
     soreness: input.soreness ?? null,
     stress: input.stress ?? null,
     motivation: input.motivation ?? null,
+    mood: input.mood ?? null,
+    disposition: input.disposition ?? null,
+    localizedPain: input.localizedPain ?? null,
     notes: input.notes ?? null,
   };
 

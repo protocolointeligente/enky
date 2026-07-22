@@ -70,3 +70,10 @@ prisma/*.db-journal
 # credenciais / tokens
 *token*.json
 client_secret*.json
+.env*
+
+# fontes de design brutas (PDFs/PNGs, ~25MB) e backups de imagem — só o que
+# está em public/brand/ é versionado; as fontes ficam fora do repo.
+/brand/
+*.bak
+*.bak.png

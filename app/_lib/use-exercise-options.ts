@@ -11,8 +11,14 @@ export function useExerciseOptions(enabled: boolean): ExerciseOption[] {
   const [options, setOptions] = useState<ExerciseOption[]>([]);
   useEffect(() => {
     if (!enabled) return;
-    apiFetch<{ exercises: { name: string; category: string }[] }>("/api/trainer/exercises")
-      .then((r) => setOptions(r.exercises.map((e) => ({ name: e.name, category: e.category }))))
+    apiFetch<{ exercises: { name: string; category: string; videoUrl?: string | null }[] }>(
+      "/api/trainer/exercises",
+    )
+      .then((r) =>
+        setOptions(
+          r.exercises.map((e) => ({ name: e.name, category: e.category, videoUrl: e.videoUrl })),
+        ),
+      )
       .catch(() => undefined);
   }, [enabled]);
   return options;

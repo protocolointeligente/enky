@@ -1,14 +1,13 @@
-import { getPlatformStats } from "@/modules/audit/audit-service";
-import { requireAuthenticatedUser, requireGlobalRole } from "@/server/auth/guards";
+import type { NextRequest } from "next/server";
+import { requireAdminActor } from "@/modules/admin/admin-actor";
+import { getPlatformStats } from "@/modules/admin/admin-service";
 import { apiError, apiSuccess } from "@/server/http/response";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const identity = await requireAuthenticatedUser();
-    requireGlobalRole(identity, ["ADMIN", "SUPERADMIN"]);
-    const stats = await getPlatformStats();
+    const stats = await getPlatformStats(await requireAdminActor(request));
     return apiSuccess({ stats });
   } catch (error) {
     return apiError(error);
