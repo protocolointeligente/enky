@@ -37,10 +37,15 @@ entrega→biblioteca, idempotência).
 publicada, nunca o preço em edição; nenhum acesso sem pagamento confirmado; ENKY
 nunca persiste dados de cartão (só tokens do gateway).
 
-## Próximas fatias (fatia B — fora do MVP)
+Painel do vendedor entregue (`marketplace-seller/seller-service.ts` +
+`/treinador/marketplace`): treinador cria perfil de vendedor, cadastra produto
+(DRAFT) e publica (congela versão comercial → entra no catálogo). Ownership
+verificado. Sem moderação (self-publish).
 
-Gateway real Asaas (split/KYC/repasse) no lugar do sandbox; execução da entrega
-(cópia efetiva de periodização/templates para a conta do comprador — hoje só o
-entitlement é gravado); painel do vendedor; payouts; moderação
+## Próximas fatias (fatia B — restante)
+
+Gateway real Asaas (split/KYC/repasse) no lugar do sandbox + coleta de CPF no
+checkout; execução da entrega (cópia efetiva de periodização/templates para a
+conta do comprador — hoje só o entitlement é gravado); payouts; moderação
 (`PENDING_REVIEW`/`REJECTED`); avaliações; cupons; carrinho multi-item; busca;
 seed dos 20 produtos oficiais; reembolso/chargeback.
