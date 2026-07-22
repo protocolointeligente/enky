@@ -60,6 +60,12 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
       <circle cx="7.5" cy="9.5" r="1" />
     </>
   ),
+  marketplace: (
+    <>
+      <path d="M3 9l1-4h16l1 4M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9M3 9h18" />
+      <path d="M9 20v-6h6v6" />
+    </>
+  ),
 };
 
 function NavIcon({ name }: { name?: string }) {

@@ -13,6 +13,7 @@ const TRAINER_LINKS = [
   { href: "/treinador/templates", label: "Templates", icon: "templates" },
   { href: "/treinador/relatorios", label: "Relatórios", icon: "relatorios" },
   { href: "/treinador/planos", label: "Planos", icon: "planos" },
+  { href: "/treinador/marketplace", label: "Marketplace", icon: "marketplace" },
 ];
 
 export default function TrainerLayout({ children }: { children: React.ReactNode }) {
