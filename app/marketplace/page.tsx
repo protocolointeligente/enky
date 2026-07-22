@@ -12,8 +12,9 @@ export const metadata: Metadata = {
     "Planos de treino, periodizações e consultorias dos melhores treinadores, prontos para comprar e começar hoje.",
 };
 
-// Catálogo muda com publicação/venda; ISR curto evita bater o banco a cada hit.
-export const revalidate = 300;
+// Lê o banco a cada request (o build da Vercel não tem DATABASE_URL, então não
+// pode ser pré-renderizada). SSR sob demanda — o SEO da metadata segue valendo.
+export const dynamic = "force-dynamic";
 
 export default async function MarketplacePage() {
   const products = await listPublishedProducts();

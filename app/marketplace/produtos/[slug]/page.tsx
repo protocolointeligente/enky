@@ -7,7 +7,9 @@ import { buildProductSeo } from "@/modules/marketplace-catalog/seo";
 import { uiClasses } from "@/app/_lib/ui";
 import { BuyButton } from "./buy-button";
 
-export const revalidate = 300;
+// Lê o banco (catálogo + generateMetadata) a cada request — sem DATABASE_URL no
+// build da Vercel, não pode ser pré-renderizada.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
