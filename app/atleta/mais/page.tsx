@@ -15,9 +15,10 @@ const AVAILABLE = [
   { href: "/atleta/prontidao", label: "Prontidão", hint: "Check-in diário: sono, fadiga, dor" },
   { href: "/atleta/relatorios", label: "Relatórios", hint: "Resumos do seu treinador" },
   { href: "/atleta/biblioteca", label: "Biblioteca", hint: "Planos e conteúdos que você adquiriu" },
+  { href: "/atleta/avaliacoes", label: "Avaliações", hint: "Seus testes físicos e resultados" },
 ];
 
-const SOON = ["Avaliações", "Objetivos", "Mensagens", "Compras", "Perfil", "Configurações"];
+const SOON = ["Objetivos", "Mensagens", "Compras", "Perfil", "Configurações"];
 
 export default function AthleteMaisPage() {
   const router = useRouter();

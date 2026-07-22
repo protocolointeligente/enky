@@ -199,10 +199,15 @@ export default function TrainerAthlete360Page({ params }: { params: Promise<{ id
               )}
             </div>
           </div>
-          <Link href={`/treinador/treinos/novo?athleteId=${id}`} className={uiClasses.button}>
-            <PlusIcon />
-            Criar treino
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/treinador/atletas/${id}/avaliacoes`} className={uiClasses.buttonSecondary}>
+              Avaliações
+            </Link>
+            <Link href={`/treinador/treinos/novo?athleteId=${id}`} className={uiClasses.button}>
+              <PlusIcon />
+              Criar treino
+            </Link>
+          </div>
         </header>
 
         {/* ── Métricas sempre visíveis ─────────────────────────────── */}
