@@ -7,6 +7,13 @@ import { ApiClientError, apiFetch } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
 import type { AssessmentView } from "@/modules/assessments/assessment-service";
+import type { Zone } from "@/modules/assessments/zones";
+
+function zoneRange(z: Zone, unit: string): string {
+  if (z.min === null) return `≤ ${z.max} ${unit}`;
+  if (z.max === null) return `≥ ${z.min} ${unit}`;
+  return `${z.min}–${z.max} ${unit}`;
+}
 
 // Sugestões comuns — texto livre, o treinador pode digitar outro.
 const COMMON_TESTS = ["Limiar de FC", "Pace de limiar", "FTP", "VO2max", "CSS", "1RM", "Salto vertical"];
@@ -122,20 +129,29 @@ export default function TrainerAssessmentsPage() {
         {items && items.length > 0 && (
           <ul className="flex flex-col gap-2">
             {items.map((a) => (
-              <li
-                key={a.id}
-                className="flex items-baseline justify-between gap-3 rounded-xl border border-line bg-surface p-3"
-              >
-                <div className="flex flex-col">
-                  <span className="font-medium text-ink">{a.testType}</span>
-                  <span className="text-xs text-muted">
-                    {new Date(a.performedAt).toLocaleDateString("pt-BR")}
-                    {a.protocol && ` · ${a.protocol}`}
+              <li key={a.id} className="flex flex-col gap-2 rounded-xl border border-line bg-surface p-3">
+                <div className="flex items-baseline justify-between gap-3">
+                  <div className="flex flex-col">
+                    <span className="font-medium text-ink">{a.testType}</span>
+                    <span className="text-xs text-muted">
+                      {new Date(a.performedAt).toLocaleDateString("pt-BR")}
+                      {a.protocol && ` · ${a.protocol}`}
+                    </span>
+                  </div>
+                  <span className="font-semibold text-ink">
+                    {a.resultValue} {a.unit}
                   </span>
                 </div>
-                <span className="font-semibold text-ink">
-                  {a.resultValue} {a.unit}
-                </span>
+                {a.zones && (
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-line pt-2 text-xs">
+                    {a.zones.zones.map((z) => (
+                      <div key={z.label} className="flex justify-between gap-2">
+                        <span className="truncate text-muted">{z.label}</span>
+                        <span className="shrink-0 font-medium text-ink">{zoneRange(z, a.zones!.unit)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

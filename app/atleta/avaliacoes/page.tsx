@@ -5,6 +5,13 @@ import { ApiClientError, apiFetch } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
 import type { AssessmentView } from "@/modules/assessments/assessment-service";
+import type { Zone } from "@/modules/assessments/zones";
+
+function zoneRange(z: Zone, unit: string): string {
+  if (z.min === null) return `≤ ${z.max} ${unit}`;
+  if (z.max === null) return `≥ ${z.min} ${unit}`;
+  return `${z.min}–${z.max} ${unit}`;
+}
 
 // Avaliações do atleta (§28): histórico de testes físicos registrados pelo
 // treinador. Só leitura — o atleta não edita avaliação.
@@ -63,6 +70,19 @@ export default function AthleteAssessmentsPage() {
                   })}
                   {a.protocol && ` · ${a.protocol}`}
                 </span>
+                {a.zones && (
+                  <div className="mt-2 flex flex-col gap-1 border-t border-line pt-2">
+                    <span className="text-xs font-medium uppercase tracking-wide text-faint">
+                      Zonas de treino
+                    </span>
+                    {a.zones.zones.map((z) => (
+                      <div key={z.label} className="flex items-baseline justify-between text-sm">
+                        <span className="text-muted">{z.label}</span>
+                        <span className="font-medium text-ink">{zoneRange(z, a.zones!.unit)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

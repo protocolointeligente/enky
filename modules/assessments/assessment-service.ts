@@ -3,6 +3,7 @@ import { recordAuditLog } from "@/domain/audit";
 import { NotFoundError } from "@/domain/errors";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { RecordTestResultBody } from "./assessment-schema";
+import { computeZonesForTest, type ZoneSet } from "./zones";
 
 // Serviço de avaliação física (§28) sobre o modelo TestResult, que já existia no
 // schema sem ninguém escrever nele. Escopo sempre org + athleteProfileId (tenant
@@ -24,6 +25,8 @@ export interface AssessmentView {
   unit: string;
   protocol: string | null;
   calculatedMetrics: Record<string, unknown> | null;
+  /** Zonas de treino derivadas do limiar (Coggan/Friel), quando aplicável. */
+  zones: ZoneSet | null;
   performedAt: string;
 }
 
@@ -36,13 +39,15 @@ function toView(r: {
   calculatedMetrics: Prisma.JsonValue;
   performedAt: Date;
 }): AssessmentView {
+  const resultValue = Number(r.resultValue);
   return {
     id: r.id,
     testType: r.testType,
-    resultValue: Number(r.resultValue),
+    resultValue,
     unit: r.unit,
     protocol: r.protocol,
     calculatedMetrics: (r.calculatedMetrics as Record<string, unknown> | null) ?? null,
+    zones: computeZonesForTest(r.unit, resultValue),
     performedAt: r.performedAt.toISOString(),
   };
 }
