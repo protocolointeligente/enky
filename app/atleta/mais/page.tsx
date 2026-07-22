@@ -14,9 +14,10 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const AVAILABLE = [
   { href: "/atleta/prontidao", label: "Prontidão", hint: "Check-in diário: sono, fadiga, dor" },
   { href: "/atleta/relatorios", label: "Relatórios", hint: "Resumos do seu treinador" },
+  { href: "/atleta/biblioteca", label: "Biblioteca", hint: "Planos e conteúdos que você adquiriu" },
 ];
 
-const SOON = ["Avaliações", "Objetivos", "Mensagens", "Biblioteca", "Compras", "Perfil", "Configurações"];
+const SOON = ["Avaliações", "Objetivos", "Mensagens", "Compras", "Perfil", "Configurações"];
 
 export default function AthleteMaisPage() {
   const router = useRouter();

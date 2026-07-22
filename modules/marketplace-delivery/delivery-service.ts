@@ -21,6 +21,66 @@ function centsToDecimal(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+interface TemplateContentPayload {
+  workoutTemplateIds?: string[];
+}
+
+// Clona os workout templates comprados na biblioteca do comprador QUANDO ele é
+// treinador (dono de biblioteca). Comprador atleta puro não tem onde receber →
+// fica só com o entitlement (acesso). Bypassa o teto de templates do plano de
+// propósito: conteúdo pago é entregue independentemente do plano.
+// ponytail: só workout templates; periodização/exercícios e agendamento no
+// calendário do atleta são fatia futura.
+async function cloneTemplatesForTrainerBuyer(
+  tx: Prisma.TransactionClient,
+  buyerUserId: string,
+  deliveryPayload: Prisma.JsonValue | null,
+): Promise<string[]> {
+  const payload = (deliveryPayload ?? {}) as TemplateContentPayload;
+  const templateIds = payload.workoutTemplateIds ?? [];
+  if (templateIds.length === 0) return [];
+
+  const trainer = await tx.trainerProfile.findUnique({ where: { userId: buyerUserId } });
+  if (!trainer) return [];
+  const membership = await tx.organizationMembership.findFirst({
+    where: { userId: buyerUserId },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!membership) return [];
+
+  const sources = await tx.workoutTemplate.findMany({ where: { id: { in: templateIds } } });
+  const cloned: string[] = [];
+  for (const src of sources) {
+    const copy = await tx.workoutTemplate.create({
+      data: {
+        organizationId: membership.organizationId,
+        trainerId: trainer.id,
+        title: src.title,
+        description: src.description,
+        modality: src.modality,
+        contentSnapshot: src.contentSnapshot as Prisma.InputJsonValue,
+      },
+    });
+    cloned.push(copy.id);
+  }
+  return cloned;
+}
+
+// Registra no entitlement os ids do conteúdo efetivamente entregue, preservando
+// o snapshot original do que foi comprado.
+function buildDeliveredPayload(
+  original: Prisma.JsonValue | null,
+  deliveredTemplateIds: string[],
+): Prisma.InputJsonValue | undefined {
+  const base = (original ?? undefined) as Prisma.InputJsonValue | undefined;
+  if (deliveredTemplateIds.length === 0) return base;
+  const obj =
+    typeof base === "object" && base !== null && !Array.isArray(base)
+      ? (base as Record<string, unknown>)
+      : {};
+  return { ...obj, deliveredWorkoutTemplateIds: deliveredTemplateIds } as Prisma.InputJsonValue;
+}
+
 export async function confirmPaymentAndDeliver(orderId: string): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const order = await tx.marketplaceOrder.findUnique({
@@ -41,6 +101,15 @@ export async function confirmPaymentAndDeliver(orderId: string): Promise<void> {
       const status = initialEntitlementStatus(item.productType);
       if (status === "PENDING") anyManual = true;
 
+      // Execução da entrega: comprador treinador recebe uma CÓPIA do conteúdo na
+      // própria biblioteca (dono do clone). Comprador atleta puro fica só com o
+      // entitlement (acesso); agendamento no calendário é fatia futura.
+      const deliveredTemplateIds = await cloneTemplatesForTrainerBuyer(
+        tx,
+        order.buyerUserId,
+        item.deliveryPayload,
+      );
+
       await tx.marketplaceEntitlement.upsert({
         where: { orderItemId: item.id },
         create: {
@@ -53,7 +122,7 @@ export async function confirmPaymentAndDeliver(orderId: string): Promise<void> {
           entitlementType: item.productType,
           status,
           startsAt: status === "ACTIVE" ? now : null,
-          deliveryPayload: (item.deliveryPayload ?? undefined) as Prisma.InputJsonValue | undefined,
+          deliveryPayload: buildDeliveredPayload(item.deliveryPayload, deliveredTemplateIds),
         },
         update: {}, // já entregue: não mexe
       });
