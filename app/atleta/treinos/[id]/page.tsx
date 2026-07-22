@@ -19,6 +19,7 @@ import { useRequireRole } from "@/app/_lib/use-session";
 import { StatusBadge } from "@/components/ui/badge";
 import { WorkoutBlocksView, type BlockView } from "@/components/workout-blocks-view";
 import { WorkoutExecution } from "@/components/workout-execution";
+import { StrengthExecution } from "@/components/workout-execution-strength";
 import {
   buildFeedbackPayload,
   emptyFeedbackForm,
@@ -109,6 +110,20 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checked, id]);
+
+  // Fim da execução (concluir/abandonar): registra o evento terminal e conduz ao
+  // feedback. Compartilhado entre a execução genérica e a de musculação.
+  function handleExecutionFinish(status: "COMPLETED" | "PARTIAL") {
+    if (execution) void recordEvent(execution.id, "COMPLETE", undefined, status === "PARTIAL");
+    setInitialCompletion(status);
+    setMode("feedback");
+  }
+
+  function handleExecutionAbandon() {
+    if (execution) void recordEvent(execution.id, "ABANDON");
+    setInitialCompletion("MISSED");
+    setMode("feedback");
+  }
 
   async function handleSubmitFeedback(values: FeedbackFormValues) {
     setError(null);
@@ -243,25 +258,30 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
           </div>
         )}
 
-        {canSubmitFeedback && mode === "executing" && (
-          <WorkoutExecution
-            blocks={current.blocks}
-            timerEvents={execution?.events}
-            onStepComplete={(blockIndex, stepIndex) => {
-              if (execution) void recordEvent(execution.id, "STEP_COMPLETED", { blockIndex, stepIndex });
-            }}
-            onFinish={(status) => {
-              if (execution) void recordEvent(execution.id, "COMPLETE", undefined, status === "PARTIAL");
-              setInitialCompletion(status);
-              setMode("feedback");
-            }}
-            onAbandon={() => {
-              if (execution) void recordEvent(execution.id, "ABANDON");
-              setInitialCompletion("MISSED");
-              setMode("feedback");
-            }}
-          />
-        )}
+        {canSubmitFeedback &&
+          mode === "executing" &&
+          (current.modality === "STRENGTH" ? (
+            // Musculação: série-a-série com descanso e planejado-vs-realizado (§14).
+            <StrengthExecution
+              blocks={current.blocks}
+              timerEvents={execution?.events}
+              onSetComplete={(payload) => {
+                if (execution) void recordEvent(execution.id, "STEP_COMPLETED", payload);
+              }}
+              onFinish={handleExecutionFinish}
+              onAbandon={handleExecutionAbandon}
+            />
+          ) : (
+            <WorkoutExecution
+              blocks={current.blocks}
+              timerEvents={execution?.events}
+              onStepComplete={(blockIndex, stepIndex) => {
+                if (execution) void recordEvent(execution.id, "STEP_COMPLETED", { blockIndex, stepIndex });
+              }}
+              onFinish={handleExecutionFinish}
+              onAbandon={handleExecutionAbandon}
+            />
+          ))}
 
         {pendingSync > 0 && (
           <p className="text-center text-xs text-muted" role="status">

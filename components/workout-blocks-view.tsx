@@ -22,6 +22,10 @@ export interface ExerciseView {
   reps: number | null;
   loadKg: string | null;
   rpeTarget: number | null;
+  // Presentes na API do atleta; usados pela execução de musculação (§14).
+  rir?: number | null;
+  restSeconds?: number | null;
+  durationSeconds?: number | null;
   exercise: { name: string; category: string; videoUrl?: string | null };
 }
 

@@ -26,3 +26,28 @@ export function useExecutionTimer(events: ExecEvent[], active: boolean): ExecTim
 
   return computeTime(events, now);
 }
+
+// Contagem regressiva do descanso de musculação (§14). Dirigida por um deadline
+// (epoch ms) — mesma razão do timer: sobrevive a background. Retorna os segundos
+// restantes (0 quando não há descanso ativo).
+export function useCountdown(deadline: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (deadline === null) return;
+    const tick = () => setNow(Date.now());
+    tick();
+    const interval = setInterval(tick, 500);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [deadline]);
+
+  if (deadline === null) return 0;
+  return Math.max(0, Math.ceil((deadline - now) / 1000));
+}

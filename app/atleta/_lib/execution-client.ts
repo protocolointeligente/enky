@@ -61,10 +61,14 @@ export async function startExecution(workoutId: string): Promise<LocalExecution>
 }
 
 /** Registra um evento de execução (STEP_COMPLETED, PAUSE, COMPLETE, ABANDON…). */
+// Planejado-vs-realizado (§15) viaja no payload: além de posição (block/step),
+// os valores reais da série de musculação (reps/carga/RIR). Passthrough no schema.
+export type EventPayload = Record<string, number | undefined>;
+
 export async function recordEvent(
   localExecutionId: string,
   type: ExecEventType,
-  payload?: { blockIndex?: number; stepIndex?: number },
+  payload?: EventPayload,
   partial?: boolean,
 ): Promise<LocalExecution | null> {
   const exec = await idbGet<LocalExecution>(STORE_EXECUTIONS, localExecutionId);
