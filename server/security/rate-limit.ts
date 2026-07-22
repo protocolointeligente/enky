@@ -182,6 +182,7 @@ export const activateInvitationRateLimiter = createRateLimiter(10, 15 * 60 * 100
 export const passwordResetRateLimiter = createRateLimiter(5, 60 * 60 * 1000); // 5/hora por IP
 export const workoutWriteRateLimiter = createRateLimiter(60, 60 * 60 * 1000); // 60/hora por treinador
 export const feedbackWriteRateLimiter = createRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta
+export const executionWriteRateLimiter = createRateLimiter(240, 60 * 60 * 1000); // 240/hora por atleta (start + lotes de eventos, inclui sync offline)
 export const libraryWriteRateLimiter = createRateLimiter(120, 60 * 60 * 1000); // 120/hora por treinador (exercícios + templates)
 export const intelligenceWriteRateLimiter = createRateLimiter(120, 60 * 60 * 1000); // 120/hora por treinador (aceitar/ignorar insight)
 export const readinessWriteRateLimiter = createRateLimiter(30, 60 * 60 * 1000); // 30/hora por atleta (check-in de prontidão)

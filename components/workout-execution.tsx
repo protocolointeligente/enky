@@ -5,7 +5,9 @@ import { stepTypeLabel } from "@/app/_lib/labels";
 import { uiClasses } from "@/app/_lib/ui";
 import { CheckIcon } from "@/components/ui/icons";
 import { ExerciseDemo } from "@/components/exercise-demo";
+import { useExecutionTimer } from "@/components/use-execution-timer";
 import type { BlockView, ExerciseView, StepView } from "@/components/workout-blocks-view";
+import { formatDuration, type ExecEvent } from "@/modules/workout-execution/execution-state";
 
 // Ephemeral "execution mode": the athlete ticks off steps/exercises as they go,
 // purely client-side (nothing is persisted step-by-step — that would need a
@@ -32,23 +34,34 @@ interface Group {
   name: string;
   // `demo` só existe em item de exercício que tenha vídeo — é durante a
   // execução que o atleta precisa ver o movimento, não só na leitura do treino.
-  items: { key: string; label: string; demo?: { name: string; url: string } }[];
+  items: {
+    key: string;
+    label: string;
+    blockIndex: number;
+    stepIndex: number;
+    demo?: { name: string; url: string };
+  }[];
 }
 
 export function WorkoutExecution({
   blocks,
   onFinish,
   onAbandon,
+  timerEvents,
+  onStepComplete,
 }: {
   blocks: BlockView[];
   onFinish: (status: "COMPLETED" | "PARTIAL") => void;
   onAbandon: () => void;
+  // Presentes quando a execução é persistida (offline-first): habilitam o
+  // cronômetro e a emissão de eventos. Ausentes = modo efêmero (fallback).
+  timerEvents?: ExecEvent[];
+  onStepComplete?: (blockIndex: number, stepIndex: number) => void;
 }) {
   const groups = useMemo<Group[]>(
     () =>
-      blocks.map((block, bi) => ({
-        name: block.name || `Bloco ${block.sequence ?? bi + 1}`,
-        items: [
+      blocks.map((block, bi) => {
+        const items = [
           ...block.steps.map((step, i) => ({ key: `${bi}-s-${i}`, label: stepLine(step) })),
           ...block.exercises.map((ex, i) => ({
             key: `${bi}-e-${i}`,
@@ -57,18 +70,27 @@ export function WorkoutExecution({
               ? { name: ex.exercise.name, url: ex.exercise.videoUrl }
               : undefined,
           })),
-        ],
-      })),
+        ];
+        return {
+          name: block.name || `Bloco ${block.sequence ?? bi + 1}`,
+          items: items.map((item, stepIndex) => ({ ...item, blockIndex: bi, stepIndex })),
+        };
+      }),
     [blocks],
   );
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   const [done, setDone] = useState<Set<string>>(new Set());
+  const timer = useExecutionTimer(timerEvents ?? [], Boolean(timerEvents));
 
-  function toggle(key: string) {
+  function toggle(item: { key: string; blockIndex: number; stepIndex: number }) {
     setDone((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(item.key)) next.delete(item.key);
+      else {
+        next.add(item.key);
+        // Só emite ao marcar (não ao desmarcar) — evento é append-only.
+        onStepComplete?.(item.blockIndex, item.stepIndex);
+      }
       return next;
     });
   }
@@ -80,9 +102,16 @@ export function WorkoutExecution({
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <h2 className={uiClasses.subheading}>Treino em andamento</h2>
-          <span className="tabular text-sm text-muted">
-            {done.size}/{total}
-          </span>
+          <div className="flex items-center gap-3">
+            {timerEvents && (
+              <span className="tabular text-sm font-semibold text-turq" aria-label="Tempo decorrido">
+                {formatDuration(timer.elapsedSeconds)}
+              </span>
+            )}
+            <span className="tabular text-sm text-muted">
+              {done.size}/{total}
+            </span>
+          </div>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-surface">
           <div
@@ -108,7 +137,7 @@ export function WorkoutExecution({
                   <button
                     type="button"
                     aria-pressed={checked}
-                    onClick={() => toggle(item.key)}
+                    onClick={() => toggle(item)}
                     className={`flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors ${
                       checked ? "text-muted line-through" : "text-ink hover:bg-surface-2"
                     }`}

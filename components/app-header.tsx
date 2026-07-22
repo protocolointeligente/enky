@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/app/_lib/api-client";
+import { clearAppCaches } from "@/app/_lib/pwa";
 import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -29,6 +30,8 @@ export function AppHeader({ home, links }: { home: string; links: AppNavLink[] }
       // Idempotent server-side (revokes the session + clears the cookie);
       // even if it fails we still send the user to /login.
       await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+      // Não deixar rastro de dados no aparelho após sair (§33/§52).
+      await clearAppCaches();
       router.push("/login");
       router.refresh();
     } finally {

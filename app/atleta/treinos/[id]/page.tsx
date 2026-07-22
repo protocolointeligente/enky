@@ -3,6 +3,14 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
+import {
+  initSync,
+  recordEvent,
+  startExecution,
+  subscribePending,
+  type LocalExecution,
+} from "@/app/atleta/_lib/execution-client";
+import { cacheWorkout, getCachedWorkout } from "@/app/atleta/_lib/workout-cache";
 import { loadStatusLabel, modalityLabel } from "@/app/_lib/labels";
 import { modalityMeta } from "@/app/_lib/modality";
 import { toast } from "@/app/_lib/toast";
@@ -11,6 +19,7 @@ import { useRequireRole } from "@/app/_lib/use-session";
 import { StatusBadge } from "@/components/ui/badge";
 import { WorkoutBlocksView, type BlockView } from "@/components/workout-blocks-view";
 import { WorkoutExecution } from "@/components/workout-execution";
+import { StrengthExecution } from "@/components/workout-execution-strength";
 import {
   buildFeedbackPayload,
   emptyFeedbackForm,
@@ -60,16 +69,38 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
   const [editingFeedback, setEditingFeedback] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // Ephemeral execution flow (client-only): view -> executing -> feedback.
+  // Execution flow: view -> executing -> feedback. Agora persistido offline-first
+  // via execution-client (IndexedDB + fila de sync), não mais só efêmero.
   const [mode, setMode] = useState<"view" | "executing" | "feedback">("view");
   const [initialCompletion, setInitialCompletion] = useState<"COMPLETED" | "PARTIAL" | "MISSED">(
     "COMPLETED",
   );
+  const [execution, setExecution] = useState<LocalExecution | null>(null);
+  const [pendingSync, setPendingSync] = useState(0);
+  const [offlineView, setOfflineView] = useState(false);
 
-  function reload() {
-    return apiFetch<{ workout: WorkoutDetailView }>(`/api/athlete/workouts/${id}`).then((result) =>
-      setWorkout(result.workout),
-    );
+  useEffect(() => {
+    initSync();
+    return subscribePending(setPendingSync);
+  }, []);
+
+  // Online: busca e guarda a cópia local. Offline: serve a cópia salva para
+  // permitir iniciar/executar sem conexão (§16/§21). Só propaga erro se não houver cache.
+  async function reload() {
+    try {
+      const result = await apiFetch<{ workout: WorkoutDetailView }>(`/api/athlete/workouts/${id}`);
+      setWorkout(result.workout);
+      setOfflineView(false);
+      void cacheWorkout(result.workout);
+    } catch (err) {
+      const cached = await getCachedWorkout<WorkoutDetailView>(id);
+      if (cached) {
+        setWorkout(cached);
+        setOfflineView(true);
+        return;
+      }
+      throw err;
+    }
   }
 
   useEffect(() => {
@@ -79,6 +110,20 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checked, id]);
+
+  // Fim da execução (concluir/abandonar): registra o evento terminal e conduz ao
+  // feedback. Compartilhado entre a execução genérica e a de musculação.
+  function handleExecutionFinish(status: "COMPLETED" | "PARTIAL") {
+    if (execution) void recordEvent(execution.id, "COMPLETE", undefined, status === "PARTIAL");
+    setInitialCompletion(status);
+    setMode("feedback");
+  }
+
+  function handleExecutionAbandon() {
+    if (execution) void recordEvent(execution.id, "ABANDON");
+    setInitialCompletion("MISSED");
+    setMode("feedback");
+  }
 
   async function handleSubmitFeedback(values: FeedbackFormValues) {
     setError(null);
@@ -172,6 +217,11 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
           </div>
           <h1 className={uiClasses.heading}>{current.title}</h1>
           <p className="text-sm capitalize text-muted">{formatDate(current.plannedDate)}</p>
+          {offlineView && (
+            <p className="text-xs text-orange-hi" role="status">
+              Offline — mostrando a cópia salva no aparelho.
+            </p>
+          )}
           {current.description && (
             <p className="mt-1 rounded-lg bg-surface/60 p-3 text-sm text-muted">
               {current.description}
@@ -186,7 +236,12 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
             <button
               type="button"
               className={`${uiClasses.button} sm:flex-[2]`}
-              onClick={() => setMode("executing")}
+              onClick={async () => {
+                // Funciona offline: cria a execução localmente e enfileira o start.
+                const exec = await startExecution(id);
+                setExecution(exec);
+                setMode("executing");
+              }}
             >
               Iniciar treino
             </button>
@@ -203,18 +258,35 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
           </div>
         )}
 
-        {canSubmitFeedback && mode === "executing" && (
-          <WorkoutExecution
-            blocks={current.blocks}
-            onFinish={(status) => {
-              setInitialCompletion(status);
-              setMode("feedback");
-            }}
-            onAbandon={() => {
-              setInitialCompletion("MISSED");
-              setMode("feedback");
-            }}
-          />
+        {canSubmitFeedback &&
+          mode === "executing" &&
+          (current.modality === "STRENGTH" ? (
+            // Musculação: série-a-série com descanso e planejado-vs-realizado (§14).
+            <StrengthExecution
+              blocks={current.blocks}
+              timerEvents={execution?.events}
+              onSetComplete={(payload) => {
+                if (execution) void recordEvent(execution.id, "STEP_COMPLETED", payload);
+              }}
+              onFinish={handleExecutionFinish}
+              onAbandon={handleExecutionAbandon}
+            />
+          ) : (
+            <WorkoutExecution
+              blocks={current.blocks}
+              timerEvents={execution?.events}
+              onStepComplete={(blockIndex, stepIndex) => {
+                if (execution) void recordEvent(execution.id, "STEP_COMPLETED", { blockIndex, stepIndex });
+              }}
+              onFinish={handleExecutionFinish}
+              onAbandon={handleExecutionAbandon}
+            />
+          ))}
+
+        {pendingSync > 0 && (
+          <p className="text-center text-xs text-muted" role="status">
+            {pendingSync} {pendingSync === 1 ? "registro pendente" : "registros pendentes"} de sincronização.
+          </p>
         )}
 
         {canSubmitFeedback && mode === "feedback" && (
