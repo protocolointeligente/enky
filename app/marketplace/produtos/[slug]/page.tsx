@@ -5,6 +5,7 @@ import { getPublishedProductBySlug } from "@/modules/marketplace-catalog/catalog
 import { formatPriceCents, productTypeLabel } from "@/modules/marketplace-catalog/labels";
 import { buildProductSeo } from "@/modules/marketplace-catalog/seo";
 import { uiClasses } from "@/app/_lib/ui";
+import { BuyButton } from "./buy-button";
 
 export const revalidate = 300;
 
@@ -84,10 +85,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </article>
       )}
 
-      <div className="flex items-center justify-between rounded-2xl border border-line bg-petrol/60 p-5">
+      <div className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-petrol/60 p-5">
         <span className="font-display text-2xl font-bold text-ink">
           {formatPriceCents(product.priceCents, product.currency)}
         </span>
+        <BuyButton
+          slug={product.slug}
+          priceLabel={formatPriceCents(product.priceCents, product.currency)}
+        />
       </div>
     </main>
   );
