@@ -1507,6 +1507,7 @@ model MarketplaceSellerProfile {
   averageRating     Decimal                 @default(0) @db.Decimal(3, 2)
   reviewCount       Int                     @default(0)
   salesCount        Int                     @default(0)
+  asaasWalletId     String? // carteira Asaas do vendedor — destino dos 90% no split
   status            MarketplaceSellerStatus @default(DRAFT)
   verificationNotes String?
   verifiedByUserId  String?

@@ -13,9 +13,13 @@ interface CheckoutResponse {
 // ponytail: pagamento real (Asaas) + tela de status é a fatia B.
 export function BuyButton({ slug, priceLabel }: { slug: string; priceLabel: string }) {
   const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [taxId, setTaxId] = useState("");
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [pixCode, setPixCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const digits = taxId.replace(/\D/g, "");
+  const taxIdValid = digits.length === 11 || digits.length === 14;
 
   async function buy() {
     setState("loading");
@@ -23,7 +27,12 @@ export function BuyButton({ slug, priceLabel }: { slug: string; priceLabel: stri
     try {
       const res = await apiFetch<CheckoutResponse>("/api/marketplace/checkout", {
         method: "POST",
-        body: JSON.stringify({ productSlug: slug, idempotencyKey, method: "PIX" }),
+        body: JSON.stringify({
+          productSlug: slug,
+          idempotencyKey,
+          method: "PIX",
+          ...(taxIdValid ? { buyerTaxId: digits } : {}),
+        }),
       });
       setPixCode(res.order.pixCode ?? null);
       setState("done");
@@ -50,10 +59,17 @@ export function BuyButton({ slug, priceLabel }: { slug: string; priceLabel: stri
 
   return (
     <div className="flex flex-col items-end gap-2">
+      <input
+        inputMode="numeric"
+        placeholder="CPF (só números)"
+        value={taxId}
+        onChange={(e) => setTaxId(e.target.value)}
+        className="w-44 rounded-lg border border-line bg-deep px-3 py-2 text-right text-sm text-ink outline-none placeholder:text-faint focus:border-electric"
+      />
       <button
         type="button"
         onClick={buy}
-        disabled={state === "loading"}
+        disabled={state === "loading" || !taxIdValid}
         className="rounded-lg bg-orange px-6 py-2.5 font-semibold text-onbrand transition-colors hover:bg-orange-hi disabled:opacity-60"
       >
         {state === "loading" ? "Criando pedido..." : `Comprar · ${priceLabel}`}

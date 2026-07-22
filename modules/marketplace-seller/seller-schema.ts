@@ -17,6 +17,9 @@ export const ensureSellerProfileSchema = z.object({
   displayName: z.string().min(2).max(80),
   headline: z.string().max(160).optional(),
   bio: z.string().max(2000).optional(),
+  // Carteira Asaas do vendedor (destino dos 90% no split). Necessária para
+  // vender em produção; opcional no cadastro para permitir preencher depois.
+  asaasWalletId: z.string().max(120).optional(),
 });
 
 export const createProductSchema = z.object({

@@ -18,7 +18,10 @@ export async function POST(request: NextRequest) {
     await enforceRateLimit(webhookRateLimiter, `marketplace-webhook:${getClientIp(request)}`);
 
     const rawBody = await request.text();
-    const signature = request.headers.get("x-webhook-signature") ?? "";
+    // Asaas autentica pelo header `asaas-access-token` (segredo compartilhado);
+    // o sandbox usa `x-webhook-signature` (HMAC). Aceita ambos.
+    const signature =
+      request.headers.get("asaas-access-token") ?? request.headers.get("x-webhook-signature") ?? "";
     const result = await handleMarketplaceWebhook(rawBody, signature);
 
     return apiSuccess({ outcome: result.outcome });

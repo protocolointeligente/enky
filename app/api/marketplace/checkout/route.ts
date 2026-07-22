@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       buyerUserId: identity.userId,
       buyerName: identity.name,
       buyerEmail: identity.email,
+      buyerTaxId: input.buyerTaxId,
       productSlug: input.productSlug,
       idempotencyKey: input.idempotencyKey,
       method: input.method,

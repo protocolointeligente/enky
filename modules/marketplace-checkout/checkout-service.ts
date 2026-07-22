@@ -1,8 +1,9 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/infrastructure/database/prisma";
-import { NotFoundError } from "@/domain/errors";
+import { BusinessRuleError, NotFoundError } from "@/domain/errors";
+import { env } from "@/lib/env";
 import { type CommissionRuleInput, computeOrderTotals } from "@/modules/marketplace/pricing";
-import { type MarketplacePaymentMethod } from "./gateway";
+import { type MarketplacePaymentMethod, type MarketplaceSplit } from "./gateway";
 import { getMarketplaceGateway } from "./gateway-factory";
 
 // Orquestra a criação de um pedido de 1 produto e abre o checkout no gateway
@@ -41,6 +42,7 @@ export interface CreateOrderInput {
   buyerUserId: string;
   buyerName: string;
   buyerEmail: string;
+  buyerTaxId?: string;
   productSlug: string;
   idempotencyKey: string;
   method: MarketplacePaymentMethod;
@@ -73,7 +75,7 @@ export async function createMarketplaceOrder(input: CreateOrderInput): Promise<C
 
   const product = await prisma.marketplaceProduct.findFirst({
     where: { slug: input.productSlug, status: "PUBLISHED", visibility: "PUBLIC", publishedVersionId: { not: null } },
-    include: { publishedVersion: true, sellerProfile: { select: { id: true } } },
+    include: { publishedVersion: true, sellerProfile: { select: { id: true, asaasWalletId: true } } },
   });
   if (!product || !product.publishedVersion) {
     throw new NotFoundError("Produto não disponível para compra.");
@@ -83,6 +85,16 @@ export async function createMarketplaceOrder(input: CreateOrderInput): Promise<C
   const unitPriceCents = toCents(product.publishedVersion.priceSnapshot);
   const currency = product.publishedVersion.currency;
   const totals = computeOrderTotals([{ unitPriceCents, quantity: 1, commission }]);
+
+  // Split 90/10: o líquido do vendedor vai para a carteira Asaas dele; os 10% de
+  // comissão ficam na conta ENKY. Sem carteira, o repasse não tem destino — em
+  // produção é erro (evita ENKY reter 100%); no sandbox (dev/testes) segue sem split.
+  const split: MarketplaceSplit[] | undefined = product.sellerProfile.asaasWalletId
+    ? [{ walletId: product.sellerProfile.asaasWalletId, fixedValueCents: totals.sellerAmountCents }]
+    : undefined;
+  if (!split && env.NODE_ENV === "production") {
+    throw new BusinessRuleError("Vendedor sem carteira de repasse configurada.");
+  }
 
   const order = await prisma.marketplaceOrder.create({
     data: {
@@ -128,6 +140,8 @@ export async function createMarketplaceOrder(input: CreateOrderInput): Promise<C
     method: input.method,
     buyerName: input.buyerName,
     buyerEmail: input.buyerEmail,
+    buyerTaxId: input.buyerTaxId,
+    split,
   });
 
   await prisma.marketplaceOrder.update({

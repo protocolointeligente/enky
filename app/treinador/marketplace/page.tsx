@@ -74,8 +74,18 @@ export default function SellerDashboardPage() {
       {data && !data.profile ? (
         <SellerOnboarding busy={busy} onCreate={(body) => run(() => createProfile(body))} />
       ) : (
-        data && (
+        data &&
+        data.profile && (
           <>
+            {!data.profile.hasWallet && (
+              <WalletBanner
+                displayName={data.profile.displayName}
+                busy={busy}
+                onSave={(walletId) =>
+                  run(() => createProfile({ displayName: data.profile!.displayName, asaasWalletId: walletId }))
+                }
+              />
+            )}
             <ProductForm busy={busy} onCreate={(body) => run(() => createProduct(body))} />
             <ProductList
               products={data.products}
@@ -89,7 +99,7 @@ export default function SellerDashboardPage() {
   );
 }
 
-function createProfile(body: { displayName: string; headline?: string }) {
+function createProfile(body: { displayName: string; headline?: string; asaasWalletId?: string }) {
   return apiFetch("/api/marketplace/seller", { method: "POST", body: JSON.stringify(body) });
 }
 function createProduct(body: unknown) {
@@ -104,10 +114,11 @@ function SellerOnboarding({
   onCreate,
 }: {
   busy: boolean;
-  onCreate: (body: { displayName: string; headline?: string }) => void;
+  onCreate: (body: { displayName: string; headline?: string; asaasWalletId?: string }) => void;
 }) {
   const [displayName, setDisplayName] = useState("");
   const [headline, setHeadline] = useState("");
+  const [walletId, setWalletId] = useState("");
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-line bg-petrol/60 p-5">
       <h2 className={uiClasses.subheading}>Criar perfil de vendedor</h2>
@@ -124,13 +135,60 @@ function SellerOnboarding({
         value={headline}
         onChange={(e) => setHeadline(e.target.value)}
       />
+      <input
+        className={uiClasses.input}
+        placeholder="Carteira Asaas / walletId (para receber os 90%)"
+        value={walletId}
+        onChange={(e) => setWalletId(e.target.value)}
+      />
       <button
         type="button"
         disabled={busy || displayName.trim().length < 2}
-        onClick={() => onCreate({ displayName: displayName.trim(), headline: headline.trim() || undefined })}
+        onClick={() =>
+          onCreate({
+            displayName: displayName.trim(),
+            headline: headline.trim() || undefined,
+            asaasWalletId: walletId.trim() || undefined,
+          })
+        }
         className={uiClasses.button}
       >
         Criar perfil
+      </button>
+    </section>
+  );
+}
+
+function WalletBanner({
+  displayName,
+  busy,
+  onSave,
+}: {
+  displayName: string;
+  busy: boolean;
+  onSave: (walletId: string) => void;
+}) {
+  const [walletId, setWalletId] = useState("");
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-danger/40 bg-danger/10 p-5">
+      <h2 className={uiClasses.subheading}>Configure sua carteira de repasse</h2>
+      <p className="text-sm text-muted">
+        {displayName}, informe seu <strong>walletId</strong> do Asaas para receber 90% de cada venda.
+        Sem ele, suas vendas não podem ser cobradas em produção.
+      </p>
+      <input
+        className={uiClasses.input}
+        placeholder="walletId do Asaas"
+        value={walletId}
+        onChange={(e) => setWalletId(e.target.value)}
+      />
+      <button
+        type="button"
+        disabled={busy || walletId.trim().length < 4}
+        onClick={() => onSave(walletId.trim())}
+        className={uiClasses.button}
+      >
+        Salvar carteira
       </button>
     </section>
   );

@@ -53,7 +53,12 @@ export async function ensureSellerProfile(actor: SellerActor, input: EnsureSelle
   if (existing) {
     return prisma.marketplaceSellerProfile.update({
       where: { id: existing.id },
-      data: { displayName: input.displayName, headline: input.headline, bio: input.bio },
+      data: {
+        displayName: input.displayName,
+        headline: input.headline,
+        bio: input.bio,
+        asaasWalletId: input.asaasWalletId,
+      },
     });
   }
   return prisma.marketplaceSellerProfile.create({
@@ -65,6 +70,7 @@ export async function ensureSellerProfile(actor: SellerActor, input: EnsureSelle
       slug: uniqueSlug(input.displayName),
       headline: input.headline,
       bio: input.bio,
+      asaasWalletId: input.asaasWalletId,
       status: "PUBLISHED",
     },
   });
@@ -79,7 +85,13 @@ async function requireSellerProfile(actor: SellerActor) {
 }
 
 export interface SellerDashboard {
-  profile: { id: string; displayName: string; slug: string; headline: string | null } | null;
+  profile: {
+    id: string;
+    displayName: string;
+    slug: string;
+    headline: string | null;
+    hasWallet: boolean;
+  } | null;
   products: {
     id: string;
     title: string;
@@ -104,7 +116,13 @@ export async function getSellerDashboard(actor: SellerActor): Promise<SellerDash
   });
 
   return {
-    profile: { id: profile.id, displayName: profile.displayName, slug: profile.slug, headline: profile.headline },
+    profile: {
+      id: profile.id,
+      displayName: profile.displayName,
+      slug: profile.slug,
+      headline: profile.headline,
+      hasWallet: profile.asaasWalletId !== null,
+    },
     products: products.map((p) => ({
       id: p.id,
       title: p.title,
