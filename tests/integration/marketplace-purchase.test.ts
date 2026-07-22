@@ -152,13 +152,13 @@ describe("Etapa 5 — compra ponta a ponta no marketplace", () => {
     expect(entitlements[0]?.status).toBe("ACTIVE");
     expect(entitlements[0]?.entitlementType).toBe("WORKOUT_TEMPLATE_PACK");
 
-    // Ledger: crédito SALE + débito PLATFORM_FEE (comissão padrão 15%).
+    // Ledger: crédito SALE (90% vendedor) + débito PLATFORM_FEE (10% ENKY).
     const ledger = await prisma.marketplaceLedgerEntry.findMany({ where: { orderId: order.orderId } });
     expect(ledger).toHaveLength(2);
     const sale = ledger.find((e) => e.type === "SALE");
     const fee = ledger.find((e) => e.type === "PLATFORM_FEE");
     expect(Number(sale?.amount)).toBeCloseTo(99.9, 2);
-    expect(Number(fee?.amount)).toBeCloseTo(-14.99, 2);
+    expect(Number(fee?.amount)).toBeCloseTo(-9.99, 2); // 10% de 99,90
 
     const library = await listBuyerLibrary(buyer.userId);
     expect(library.some((i) => i.title === "Pacote Força Total" && i.status === "ACTIVE")).toBe(true);

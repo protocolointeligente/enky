@@ -10,8 +10,11 @@ import { getMarketplaceGateway } from "./gateway-factory";
 // pedido existente, nunca cobra duas vezes. Preço travado no priceSnapshot da
 // versão publicada — o `price` em edição do produto nunca entra no checkout.
 
-// Comissão padrão da plataforma quando não há regra específica cadastrada.
-const DEFAULT_COMMISSION: CommissionRuleInput = { percentage: 15, fixedFeeCents: 0 };
+// Comissão padrão da plataforma: ENKY fica com 10% da venda, vendedor com 90%
+// (modelo de repasse do marketplace; a assinatura B2B da plataforma é 100% ENKY
+// e não passa por aqui). Regra específica cadastrada em MarketplaceCommissionRule
+// sobrepõe este default.
+const DEFAULT_COMMISSION: CommissionRuleInput = { percentage: 10, fixedFeeCents: 0 };
 
 function toCents(dec: Prisma.Decimal | number): number {
   return Math.round(Number(dec) * 100);
