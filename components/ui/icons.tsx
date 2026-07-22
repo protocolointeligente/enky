@@ -29,6 +29,30 @@ export const PlusIcon = (p: IconProps) => (
   </Base>
 );
 
+export const HomeIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M3 10.5 12 3l9 7.5M5 9.5V21h14V9.5" />
+  </Base>
+);
+
+export const PlayIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M7 4.5v15l12-7.5-12-7.5Z" />
+  </Base>
+);
+
+export const TrendingUpIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M3 17l6-6 4 4 8-8M15 7h6v6" />
+  </Base>
+);
+
+export const MoreIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M5 12h.01M12 12h.01M19 12h.01" />
+  </Base>
+);
+
 export const CalendarIcon = (p: IconProps) => (
   <Base {...p}>
     <rect x="3" y="4.5" width="18" height="16" rx="2" />
