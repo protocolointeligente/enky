@@ -6,18 +6,20 @@ import { ATHLETE_NAV } from "@/components/athlete-bottom-nav";
 import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-// Header enxuto do atleta (§6/§7): NÃO reusa o chrome do treinador. No mobile é
-// só marca + tema (a navegação vive na bottom nav). No desktop (≥sm), onde a
-// bottom nav some, expõe os mesmos destinos como nav horizontal.
+// Header do atleta — compacto no mobile (nav vive na bottom bar),
+// barra de nav completa no desktop (≥sm).
+// Fundo: deep/95 com backdrop-blur para profundidade.
 export function AthleteHeader() {
   const pathname = usePathname();
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-petrol/95 backdrop-blur">
-      <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3">
+    <header className="sticky top-0 z-30 border-b border-line bg-deep/95 backdrop-blur">
+      <div className="mx-auto flex max-w-xl items-center justify-between gap-4 px-4 py-3">
         <Link href="/atleta" className="shrink-0" aria-label="ENKY — início">
           <BrandLogo />
         </Link>
-        <nav className="hidden items-center gap-1 sm:flex" aria-label="Navegação principal">
+
+        {/* Nav desktop — oculta no mobile (usa bottom nav) */}
+        <nav className="hidden items-center gap-0.5 sm:flex" aria-label="Navegação principal">
           {ATHLETE_NAV.map((item) => {
             const active = item.exact
               ? pathname === item.href
@@ -27,8 +29,10 @@ export function AthleteHeader() {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                  active ? "bg-surface text-ink" : "text-muted hover:bg-surface/60 hover:text-ink"
+                className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  active
+                    ? "bg-surface-2 text-ink"
+                    : "text-muted hover:bg-surface hover:text-ink"
                 }`}
               >
                 {item.label}
@@ -36,6 +40,7 @@ export function AthleteHeader() {
             );
           })}
         </nav>
+
         <ThemeToggle />
       </div>
     </header>
