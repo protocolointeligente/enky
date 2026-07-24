@@ -1,6 +1,7 @@
 import type { Role } from "@prisma/client";
 import { AuthorizationError, NotFoundError } from "@/domain/errors";
 import { prisma } from "@/infrastructure/database/prisma";
+import { sendPushToUser } from "@/modules/push/push-service";
 import type { MessagePageInput } from "./message-schema";
 
 // Serviço de mensagens (§13). Conversa 1:1 por (org, treinador, atleta). O vínculo
@@ -97,6 +98,13 @@ export async function sendMessage(args: {
     });
     return created;
   });
+
+  // Push best-effort para o atleta quando o treinador escreve (§14). Categoria
+  // modelada nas prefs do atleta; nunca bloqueia nem quebra o envio.
+  if (args.senderRole === "TRAINER") {
+    void notifyAthleteOfMessage(args.athleteProfileId, args.body).catch(() => {});
+  }
+
   return {
     id: message.id,
     senderRole: message.senderRole,
@@ -104,6 +112,20 @@ export async function sendMessage(args: {
     readAt: null,
     createdAt: message.createdAt.toISOString(),
   };
+}
+
+async function notifyAthleteOfMessage(athleteProfileId: string, body: string): Promise<void> {
+  const athlete = await prisma.athleteProfile.findUnique({
+    where: { id: athleteProfileId },
+    select: { userId: true },
+  });
+  if (!athlete?.userId) return;
+  await sendPushToUser(athlete.userId, {
+    title: "Nova mensagem do treinador",
+    body: body.slice(0, 120),
+    url: "/atleta/mensagens",
+    category: "coachMessage",
+  });
 }
 
 // Lista mensagens (mais recentes primeiro) e marca como lidas as recebidas pelo

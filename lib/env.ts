@@ -49,6 +49,15 @@ const envSchema = z.object({
   STRAVA_CLIENT_SECRET: z.string().optional(),
   STRAVA_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
   STRAVA_WEBHOOK_SUBSCRIPTION_ID: z.string().optional(),
+  // Web Push / VAPID (§14). Opcionais pelo mesmo motivo dos periféricos acima:
+  // sem as chaves, o push é desligado e o app segue funcionando (a fábrica
+  // modules/push/get-push-provider.ts é o único ponto que decide isso). São
+  // strings opacas (base64url), sem risco de malformação como URL.
+  //   - VAPID_PRIVATE_KEY: chave privada VAPID (par da NEXT_PUBLIC_VAPID_PUBLIC_KEY).
+  //   - VAPID_SUBJECT: contato do remetente exigido pelo protocolo — "mailto:..."
+  //     ou uma URL https. A chave PÚBLICA é NEXT_PUBLIC_* (exposta ao cliente).
+  VAPID_PRIVATE_KEY: z.string().optional(),
+  VAPID_SUBJECT: z.string().optional(),
   // UPSTASH_REDIS_REST_URL/TOKEN NÃO entram aqui de propósito. Este schema é
   // validado inteiro no primeiro acesso a qualquer variável, então declarar uma
   // config opcional aqui faz um valor malformado derrubar TODA rota que toca

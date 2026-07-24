@@ -20,6 +20,7 @@ export const NOTIFICATION_CATEGORIES = [
   "contract",
   "accountAlert",
 ] as const;
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
 export const preferencesSchema = z
   .object({

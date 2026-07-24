@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiFetch, ApiClientError } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
+import { PushToggle } from "@/components/push-toggle";
 import {
   DATE_FORMATS,
   LANGUAGES,
@@ -272,6 +273,7 @@ function NotificationsTab({ profile, onSaved }: { profile: Profile; onSaved: (p:
 
   return (
     <section className="flex flex-col gap-2">
+      <PushToggle />
       <p className="text-sm text-muted">Escolha o que você quer receber. Alertas críticos da conta são sempre enviados.</p>
       {NOTIFICATION_CATEGORIES.map((c) => (
         <label key={c} className="flex items-center justify-between rounded-lg border border-line bg-petrol/70 px-3 py-2">
