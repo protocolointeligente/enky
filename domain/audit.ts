@@ -42,6 +42,15 @@ export type AuditAction =
   | "DELETE_PERIODIZATION"
   | "GENERATE_WEEK"
   | "GENERATE_CYCLE"
+  // ENKY Intelligence 2.0 (Fase 1) — geração do macrociclo pelo motor
+  // estratégico. Nasce como periodização-RASCUNHO; nada publica sozinho.
+  | "GENERATE_PERIODIZATION_STRATEGY"
+  // Etapa de avaliações e zonas. Dados de saúde/performance do atleta —
+  // sempre auditados. Notas livres e valores clínicos NÃO entram no log
+  // (só ids/ação), conforme a regra de redação da etapa.
+  | "CREATE_ASSESSMENT"
+  | "UPDATE_ASSESSMENT_DRAFT"
+  | "VALIDATE_ASSESSMENT"
   // Fase 9 — Admin Operacional. Toda ação do ADMIN/SUPERADMIN é cross-tenant
   // e por isso sempre auditada, inclusive a LEITURA de detalhes de uma
   // organização: quem inspecionou os dados de qual tenant é exatamente o que
@@ -51,6 +60,10 @@ export type AuditAction =
   | "ADMIN_VIEW_ORGANIZATION"
   | "ADMIN_BLOCK_USER"
   | "ADMIN_UNBLOCK_USER"
+  // Fase 05/06 (WIP admin) — feature flags e LGPD (exportar/anonimizar dados).
+  | "ADMIN_SET_FEATURE_FLAG"
+  | "ADMIN_EXPORT_USER_DATA"
+  | "ADMIN_ANONYMIZE_USER"
   | "ADMIN_SUSPEND_ORGANIZATION"
   | "ADMIN_REACTIVATE_ORGANIZATION"
   // Fase 10 — Planos e Pagamentos. As ações iniciadas pelo treinador
@@ -74,7 +87,38 @@ export type AuditAction =
   // Etapa/Fase B — Avaliação física. O treinador registra e apaga resultados de
   // teste do atleta (dado sensível de desempenho); ambos auditados.
   | "RECORD_TEST_RESULT"
-  | "DELETE_TEST_RESULT";
+  | "DELETE_TEST_RESULT"
+  // Etapa 4 §10–11/§32 — contratos da assessoria. Ações comerciais sensíveis
+  // (preço/desconto/cancelamento/aceite) são sempre auditadas. Nunca passar o
+  // preço/nota livre em `reason` — só ids e ação.
+  | "CREATE_CONTRACT"
+  | "UPDATE_CONTRACT"
+  | "CHANGE_CONTRACT_STATUS"
+  | "CANCEL_CONTRACT"
+  | "ACCEPT_CONTRACT"
+  // Etapa 4 §12–14/§32 — mensalidades e pagamentos da assessoria. Pagamento,
+  // cancelamento e desconto/juros/multa são sempre auditados.
+  | "GENERATE_INVOICES"
+  | "UPDATE_INVOICE"
+  | "CANCEL_INVOICE"
+  | "REGISTER_PAYMENT"
+  // Etapa 4 §7 — conversão de lead em cliente (cria cliente/contrato/atleta/
+  // cobrança numa transação). O lead vira WON, nunca é apagado.
+  | "CONVERT_LEAD"
+  // Etapa 4 §18–19/§32 — gestão de equipe e carteiras. Mudança de papel e
+  // transferência de atleta são sempre auditadas.
+  | "CHANGE_MEMBER_ROLE"
+  | "SET_MEMBER_ACTIVE"
+  | "ASSIGN_ATHLETE"
+  | "UNASSIGN_ATHLETE"
+  | "TRANSFER_ATHLETE"
+  // Etapa 4 §21 — ação em massa. Uma linha de auditoria por lote (com a
+  // contagem), não por registro afetado.
+  | "BULK_UPDATE_CLIENTS"
+  // Etapa 4 §26/§29 — importação CSV e LGPD (exportar/anonimizar dado comercial).
+  | "IMPORT_CLIENTS"
+  | "EXPORT_CLIENT_DATA"
+  | "ANONYMIZE_CLIENT";
 
 export interface AuditLogInput {
   action: AuditAction;

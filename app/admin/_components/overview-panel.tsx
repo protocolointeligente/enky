@@ -79,6 +79,37 @@ export function OverviewPanel() {
       </section>
 
       <section className="flex flex-col gap-3">
+        <h2 className={uiClasses.subheading}>Saúde comercial e integração</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard
+            label="MRR"
+            value={s.mrr.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            icon={<LayersIcon />}
+            tone="turq"
+            hint={`${s.activeSubscriptions} assinatura(s) ativa(s)`}
+          />
+          <StatCard
+            label="Inadimplência"
+            value={s.delinquentSubscriptions}
+            icon={<AlertIcon />}
+            tone={s.delinquentSubscriptions > 0 ? "orange" : "default"}
+            hint="assinaturas em atraso (PAST_DUE/UNPAID)"
+          />
+          <StatCard
+            label="Webhooks processados"
+            value={s.webhooksProcessed}
+            icon={<CheckIcon />}
+          />
+          <StatCard
+            label="Webhooks com falha"
+            value={s.webhooksFailed}
+            icon={<AlertIcon />}
+            tone={s.webhooksFailed > 0 ? "orange" : "default"}
+          />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
         <h2 className={uiClasses.subheading}>Rastreabilidade</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard label="Eventos de auditoria" value={s.auditEvents} icon={<LayersIcon />} />

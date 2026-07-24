@@ -19,7 +19,6 @@ import {
   ChevronRightIcon,
   ClockIcon,
   CopyIcon,
-  DumbbellIcon,
   LayersIcon,
   PlusIcon,
   UsersIcon,

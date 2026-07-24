@@ -1,9 +1,10 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { Toaster } from "@/app/_lib/toast";
 
-// Links da sidebar desktop/tablet derivados da mesma config que o bottom nav mobile.
-// TRAINER_NAV_ALL é a lista completa (primários + secundários) para a sidebar.
-// Não manter lista separada aqui — use nav-config.ts como fonte única.
+// União do merge: shell redesenhado do marketplace + área comercial "Gestão"
+// vinda do CRM (Etapa 4). Todo link aponta para rota real (sem dead link).
+// TODO(§8 nav): racionalizar "Planos" (catálogo SaaS) vs. Configurações →
+// Assinatura ENKY e consolidar com nav-config.ts como fonte única.
 const TRAINER_LINKS = [
   { href: "/treinador",            label: "Painel",        icon: "painel" },
   { href: "/treinador/atletas",    label: "Atletas",       icon: "atletas" },
@@ -14,8 +15,10 @@ const TRAINER_LINKS = [
   { href: "/treinador/templates",  label: "Templates",     icon: "templates" },
   { href: "/treinador/exercicios", label: "Exercícios",    icon: "exercicios" },
   { href: "/treinador/relatorios", label: "Relatórios",    icon: "relatorios" },
+  { href: "/treinador/gestao",     label: "Gestão",        icon: "gestao" },
   { href: "/treinador/planos",     label: "Planos",        icon: "planos" },
   { href: "/treinador/marketplace",label: "Marketplace",   icon: "marketplace" },
+  { href: "/treinador/configuracoes", label: "Configurações", icon: "configuracoes" },
 ];
 
 export default function TrainerLayout({ children }: { children: React.ReactNode }) {

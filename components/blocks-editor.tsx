@@ -1,8 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { apiFetch } from "@/app/_lib/api-client";
 import { stepTypeLabel } from "@/app/_lib/labels";
 import { uiClasses } from "@/app/_lib/ui";
 import { ExerciseDemo } from "@/components/exercise-demo";
+import { ZoneCalculator, StrengthZoneCalculator, formatBand } from "@/components/zone-calculator";
+import type { PerformanceProfile } from "@/modules/assessments/performance-profile";
+import type { ZoneProvenance } from "@/modules/workouts/zone-provenance";
 
 // The single canonical block/step/exercise editor. Reused by the workout
 // prescription form AND the workout-template form so the two never drift.
@@ -79,6 +84,8 @@ export interface StepFormState {
   targetMax: string;
   recoverySeconds: string;
   recoveryMeters: string;
+  // Proveniência da zona calculada (fatia D); null = alvo digitado à mão.
+  zone?: ZoneProvenance | null;
 }
 
 export interface ExerciseFormState {
@@ -93,6 +100,7 @@ export interface ExerciseFormState {
   rpeTarget: string;
   restSeconds: string;
   notes: string;
+  zone?: ZoneProvenance | null; // proveniência da carga por %1RM (fatia D2)
 }
 
 export interface BlockFormState {
@@ -125,6 +133,7 @@ export function emptyStep(): StepFormState {
     targetMax: "",
     recoverySeconds: "",
     recoveryMeters: "",
+    zone: null,
   };
 }
 
@@ -141,6 +150,7 @@ export function emptyExercise(): ExerciseFormState {
     rpeTarget: "",
     restSeconds: "",
     notes: "",
+    zone: null,
   };
 }
 
@@ -176,6 +186,7 @@ export function buildBlocksPayload(blocks: BlockFormState[]) {
       targetMax: toFloatOrUndefined(step.targetMax),
       recoverySeconds: toIntOrUndefined(step.recoverySeconds),
       recoveryMeters: toIntOrUndefined(step.recoveryMeters),
+      metadata: step.zone ? { zone: step.zone } : undefined,
     })),
     exercises: block.exercises.map((exercise) => ({
       exerciseName: exercise.exerciseName,
@@ -189,6 +200,7 @@ export function buildBlocksPayload(blocks: BlockFormState[]) {
       rpeTarget: toFloatOrUndefined(exercise.rpeTarget),
       restSeconds: toIntOrUndefined(exercise.restSeconds),
       notes: exercise.notes.trim() === "" ? undefined : exercise.notes,
+      metadata: exercise.zone ? { zone: exercise.zone } : undefined,
     })),
   }));
 }
@@ -208,6 +220,7 @@ export interface BlockInputLike {
     targetMax?: number | null;
     recoverySeconds?: number | null;
     recoveryMeters?: number | null;
+    metadata?: { zone?: ZoneProvenance | null } | null;
   }>;
   exercises?: Array<{
     exerciseName: string;
@@ -220,6 +233,7 @@ export interface BlockInputLike {
     rpeTarget?: number | null;
     restSeconds?: number | null;
     notes?: string | null;
+    metadata?: { zone?: ZoneProvenance | null } | null;
   }>;
 }
 
@@ -243,6 +257,7 @@ export function blocksInputToState(blocks: BlockInputLike[]): BlockFormState[] {
       targetMax: toStr(step.targetMax),
       recoverySeconds: toStr(step.recoverySeconds),
       recoveryMeters: toStr(step.recoveryMeters),
+      zone: step.metadata?.zone ?? null,
     })),
     exercises: (block.exercises ?? []).map((exercise) => ({
       key: newKey(),
@@ -256,6 +271,7 @@ export function blocksInputToState(blocks: BlockInputLike[]): BlockFormState[] {
       rpeTarget: toStr(exercise.rpeTarget),
       restSeconds: toStr(exercise.restSeconds),
       notes: exercise.notes ?? "",
+      zone: exercise.metadata?.zone ?? null,
     })),
   }));
 }
@@ -265,6 +281,9 @@ interface BlocksEditorProps {
   modality: Modality;
   onChange: (blocks: BlockFormState[]) => void;
   exerciseOptions?: ExerciseOption[];
+  // Presente no contexto de prescrição (atleta conhecido) → habilita o cálculo
+  // por zona. Ausente em templates (não são específicos de um atleta).
+  athleteId?: string;
 }
 
 const fieldLabel = "mb-1 block text-[11px] font-medium text-faint";
@@ -275,10 +294,29 @@ export function BlocksEditor({
   modality,
   onChange,
   exerciseOptions = [],
+  athleteId,
 }: BlocksEditorProps) {
   const usesSteps = modalityUsesSteps(modality);
   const intensityOptions = INTENSITY_BY_MODALITY[modality];
   const optionByName = new Map(exerciseOptions.map((o) => [o.name.toLowerCase(), o]));
+
+  // Perfil consolidado do atleta — buscado uma vez e reusado por todos os passos.
+  const [profile, setProfile] = useState<PerformanceProfile | null>(null);
+  useEffect(() => {
+    if (!athleteId) {
+      setProfile(null);
+      return;
+    }
+    let cancelled = false;
+    apiFetch<{ profile: PerformanceProfile }>(
+      `/api/trainer/athletes/${athleteId}/performance-profile`,
+    )
+      .then((r) => !cancelled && setProfile(r.profile))
+      .catch(() => !cancelled && setProfile(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [athleteId]);
 
   function updateBlock(index: number, patch: Partial<BlockFormState>) {
     onChange(blocks.map((block, i) => (i === index ? { ...block, ...patch } : block)));
@@ -482,7 +520,7 @@ export function BlocksEditor({
                           value={step.targetMin}
                           disabled={step.targetType === ""}
                           onChange={(e) =>
-                            updateStep(blockIndex, stepIndex, { targetMin: e.target.value })
+                            updateStep(blockIndex, stepIndex, { targetMin: e.target.value, zone: null })
                           }
                         />
                       </div>
@@ -494,7 +532,7 @@ export function BlocksEditor({
                           value={step.targetMax}
                           disabled={step.targetType === ""}
                           onChange={(e) =>
-                            updateStep(blockIndex, stepIndex, { targetMax: e.target.value })
+                            updateStep(blockIndex, stepIndex, { targetMax: e.target.value, zone: null })
                           }
                         />
                       </div>
@@ -510,6 +548,39 @@ export function BlocksEditor({
                         />
                       </div>
                     </div>
+
+                    {/* Cálculo por zona (fatia D) — só na prescrição (atleta conhecido). */}
+                    {athleteId &&
+                      step.targetType &&
+                      step.targetType !== "RPE" &&
+                      step.targetType !== "CADENCE" && (
+                        <ZoneCalculator
+                          athleteId={athleteId}
+                          modality={modality}
+                          targetType={step.targetType}
+                          profile={profile}
+                          onApply={(lo, hi, prov) =>
+                            updateStep(blockIndex, stepIndex, {
+                              targetMin: String(lo),
+                              targetMax: String(hi),
+                              zone: prov,
+                            })
+                          }
+                        />
+                      )}
+                    {step.zone && (
+                      <p className="mt-1 text-[11px] text-turq">
+                        Zona {step.zone.zoneCode} aplicada:{" "}
+                        {formatBand({
+                          zoneCode: step.zone.zoneCode,
+                          label: step.zone.zoneCode,
+                          lowerBound: step.zone.calculatedLowerBound,
+                          upperBound: step.zone.calculatedUpperBound,
+                          unit: step.zone.unit as "bpm" | "s/km" | "s/100m" | "W" | "kg",
+                        })}{" "}
+                        · {step.zone.formulaCode} v{step.zone.formulaVersion}
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -610,7 +681,10 @@ export function BlocksEditor({
                         className={uiClasses.input}
                         value={exercise.loadKg}
                         onChange={(e) =>
-                          updateExercise(blockIndex, exerciseIndex, { loadKg: e.target.value })
+                          updateExercise(blockIndex, exerciseIndex, {
+                            loadKg: e.target.value,
+                            zone: null,
+                          })
                         }
                       />
                     </div>
@@ -659,6 +733,26 @@ export function BlocksEditor({
                       }
                     />
                   </div>
+
+                  {/* Carga por %1RM (fatia D2) — só na prescrição (atleta conhecido). */}
+                  {athleteId && (
+                    <StrengthZoneCalculator
+                      athleteId={athleteId}
+                      profile={profile}
+                      onApply={(loadKg, prov) =>
+                        updateExercise(blockIndex, exerciseIndex, {
+                          loadKg: String(loadKg),
+                          zone: prov,
+                        })
+                      }
+                    />
+                  )}
+                  {exercise.zone && (
+                    <p className="mt-1 text-[11px] text-turq">
+                      {exercise.zone.zoneCode} de 1RM aplicado: {exercise.zone.calculatedLowerBound}–
+                      {exercise.zone.calculatedUpperBound} kg · carga {exercise.loadKg} kg
+                    </p>
+                  )}
                 </div>
               ))}
               <button

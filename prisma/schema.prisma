@@ -50,11 +50,22 @@ enum Role {
   ATHLETE
 }
 
+// Papel do usuário DENTRO da organização (distinto de `Role`, o papel global).
+// Etapa 4 §4: a assessoria real precisa de papéis operacionais/financeiros
+// separados. Valores novos são ANEXADOS (migração aditiva) — a ordem no enum
+// não implica hierarquia; a autoridade é modelada em `modules/organizations/
+// org-roles.ts` e imposta por `requireOrgRole`. `ADMIN` é legado (nunca
+// atribuído a vínculos novos — o cadastro cria OWNER) e é tratado como MANAGER.
 enum OrganizationRole {
   OWNER
   COACH
   ADMIN
   SUPPORT
+  MANAGER
+  HEAD_COACH
+  ASSISTANT_COACH
+  FINANCE
+  VIEWER
 }
 
 enum WorkoutStatus {
@@ -360,6 +371,29 @@ enum DerivedMetricStatus {
   INVALID
 }
 
+// Avaliações do atleta (etapa feat/athlete-assessments-prescription-zones).
+// Ciclo de vida versionado: uma avaliação nova NÃO apaga a anterior — a antiga
+// vira SUPERSEDED e o histórico é preservado. EXPIRED é derivado de validUntil.
+enum AssessmentStatus {
+  DRAFT
+  VALID
+  SUPERSEDED
+  EXPIRED
+  INVALID
+}
+
+// Procedência do dado. MEASURED (medido) nunca é substituído silenciosamente
+// por ESTIMATED (estimado) — a diferença é sempre visível ao treinador.
+enum AssessmentSource {
+  MEASURED
+  ESTIMATED
+  IMPORTED
+  MANUAL
+  DEVICE
+  LAB
+  FIELD_TEST
+}
+
 // Ciclo de vida do Insight persistido (02H → 03). Máquina de estados completa:
 // NEW (exposto, não visto) → VIEWED (treinador abriu) → ACCEPTED/IGNORED (decisão)
 // → RESOLVED (situação encerrada, com `outcome` observado). EXPIRED é aplicado
@@ -382,6 +416,22 @@ enum InsightStatus {
 // saiba falar com ele.
 enum ExternalProvider {
   STRAVA
+}
+
+// Fase 06/08 — feature flag global da plataforma. Só SUPERADMIN altera (matriz
+// de permissões §3). Flag DESLIGADA/ausente é o padrão seguro: um recurso atrás
+// de flag não vaza por acidente. Escopo global no MVP (não por organização);
+// `enabledOrganizationIds` permite habilitação gradual (canário) sem schema novo.
+model FeatureFlag {
+  key                    String   @id
+  description            String
+  enabled                Boolean  @default(false)
+  enabledOrganizationIds String[] @default([])
+  updatedById            String?
+  createdAt              DateTime @default(now()) @db.Timestamptz
+  updatedAt              DateTime @updatedAt @db.Timestamptz
+
+  updatedBy User? @relation("FeatureFlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
 }
 
 // Uma conexão nunca é apagada — vira REVOKED. Apagar a linha apagaria a
@@ -421,13 +471,22 @@ model User {
   athleteProfile             AthleteProfile?
   memberships                OrganizationMembership[]
   sessions                   Session[]
-  requestedGenerationBatches GenerationBatch[]        @relation("GenerationRequestedBy")
+  requestedGenerationBatches GenerationBatch[]          @relation("GenerationRequestedBy")
   auditLogs                  AuditLog[]
-  resolvedInsights           Insight[]                @relation("InsightResolvedBy")
+  resolvedInsights           Insight[]                  @relation("InsightResolvedBy")
   marketplaceOrders          MarketplaceOrder[]
   marketplaceEntitlements    MarketplaceEntitlement[]
   marketplaceCarts           MarketplaceCart[]
   marketplaceReviews         MarketplaceReview[]
+  performedAssessments       Assessment[]               @relation("AssessmentPerformedBy")
+  updatedFeatureFlags        FeatureFlag[]              @relation("FeatureFlagUpdatedBy")
+  assignedLeads              Lead[]                     @relation("LeadAssignedTo")
+  leadInteractions           LeadInteraction[]
+  clients                    Client[]
+  createdCoachPayments       CoachPayment[]
+  assignedRelationships      CoachAthleteRelationship[] @relation("RelationshipAssignedBy")
+  addedGroupMembers          CoachGroupMember[]
+  createdCommunications      CommunicationLog[]
 
   @@index([email])
 }
@@ -456,6 +515,22 @@ model Organization {
   slug        String   @unique
   timezone    String   @default("America/Sao_Paulo")
   isActive    Boolean  @default(true)
+  // Identidade comercial da assessoria (Etapa 4 §3). Todos opcionais — o
+  // cadastro mínimo (name/slug) segue válido; o editor "Configurações da
+  // assessoria" (fatia posterior) preenche o resto. `document` = CNPJ/CPF sem
+  // máscara. NOTA: `TrainerProfile.companyName/crefCode` são a identidade
+  // PROFISSIONAL do treinador — não confundir; a consolidação (quando a org
+  // vira multi-treinador de fato) é trabalho futuro.
+  // ponytail: `status` (lifecycle 4-estados) e defaults de faturamento
+  // (defaultBillingDay/gracePeriod/…) ficam para as fatias que os consomem —
+  // hoje `isActive` já é o gate de suspensão (guards) e não há cobrança da
+  // assessoria ainda. Adicionar antes seria coluna morta.
+  legalName   String?
+  document    String?
+  email       String?
+  phone       String?
+  website     String?
+  logoUrl     String?
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
   lockVersion Int      @default(1)
@@ -478,13 +553,24 @@ model Organization {
   auditLogs              AuditLog[]
   insights               Insight[]
   readinessCheckIns      ReadinessCheckIn[]
+  externalConnections    ExternalConnection[]
+  externalActivities     ExternalActivity[]
   marketplaceSellers     MarketplaceSellerProfile[]
   marketplaceOrders      MarketplaceOrder[]
   marketplaceCoupons     MarketplaceCoupon[]
   workoutExecutions      WorkoutExecution[]
   workoutExecutionEvents WorkoutExecutionEvent[]
-  externalConnections    ExternalConnection[]
-  externalActivities     ExternalActivity[]
+  assessments            Assessment[]
+  leads                  Lead[]
+  leadInteractions       LeadInteraction[]
+  clients                Client[]
+  coachServicePlans      CoachServicePlan[]
+  contracts              CoachClientContract[]
+  coachInvoices          CoachInvoice[]
+  coachPayments          CoachPayment[]
+  coachGroups            CoachGroup[]
+  coachGroupMembers      CoachGroupMember[]
+  communications         CommunicationLog[]
 }
 
 model OrganizationMembership {
@@ -492,6 +578,11 @@ model OrganizationMembership {
   userId         String
   organizationId String
   role           OrganizationRole @default(COACH)
+  // Membro pode ser desativado sem perder o histórico/vínculo (§18). O acesso
+  // real ainda depende do papel global e da org ativa; desativar aqui é o gancho
+  // de gestão de equipe. ponytail: imposição no resolveActiveOrganization fica
+  // para quando multi-org (ADR-001/Fase 6) existir de fato.
+  isActive       Boolean          @default(true)
   createdAt      DateTime         @default(now()) @db.Timestamptz
   updatedAt      DateTime         @updatedAt @db.Timestamptz
 
@@ -523,6 +614,7 @@ model TrainerProfile {
   testResults       TestResult[]
   reports           Report[]
   insights          Insight[]
+  coachGroups       CoachGroup[]
 }
 
 model AthleteProfile {
@@ -544,6 +636,7 @@ model AthleteProfile {
   generationBatches   GenerationBatch[]
   testResults         TestResult[]
   derivedMetrics      DerivedMetric[]
+  assessments         Assessment[]
   reports             Report[]
   purchases           MarketplacePurchase[]
   invitations         AthleteInvitation[]
@@ -552,23 +645,40 @@ model AthleteProfile {
   workoutExecutions   WorkoutExecution[]
   externalConnections ExternalConnection[]
   externalActivities  ExternalActivity[]
+  contracts           CoachClientContract[]
+  groupMemberships    CoachGroupMember[]
+}
+
+// Papel do treinador na carteira do atleta (Etapa 4 §19).
+enum CoachAthleteRole {
+  PRIMARY
+  ASSISTANT
+  TEMPORARY
+  VIEW_ONLY
 }
 
 model CoachAthleteRelationship {
-  id                String    @id @default(uuid())
+  id                String           @id @default(uuid())
   organizationId    String
   trainerId         String
   athleteId         String
-  isActive          Boolean   @default(true)
-  startedAt         DateTime  @default(now()) @db.Timestamptz
-  endedAt           DateTime? @db.Timestamptz
+  // Papel do treinador nesta carteira (Etapa 4 §19). Um atleta pode ter um
+  // PRIMARY e um ASSISTANT (pares distintos). Default PRIMARY: vínculos antigos
+  // (um treinador por atleta) já são o titular.
+  role              CoachAthleteRole @default(PRIMARY)
+  // Quem fez a atribuição (§19). SetNull para não perder o vínculo.
+  assignedByUserId  String?
+  isActive          Boolean          @default(true)
+  startedAt         DateTime         @default(now()) @db.Timestamptz
+  endedAt           DateTime?        @db.Timestamptz
   terminationReason String?
-  createdAt         DateTime  @default(now()) @db.Timestamptz
-  updatedAt         DateTime  @updatedAt @db.Timestamptz
+  createdAt         DateTime         @default(now()) @db.Timestamptz
+  updatedAt         DateTime         @updatedAt @db.Timestamptz
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
   athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  assignedBy   User?          @relation("RelationshipAssignedBy", fields: [assignedByUserId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, trainerId, athleteId])
   @@index([organizationId, athleteId])
@@ -630,6 +740,10 @@ model Periodization {
   isDraft                Boolean   @default(false)
   notes                  String?
   parameters             Json?
+  // Saída explicável do motor estratégico (Fase 1) congelada na geração:
+  // regras aplicadas + versão + referências + confiança + dados ausentes.
+  // Null em planos desenhados manualmente. Validado por Zod na escrita.
+  strategyRationale      Json?
   createdAt              DateTime  @default(now()) @db.Timestamptz
   updatedAt              DateTime  @updatedAt @db.Timestamptz
   lockVersion            Int       @default(1)
@@ -852,6 +966,8 @@ model WorkoutExercise {
   rpeTarget       Float?
   restSeconds     Int?
   notes           String?
+  // Proveniência da carga por %1RM (fatia D2) — paridade com WorkoutStep.metadata.
+  metadata        Json?
   createdAt       DateTime @default(now()) @db.Timestamptz
   updatedAt       DateTime @updatedAt @db.Timestamptz
 
@@ -1048,6 +1164,42 @@ model TestResult {
   trainer      TrainerProfile @relation(fields: [trainerId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, athleteId, performedAt])
+}
+
+// Avaliação fisiológica/esportiva do atleta, VERSIONADA. Uma nova avaliação do
+// mesmo tipo não apaga a anterior: a antiga vira SUPERSEDED (histórico
+// preservado). As MEDIÇÕES do protocolo (FC repouso/máx; VDOT; FTP; CSS; 1RM…)
+// vivem em `measurements` (JSON validado por Zod por protocolo — mesmo padrão de
+// Periodization.parameters, nunca lido cru); as saídas derivadas por fórmula
+// formal ficam em `derivedMetrics`. `TestResult` (genérico, sem uso) NÃO é
+// substituído aqui — ver docs/ENKY_ASSESSMENTS_AND_ZONES_CURRENT_STATE.md.
+model Assessment {
+  id                String           @id @default(uuid())
+  organizationId    String
+  athleteId         String
+  assessmentType    String // HEART_RATE | RUNNING | CYCLING | SWIMMING | STRENGTH | BODY_COMPOSITION
+  modality          Modality? // nem todo tipo tem modalidade única (FC, composição)
+  protocolCode      String
+  protocolVersion   String           @default("1.0.0")
+  assessmentDate    DateTime         @db.Date
+  performedByUserId String?
+  source            AssessmentSource @default(MANUAL)
+  status            AssessmentStatus @default(DRAFT)
+  confidence        ConfidenceLevel  @default(NOT_ASSESSED)
+  validUntil        DateTime?        @db.Date
+  measurements      Json // entradas do protocolo (Zod)
+  derivedMetrics    Json? // saídas derivadas quando há fórmula formal
+  notes             String?
+  createdAt         DateTime         @default(now()) @db.Timestamptz
+  updatedAt         DateTime         @updatedAt @db.Timestamptz
+  lockVersion       Int              @default(1)
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  performedBy  User?          @relation("AssessmentPerformedBy", fields: [performedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, athleteId, assessmentType, assessmentDate], map: "idx_assessment_athlete_type_date")
+  @@index([organizationId, athleteId, status], map: "idx_assessment_athlete_status")
 }
 
 model DerivedMetric {
@@ -1929,4 +2081,516 @@ model MarketplaceCouponRedemption {
   coupon MarketplaceCoupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
 
   @@index([couponId, userId])
+}
+
+// ---------------------------------------------------------------------------
+// 11. CRM DA ASSESSORIA (Etapa 4 §5–7)
+// ---------------------------------------------------------------------------
+// Funil de captação `assessoria → prospect`. É a PORTA DE ENTRADA comercial:
+// um Lead vira Cliente (§8) na conversão, que ainda NÃO existe (depende de
+// Client/CoachServicePlan/Contract). Enquanto isso, o Lead vive seu ciclo
+// próprio (NEW → … → WON/LOST/ARCHIVED). Isolado por `organizationId` como todo
+// dado de tenant.
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  TRIAL
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+  ARCHIVED
+}
+
+enum LeadSource {
+  INSTAGRAM
+  WHATSAPP
+  REFERRAL
+  WEBSITE
+  EVENT
+  ORGANIC
+  PAID_MEDIA
+  OTHER
+}
+
+enum LeadInteractionType {
+  NOTE
+  CALL
+  MESSAGE
+  EMAIL
+  MEETING
+  TRIAL_STARTED
+  PROPOSAL_SENT
+  FOLLOW_UP
+  STATUS_CHANGE
+}
+
+enum LeadInteractionChannel {
+  PHONE
+  WHATSAPP
+  EMAIL
+  INSTAGRAM
+  IN_PERSON
+  SYSTEM
+  OTHER
+}
+
+model Lead {
+  id                 String     @id @default(uuid())
+  organizationId     String
+  name               String
+  email              String?
+  phone              String?
+  source             LeadSource @default(OTHER)
+  // Modalidade de interesse (enum existente). O `interestedServiceId` do §5 fica
+  // para quando `CoachServicePlan` existir — sem entidade para apontar, seria
+  // uma coluna solta. ponytail: adicionar o FK na fatia de planos.
+  interestedModality Modality?
+  // Responsável pelo lead. Membro da organização (validado no serviço, não no
+  // schema). SetNull: remover o usuário não apaga o lead, só o desatribui.
+  assignedToUserId   String?
+  status             LeadStatus @default(NEW)
+  estimatedValue     Decimal?   @db.Decimal(12, 2)
+  notes              String?
+  nextActionAt       DateTime?  @db.Timestamptz
+  convertedAt        DateTime?  @db.Timestamptz
+  lostAt             DateTime?  @db.Timestamptz
+  lostReason         String?
+  createdAt          DateTime   @default(now()) @db.Timestamptz
+  updatedAt          DateTime   @updatedAt @db.Timestamptz
+  lockVersion        Int        @default(1)
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignedTo       User?             @relation("LeadAssignedTo", fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  interactions     LeadInteraction[]
+  convertedClients Client[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, assignedToUserId])
+  @@index([organizationId, nextActionAt])
+}
+
+// Trilha append-only de interações do lead (§6). Mudanças de etapa geram uma
+// entrada STATUS_CHANGE automática — o histórico do funil mora aqui, não em
+// AuditLog (que é para ações sensíveis da plataforma).
+model LeadInteraction {
+  id             String                 @id @default(uuid())
+  organizationId String
+  leadId         String
+  actorUserId    String?
+  type           LeadInteractionType
+  channel        LeadInteractionChannel @default(SYSTEM)
+  summary        String
+  occurredAt     DateTime               @default(now()) @db.Timestamptz
+  nextActionAt   DateTime?              @db.Timestamptz
+  createdAt      DateTime               @default(now()) @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lead         Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, occurredAt])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// 12. CLIENTES DA ASSESSORIA (Etapa 4 §8)
+// ---------------------------------------------------------------------------
+// Cliente = quem tem a RELAÇÃO COMERCIAL (paga ou é responsável). NÃO é o mesmo
+// que Atleta (quem treina, `AthleteProfile`) nem que Pagador. A separação é
+// deliberada: pai paga / filho treina; empresa paga / funcionário treina. Por
+// isso Client NÃO tem `athleteProfileId` — o vínculo cliente↔atleta↔pagador
+// mora no Contrato (§10: clientId/athleteId/payerClientId), onde ele é por
+// contrato e pode ser 1→N. Aqui é só o registro comercial da pessoa/entidade.
+
+enum ClientStatus {
+  PROSPECT
+  TRIAL
+  ACTIVE
+  PAUSED
+  INACTIVE
+  CANCELLED
+  ARCHIVED
+}
+
+model Client {
+  id             String       @id @default(uuid())
+  organizationId String
+  // Login no portal, se este cliente tiver acesso (ex.: o pai pagante). Muitos
+  // clientes não têm — o atleta tem o seu próprio User. ponytail: nada popula
+  // isto ainda; entra quando houver portal do cliente.
+  userId         String?
+  name           String
+  email          String?
+  phone          String?
+  document       String?
+  birthDate      DateTime?    @db.Date
+  status         ClientStatus @default(PROSPECT)
+  // Origem no funil, quando o cliente veio de um Lead convertido (§7). A
+  // conversão que popula isto é fatia posterior; SetNull para não perder o
+  // cliente se o lead for apagado.
+  sourceLeadId   String?
+  notes          String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz
+  updatedAt      DateTime     @updatedAt @db.Timestamptz
+  lockVersion    Int          @default(1)
+
+  organization      Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user              User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sourceLead        Lead?                 @relation(fields: [sourceLeadId], references: [id], onDelete: SetNull)
+  contractsAsClient CoachClientContract[] @relation("ContractClient")
+  contractsAsPayer  CoachClientContract[] @relation("ContractPayer")
+  invoicesAsClient  CoachInvoice[]        @relation("InvoiceClient")
+  invoicesAsPayer   CoachInvoice[]        @relation("InvoicePayer")
+
+  @@index([organizationId, status])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// 13. PLANOS E SERVIÇOS DA ASSESSORIA (Etapa 4 §9)
+// ---------------------------------------------------------------------------
+// Produto comercial que a assessoria VENDE ao cliente (mensalidade, pacote,
+// avulso). NÃO confundir com `SubscriptionPlan` (assinatura SaaS ENKY↔treinador)
+// nem com `MarketplacePlan` (venda avulsa de CONTEÚDO de treino — outra coisa,
+// fora de escopo). O contrato (§10) aponta para um destes e CONGELA o preço no
+// momento — alterar o plano depois não mexe em contrato já assinado.
+
+enum CoachBillingType {
+  RECURRING
+  ONE_TIME
+  PACKAGE
+  FREE
+  CUSTOM
+}
+
+enum CoachBillingInterval {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+  CUSTOM
+}
+
+model CoachServicePlan {
+  id                    String                @id @default(uuid())
+  organizationId        String
+  name                  String
+  description           String?
+  // Nulo = plano multi/sem modalidade específica.
+  modality              Modality?
+  billingType           CoachBillingType      @default(RECURRING)
+  price                 Decimal               @default(0) @db.Decimal(12, 2)
+  currency              String                @default("BRL") @db.VarChar(3)
+  // Só faz sentido em RECURRING; nulo nos demais tipos (validado no Zod).
+  billingInterval       CoachBillingInterval?
+  // Duração do compromisso; nulo = indeterminado / não aplicável (avulso).
+  durationMonths        Int?
+  trialDays             Int                   @default(0)
+  // Benefícios do plano (§9). Descritivos — mostrados na comparação de planos e
+  // congelados no contrato. Nada os IMPÕE ainda (enforcement é fatia futura):
+  // por ora definem a proposta de valor, não um limite técnico.
+  maxSessionsPerWeek    Int?
+  includedAssessments   Int?
+  includedReports       Boolean               @default(false)
+  includedCommunication Boolean               @default(false)
+  includedFeatures      String[]              @default([])
+  // Listagem pública (checkout) é fatia futura — marketplace público está fora
+  // de escopo. Fica default false até existir superfície pública.
+  isPublic              Boolean               @default(false)
+  isActive              Boolean               @default(true)
+  createdAt             DateTime              @default(now()) @db.Timestamptz
+  updatedAt             DateTime              @updatedAt @db.Timestamptz
+  lockVersion           Int                   @default(1)
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contracts    CoachClientContract[]
+
+  @@index([organizationId, isActive])
+}
+
+// ---------------------------------------------------------------------------
+// 14. CONTRATOS DA ASSESSORIA (Etapa 4 §10–11)
+// ---------------------------------------------------------------------------
+// É AQUI que nasce o vínculo cliente↔atleta↔pagador (clientId/athleteId/
+// payerClientId) — deliberadamente três campos distintos, porque coincidem
+// frequentemente mas nem sempre (empresa paga / funcionário treina). O contrato
+// CONGELA o preço do plano no momento (§10): editar/trocar o plano depois nunca
+// retroage sobre um contrato já feito. Ações sensíveis (preço/desconto/
+// cancelamento/aceite) são auditadas (§32).
+
+enum ContractStatus {
+  DRAFT
+  PENDING_SIGNATURE
+  ACTIVE
+  PAUSED
+  OVERDUE
+  CANCELLED
+  EXPIRED
+  COMPLETED
+}
+
+enum ContractAcceptanceMethod {
+  MANUAL
+  CHECKBOX
+  DIGITAL_SIGNATURE_PROVIDER
+  IMPORTED
+}
+
+model CoachClientContract {
+  id             String         @id @default(uuid())
+  organizationId String
+  clientId       String
+  // Quem treina — opcional (o cliente pode ser só o pagador). SetNull para
+  // preservar o contrato se o perfil do atleta sumir.
+  athleteId      String?
+  servicePlanId  String
+  // Quem paga — default = clientId no serviço quando omitido (caso comum
+  // cliente=pagador), mas modelado à parte para os casos em que difere.
+  payerClientId  String
+  status         ContractStatus @default(DRAFT)
+
+  startDate        DateTime  @db.Date
+  endDate          DateTime? @db.Date
+  billingStartDate DateTime? @db.Date
+  billingDay       Int       @default(1)
+
+  // Preço CONGELADO na assinatura. finalPrice = price - discount
+  // (computeFinalPrice, clampeado ≥ 0). `price` pode ser personalizado na
+  // criação (valor avulso), não precisa ser igual ao do plano.
+  price      Decimal @default(0) @db.Decimal(12, 2)
+  discount   Decimal @default(0) @db.Decimal(12, 2)
+  finalPrice Decimal @default(0) @db.Decimal(12, 2)
+  currency   String  @default("BRL") @db.VarChar(3)
+
+  autoRenew              Boolean   @default(false)
+  gracePeriodDays        Int       @default(0)
+  cancellationNoticeDays Int       @default(0)
+  cancellationReason     String?
+  cancelledAt            DateTime? @db.Timestamptz
+
+  // Documento e aceite (§11). Sem assinatura digital avançada nesta etapa —
+  // MANUAL/CHECKBOX registram quem/quando/IP; o HTML é gerado do template.
+  templateCode     String?
+  templateVersion  Int?
+  acceptedAt       DateTime?                 @db.Timestamptz
+  acceptedBy       String?
+  acceptanceMethod ContractAcceptanceMethod?
+  acceptanceIp     String?
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  lockVersion Int      @default(1)
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  client       Client           @relation("ContractClient", fields: [clientId], references: [id], onDelete: Restrict)
+  payer        Client           @relation("ContractPayer", fields: [payerClientId], references: [id], onDelete: Restrict)
+  athlete      AthleteProfile?  @relation(fields: [athleteId], references: [id], onDelete: SetNull)
+  servicePlan  CoachServicePlan @relation(fields: [servicePlanId], references: [id], onDelete: Restrict)
+  invoices     CoachInvoice[]
+
+  @@index([organizationId, status])
+  @@index([clientId])
+  @@index([payerClientId])
+  @@index([servicePlanId])
+}
+
+// ---------------------------------------------------------------------------
+// 15. MENSALIDADES E PAGAMENTOS DA ASSESSORIA (Etapa 4 §12–14)
+// ---------------------------------------------------------------------------
+// CoachInvoice = cobrança de uma competência de um contrato. Idempotência da
+// geração garantida por @@unique([contractId, referencePeriod]): gerar duas
+// vezes o mesmo mês colide no índice em vez de duplicar (não é SELECT-then-INSERT).
+// CoachPayment = baixa (parcial ou total); uma fatura pode ter vários. NÃO
+// guardamos dado de cartão (§12). Cobrança é MANUAL nesta etapa (sem gateway).
+
+enum CoachInvoiceStatus {
+  DRAFT
+  PENDING
+  PAID
+  OVERDUE
+  PARTIALLY_PAID
+  CANCELLED
+  REFUNDED
+  FAILED
+}
+
+enum CoachPaymentMethod {
+  PIX
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_SLIP
+  TRANSFER
+  CASH
+  OTHER
+}
+
+model CoachInvoice {
+  id              String   @id @default(uuid())
+  organizationId  String
+  contractId      String
+  // Denormalizados do contrato para consultas financeiras diretas (inadimplência
+  // por pagador) sem join. Snapshot no momento da geração.
+  clientId        String
+  payerClientId   String
+  // Competência "YYYY-MM". É a chave de idempotência junto do contrato.
+  referencePeriod String
+  dueDate         DateTime @db.Date
+
+  // amount = base (finalPrice do contrato no momento). finalAmount = amount -
+  // discount + interest + penalty (computeInvoiceFinalAmount).
+  amount      Decimal @db.Decimal(12, 2)
+  discount    Decimal @default(0) @db.Decimal(12, 2)
+  interest    Decimal @default(0) @db.Decimal(12, 2)
+  penalty     Decimal @default(0) @db.Decimal(12, 2)
+  finalAmount Decimal @db.Decimal(12, 2)
+  currency    String  @default("BRL") @db.VarChar(3)
+
+  status        CoachInvoiceStatus  @default(PENDING)
+  // Método predominante — informativo; a verdade das baixas está em CoachPayment.
+  paymentMethod CoachPaymentMethod?
+  paidAt        DateTime?           @db.Timestamptz
+  cancelledAt   DateTime?           @db.Timestamptz
+  notes         String?
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  lockVersion Int      @default(1)
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contract     CoachClientContract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  client       Client              @relation("InvoiceClient", fields: [clientId], references: [id], onDelete: Restrict)
+  payer        Client              @relation("InvoicePayer", fields: [payerClientId], references: [id], onDelete: Restrict)
+  payments     CoachPayment[]
+
+  @@unique([contractId, referencePeriod], map: "uq_invoice_contract_period")
+  @@index([organizationId, status])
+  @@index([organizationId, dueDate])
+  @@index([payerClientId])
+}
+
+model CoachPayment {
+  id                String             @id @default(uuid())
+  organizationId    String
+  invoiceId         String
+  amount            Decimal            @db.Decimal(12, 2)
+  paidAt            DateTime           @db.Timestamptz
+  method            CoachPaymentMethod
+  externalReference String?
+  notes             String?
+  createdByUserId   String?
+  createdAt         DateTime           @default(now()) @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      CoachInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([invoiceId])
+  @@index([organizationId])
+}
+
+// ---------------------------------------------------------------------------
+// 16. GRUPOS DA ASSESSORIA (Etapa 4 §20)
+// ---------------------------------------------------------------------------
+// Turmas/coletivos de atletas (Corrida Iniciante, Equipe Ironman…). Nesta fatia:
+// CRUD + composição (membros) + treinador do grupo. Aplicar template / criar
+// treino ou periodização PARA o grupo são cross-domínio de treino — fatia futura.
+
+enum CoachGroupStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model CoachGroup {
+  id             String           @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  modality       Modality?
+  level          String?
+  // Treinador responsável pelo grupo (opcional). SetNull para não apagar o grupo.
+  coachId        String?
+  status         CoachGroupStatus @default(ACTIVE)
+  createdAt      DateTime         @default(now()) @db.Timestamptz
+  updatedAt      DateTime         @updatedAt @db.Timestamptz
+  lockVersion    Int              @default(1)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  coach        TrainerProfile?    @relation(fields: [coachId], references: [id], onDelete: SetNull)
+  members      CoachGroupMember[]
+
+  @@index([organizationId, status])
+}
+
+model CoachGroupMember {
+  id             String   @id @default(uuid())
+  organizationId String
+  groupId        String
+  athleteId      String
+  addedByUserId  String?
+  addedAt        DateTime @default(now()) @db.Timestamptz
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  group        CoachGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  addedBy      User?          @relation(fields: [addedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([groupId, athleteId], map: "uq_group_member")
+  @@index([organizationId])
+  @@index([athleteId])
+}
+
+// ---------------------------------------------------------------------------
+// 17. COMUNICAÇÃO (Etapa 4 §22)
+// ---------------------------------------------------------------------------
+// Registro de comunicações internas (anotação, lembrete, aviso de vencimento,
+// mensagem geral). Nesta fatia é um LIVRO-RAZÃO: registra que a comunicação
+// aconteceu (quem/quando/canal). Disparo real de e-mail para mensagem avulsa
+// depende de um mailer geral — fatia futura; por ora status = LOGGED.
+// `recipientId` é referência SOLTA (polimórfica sobre cliente/lead/atleta), sem
+// FK — o tipo diz a que entidade pertence.
+
+enum CommunicationRecipientType {
+  CLIENT
+  LEAD
+  ATHLETE
+}
+
+enum CommunicationChannel {
+  EMAIL
+  IN_APP
+  MANUAL
+}
+
+enum CommunicationStatus {
+  LOGGED
+  SENT
+  FAILED
+}
+
+model CommunicationLog {
+  id              String                     @id @default(uuid())
+  organizationId  String
+  recipientType   CommunicationRecipientType
+  recipientId     String
+  channel         CommunicationChannel       @default(MANUAL)
+  templateCode    String?
+  subject         String?
+  // Conteúdo da anotação/mensagem. Opcional (§22: não guardar conteúdo sensível
+  // desnecessário) — para um log de e-mail transacional, subject basta.
+  body            String?
+  status          CommunicationStatus        @default(LOGGED)
+  sentAt          DateTime?                  @db.Timestamptz
+  failureReason   String?
+  createdByUserId String?
+  createdAt       DateTime                   @default(now()) @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, recipientType, recipientId])
 }

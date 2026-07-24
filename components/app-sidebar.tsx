@@ -50,10 +50,16 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M8 12v4M12 9v7M16 13v3" />
     </>
   ),
-  planos: (
+  gestao: (
     <>
-      <path d="M3 7a2 2 0 0 1 2-2h9l6 6-9 9-8-8V7z" />
-      <circle cx="7.5" cy="9.5" r="1" />
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" />
+    </>
+  ),
+  configuracoes: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
     </>
   ),
   marketplace: (

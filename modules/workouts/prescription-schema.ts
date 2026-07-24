@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { stepMetadataSchema } from "./zone-provenance";
 
 // The single canonical prescription contract — reused by createWorkoutDraft,
 // updateWorkoutDraft, and (eventually) calendar/template/periodization entry
@@ -16,6 +17,8 @@ export const workoutStepInputSchema = z.object({
   targetMax: z.number().nonnegative().optional(),
   recoverySeconds: z.number().int().nonnegative().optional(),
   recoveryMeters: z.number().int().nonnegative().optional(),
+  // Proveniência da zona calculada (fatia D) — congela a interpretação histórica.
+  metadata: stepMetadataSchema.optional(),
 });
 
 export const workoutExerciseInputSchema = z.object({
@@ -29,6 +32,8 @@ export const workoutExerciseInputSchema = z.object({
   rpeTarget: z.number().min(1).max(10).optional(),
   restSeconds: z.number().int().nonnegative().optional(),
   notes: z.string().trim().max(1000).optional(),
+  // Proveniência da carga por %1RM (fatia D2).
+  metadata: stepMetadataSchema.optional(),
 });
 
 export const workoutBlockInputSchema = z.object({

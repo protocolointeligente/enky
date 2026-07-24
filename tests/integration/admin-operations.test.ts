@@ -17,6 +17,12 @@ import {
   type AdminActor,
 } from "@/modules/admin/admin-service";
 import {
+  isFeatureEnabled,
+  listFeatureFlags,
+  setFeatureFlag,
+} from "@/modules/admin/feature-flag-service";
+import { anonymizeUserData, exportUserData } from "@/modules/admin/lgpd-service";
+import {
   resolveActiveOrganization,
   resolveAthleteOrganization,
 } from "@/server/auth/guards";

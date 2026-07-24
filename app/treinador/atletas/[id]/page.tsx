@@ -11,6 +11,7 @@ import { PlannedVsActual } from "@/components/planned-vs-actual";
 import { StatusBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorNotice } from "@/components/ui/error-notice";
+import { AssessmentsTab } from "@/components/assessments-tab";
 import { ChevronRightIcon, DumbbellIcon, PlusIcon } from "@/components/ui/icons";
 
 interface Overview {
@@ -439,16 +440,13 @@ export default function TrainerAthlete360Page({ params }: { params: Promise<{ id
             </Panel>
           )}
 
-          {/* Abas ainda sem fonte de dados própria — honestas, não fabricadas. */}
-          {(tab === "Avaliações" || tab === "Evolução") && (
-            <Panel title={tab}>
+          {tab === "Avaliações" && <AssessmentsTab athleteId={id} />}
+
+          {tab === "Evolução" && (
+            <Panel title="Evolução">
               <EmptyState
-                title={tab === "Avaliações" ? "Sem avaliações registradas" : "Sem série de evolução"}
-                description={
-                  tab === "Avaliações"
-                    ? "Testes e avaliações físicas aparecerão aqui quando forem registrados."
-                    : "A evolução de métricas ao longo do tempo entra numa próxima fase."
-                }
+                title="Sem série de evolução"
+                description="A evolução de métricas ao longo do tempo entra numa próxima fase."
                 icon={<DumbbellIcon width={28} height={28} />}
               />
             </Panel>
