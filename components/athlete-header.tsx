@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ATHLETE_NAV } from "@/components/athlete-bottom-nav";
 import { BrandLogo } from "@/components/brand-logo";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ATHLETE_NAV_PRIMARY, isNavActive } from "@/components/nav/nav-config";
 
-// Header do atleta — compacto no mobile (nav vive na bottom bar),
-// barra de nav completa no desktop (≥sm).
-// Fundo: deep/95 com backdrop-blur para profundidade.
+// Header do atleta.
+// Mobile (<md):  apenas logo + ThemeToggle — nav fica na AthleteBottomNav.
+// Desktop (≥md): logo + nav links dos itens primários + ThemeToggle.
+// Fundo: deep/95 com backdrop-blur para profundidade e hierarquia.
 export function AthleteHeader() {
   const pathname = usePathname();
   return (
@@ -18,24 +19,22 @@ export function AthleteHeader() {
           <BrandLogo />
         </Link>
 
-        {/* Nav desktop — oculta no mobile (usa bottom nav) */}
-        <nav className="hidden items-center gap-0.5 sm:flex" aria-label="Navegação principal">
-          {ATHLETE_NAV.map((item) => {
-            const active = item.exact
-              ? pathname === item.href
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+        {/* Nav desktop (≥md) — oculta no mobile, usa bottom nav */}
+        <nav className="hidden items-center gap-0.5 md:flex" aria-label="Navegação principal">
+          {ATHLETE_NAV_PRIMARY.map((item) => {
+            const active = isNavActive(item.href, "/atleta", pathname);
             return (
               <Link
-                key={item.href}
+                key={item.id}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
                   active
-                    ? "bg-surface-2 text-ink"
+                    ? "bg-orange-lo text-orange-hi"
                     : "text-muted hover:bg-surface hover:text-ink"
                 }`}
               >
-                {item.label}
+                {item.shortLabel}
               </Link>
             );
           })}

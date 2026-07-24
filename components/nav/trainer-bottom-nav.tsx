@@ -8,24 +8,25 @@ import { clearAppCaches } from "@/app/_lib/pwa";
 import { MoreIcon, LogoutIcon, ChevronRightIcon } from "@/components/ui/icons";
 import { BottomDrawer } from "@/components/nav/bottom-drawer";
 import {
-  ATHLETE_NAV_PRIMARY,
-  ATHLETE_NAV_SECONDARY,
+  TRAINER_NAV_PRIMARY,
+  TRAINER_NAV_SECONDARY,
   isNavActive,
 } from "@/components/nav/nav-config";
 
-// Bottom nav do atleta — visível apenas em mobile (<md).
-// 4 itens primários + "Mais" → abre BottomDrawer com itens secundários + Sair.
+// Bottom nav do treinador — visível apenas em mobile (<md).
+// 4 itens primários + "Mais" → abre BottomDrawer com itens secundários.
 // Ativo: pill bg-orange-lo + texto orange-hi. Inativo: texto muted.
 
-export function AthleteBottomNav() {
-  const pathname   = usePathname();
-  const router     = useRouter();
-  const [drawerOpen, setDrawerOpen]   = useState(false);
-  const [loggingOut, setLoggingOut]   = useState(false);
+export function TrainerBottomNav() {
+  const pathname = usePathname();
+  const router   = useRouter();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
 
-  const primaryActive = ATHLETE_NAV_PRIMARY.some((item) =>
-    isNavActive(item.href, "/atleta", pathname)
+  // "Mais" está ativo se o pathname não bate com nenhum primário
+  const primaryActive = TRAINER_NAV_PRIMARY.some((item) =>
+    isNavActive(item.href, "/treinador", pathname)
   );
   const moreActive = !primaryActive;
 
@@ -49,8 +50,8 @@ export function AthleteBottomNav() {
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {/* 4 links primários */}
-        {ATHLETE_NAV_PRIMARY.map((item) => {
-          const active = isNavActive(item.href, "/atleta", pathname);
+        {TRAINER_NAV_PRIMARY.map((item) => {
+          const active = isNavActive(item.href, "/treinador", pathname);
           const Icon = item.icon;
           return (
             <Link
@@ -104,8 +105,8 @@ export function AthleteBottomNav() {
         triggerRef={moreButtonRef}
       >
         <ul className="flex flex-col gap-0.5 px-3 py-2">
-          {ATHLETE_NAV_SECONDARY.map((item) => {
-            const active = isNavActive(item.href, "/atleta", pathname);
+          {TRAINER_NAV_SECONDARY.map((item) => {
+            const active = isNavActive(item.href, "/treinador", pathname);
             const Icon = item.icon;
             return (
               <li key={item.id}>
