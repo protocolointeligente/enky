@@ -573,8 +573,8 @@ export default function TrainerCalendarPage() {
                       isDropTarget
                         ? "border-orange bg-orange/10"
                         : isToday(day)
-                          ? "border-electric bg-electric/5"
-                          : "border-line hover:border-line-strong"
+                          ? "border-electric bg-electric-lo"
+                          : "border-line bg-surface hover:border-line-strong hover:bg-surface-2"
                     } ${muted ? "opacity-40" : ""}`}
                   >
                     <div className="mb-1 flex items-center justify-between">
