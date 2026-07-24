@@ -41,6 +41,12 @@ const PRIMARY_LINKS = [
     hint: "Conecte Strava, Garmin e wearables",
     icon: "🔗",
   },
+  {
+    href: "/atleta/perfil",
+    label: "Perfil",
+    hint: "Dados, preferências, privacidade e segurança",
+    icon: "⚙️",
+  },
 ];
 
 const MARKETPLACE_LINKS = [
@@ -58,7 +64,7 @@ const MARKETPLACE_LINKS = [
   },
 ];
 
-const SOON = ["Mensagens", "Perfil", "Configurações"];
+const SOON = ["Mensagens"];
 
 export default function AthleteMaisPage() {
   const router = useRouter();

@@ -122,7 +122,13 @@ export type AuditAction =
   // App do atleta §11 — o treinador comenta a meta PESSOAL do atleta. Comentar
   // é a única ação do treinador sobre metas (nunca edita); auditada porque toca
   // dado de outro usuário sob o mesmo tenant.
-  | "COMMENT_ATHLETE_GOAL";
+  | "COMMENT_ATHLETE_GOAL"
+  // App do atleta §12 — privacidade/segurança do próprio usuário. Exportação e
+  // exclusão são SOLICITAÇÕES registradas (processadas fora de banda); revogar
+  // outras sessões é ato de segurança. Todos auditados (não guardam dado sensível).
+  | "REQUEST_DATA_EXPORT"
+  | "REQUEST_ACCOUNT_DELETION"
+  | "REVOKE_OTHER_SESSIONS";
 
 export interface AuditLogInput {
   action: AuditAction;

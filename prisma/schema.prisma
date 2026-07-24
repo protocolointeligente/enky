@@ -463,6 +463,9 @@ model User {
   name         String
   globalRole   Role     @default(ATHLETE)
   isActive     Boolean  @default(true)
+  // Preferências de UI/notificação (§12). JSON validado por Zod, nunca lido cru.
+  // NÃO guarda dado de saúde (peso/altura/etc. ficam em AthleteProfile).
+  preferences  Json?
   createdAt    DateTime @default(now()) @db.Timestamptz
   updatedAt    DateTime @updatedAt @db.Timestamptz
   lockVersion  Int      @default(1)
