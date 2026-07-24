@@ -118,7 +118,11 @@ export type AuditAction =
   // Etapa 4 §26/§29 — importação CSV e LGPD (exportar/anonimizar dado comercial).
   | "IMPORT_CLIENTS"
   | "EXPORT_CLIENT_DATA"
-  | "ANONYMIZE_CLIENT";
+  | "ANONYMIZE_CLIENT"
+  // App do atleta §11 — o treinador comenta a meta PESSOAL do atleta. Comentar
+  // é a única ação do treinador sobre metas (nunca edita); auditada porque toca
+  // dado de outro usuário sob o mesmo tenant.
+  | "COMMENT_ATHLETE_GOAL";
 
 export interface AuditLogInput {
   action: AuditAction;

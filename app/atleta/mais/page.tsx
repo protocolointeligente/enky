@@ -30,6 +30,12 @@ const PRIMARY_LINKS = [
     icon: "📋",
   },
   {
+    href: "/atleta/objetivos",
+    label: "Objetivos",
+    hint: "Suas metas e provas-alvo",
+    icon: "🎯",
+  },
+  {
     href: "/atleta/integracoes",
     label: "Integrações",
     hint: "Conecte Strava, Garmin e wearables",
@@ -52,7 +58,7 @@ const MARKETPLACE_LINKS = [
   },
 ];
 
-const SOON = ["Objetivos", "Mensagens", "Perfil", "Configurações"];
+const SOON = ["Mensagens", "Perfil", "Configurações"];
 
 export default function AthleteMaisPage() {
   const router = useRouter();

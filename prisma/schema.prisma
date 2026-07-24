@@ -487,6 +487,7 @@ model User {
   assignedRelationships      CoachAthleteRelationship[] @relation("RelationshipAssignedBy")
   addedGroupMembers          CoachGroupMember[]
   createdCommunications      CommunicationLog[]
+  authoredGoalEvents         AthleteGoalEvent[]         @relation("GoalEventAuthor")
 
   @@index([email])
 }
@@ -571,6 +572,7 @@ model Organization {
   coachGroups            CoachGroup[]
   coachGroupMembers      CoachGroupMember[]
   communications         CommunicationLog[]
+  athleteGoals           AthleteGoal[]
 }
 
 model OrganizationMembership {
@@ -647,6 +649,7 @@ model AthleteProfile {
   externalActivities  ExternalActivity[]
   contracts           CoachClientContract[]
   groupMemberships    CoachGroupMember[]
+  goals               AthleteGoal[]
 }
 
 // Papel do treinador na carteira do atleta (Etapa 4 §19).
@@ -2593,4 +2596,88 @@ model CommunicationLog {
 
   @@index([organizationId, createdAt])
   @@index([organizationId, recipientType, recipientId])
+}
+
+// ---------------------------------------------------------------------------
+// OBJETIVOS E METAS DO ATLETA (App do atleta §11)
+// Meta PESSOAL: o atleta cadastra e atualiza. O treinador VÊ e COMENTA — nunca
+// edita silenciosamente; todo comentário/alteração vira AthleteGoalEvent
+// (histórico) e, nas ações do treinador, também AuditLog. Métricas-alvo
+// heterogêneas (distância/tempo/pace/potência/composição) num JSON `targets`,
+// mesmo padrão de Assessment.measurements / Periodization.parameters.
+// ---------------------------------------------------------------------------
+
+enum GoalType {
+  RACE
+  PERFORMANCE
+  CONDITIONING
+  HEALTH
+  BODY_COMPOSITION
+  ADHERENCE
+  RETURN_TO_SPORT
+  CUSTOM
+}
+
+enum GoalPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum GoalStatus {
+  ACTIVE
+  ACHIEVED
+  MISSED
+  PAUSED
+  ARCHIVED
+}
+
+enum GoalEventKind {
+  CREATED
+  UPDATED
+  COMMENT
+  ARCHIVED
+}
+
+model AthleteGoal {
+  id              String       @id @default(uuid())
+  organizationId  String
+  athleteId       String
+  title           String
+  type            GoalType
+  modality        Modality?
+  targetEvent     String?
+  targetDate      DateTime?    @db.Date
+  weeklyFrequency Int?
+  targets         Json?
+  priority        GoalPriority @default(MEDIUM)
+  status          GoalStatus   @default(ACTIVE)
+  progress        Int          @default(0)
+  notes           String?
+  createdAt       DateTime     @default(now()) @db.Timestamptz
+  updatedAt       DateTime     @updatedAt @db.Timestamptz
+  lockVersion     Int          @default(1)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile     @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  events       AthleteGoalEvent[]
+
+  @@index([organizationId, athleteId, status], map: "idx_goal_athlete_status")
+  @@index([organizationId, athleteId, targetDate], map: "idx_goal_athlete_target_date")
+}
+
+model AthleteGoalEvent {
+  id            String        @id @default(uuid())
+  goalId        String
+  authorUserId  String?
+  authorRole    Role
+  kind          GoalEventKind
+  note          String?
+  changedFields String[]
+  createdAt     DateTime      @default(now()) @db.Timestamptz
+
+  goal   AthleteGoal @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  author User?       @relation("GoalEventAuthor", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([goalId, createdAt])
 }
