@@ -61,7 +61,7 @@ export const statusBadgeClass: Record<string, string> = {
   DRAFT:       "bg-surface text-muted",
   PUBLISHED:   "bg-electric-lo text-electric-hi",
   IN_PROGRESS: "bg-orange-lo text-orange-hi",
-  COMPLETED:   "bg-turq-lo text-turq-hi",
+  COMPLETED:   "bg-turq-lo text-turq",
   PARTIAL:     "bg-warning-lo text-warning",
   MISSED:      "bg-danger-lo text-danger",
   ARCHIVED:    "bg-surface text-faint",
