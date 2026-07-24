@@ -19,6 +19,7 @@ import { useRequireRole } from "@/app/_lib/use-session";
 import { StatusBadge } from "@/components/ui/badge";
 import { WorkoutBlocksView, type BlockView } from "@/components/workout-blocks-view";
 import { WorkoutExecution } from "@/components/workout-execution";
+import { EnduranceExecution } from "@/components/workout-execution-endurance";
 import { StrengthExecution } from "@/components/workout-execution-strength";
 import {
   buildFeedbackPayload,
@@ -260,28 +261,52 @@ export default function AthleteWorkoutDetailPage({ params }: { params: Promise<{
 
         {canSubmitFeedback &&
           mode === "executing" &&
-          (current.modality === "STRENGTH" ? (
-            // Musculação: série-a-série com descanso e planejado-vs-realizado (§14).
-            <StrengthExecution
-              blocks={current.blocks}
-              timerEvents={execution?.events}
-              onSetComplete={(payload) => {
-                if (execution) void recordEvent(execution.id, "STEP_COMPLETED", payload);
-              }}
-              onFinish={handleExecutionFinish}
-              onAbandon={handleExecutionAbandon}
-            />
-          ) : (
-            <WorkoutExecution
-              blocks={current.blocks}
-              timerEvents={execution?.events}
-              onStepComplete={(blockIndex, stepIndex) => {
-                if (execution) void recordEvent(execution.id, "STEP_COMPLETED", { blockIndex, stepIndex });
-              }}
-              onFinish={handleExecutionFinish}
-              onAbandon={handleExecutionAbandon}
-            />
-          ))}
+          (() => {
+            const onStep = (blockIndex: number, stepIndex: number) => {
+              if (execution) void recordEvent(execution.id, "STEP_COMPLETED", { blockIndex, stepIndex });
+            };
+            // Musculação: série-a-série com descanso (§14). Endurance: execução por
+            // modalidade com pace/potência/zona formatados (§15). Demais (funcional/
+            // triatlo): checklist genérico. Todos partilham a infra offline-first.
+            if (current.modality === "STRENGTH") {
+              return (
+                <StrengthExecution
+                  blocks={current.blocks}
+                  timerEvents={execution?.events}
+                  onSetComplete={(payload) => {
+                    if (execution) void recordEvent(execution.id, "STEP_COMPLETED", payload);
+                  }}
+                  onFinish={handleExecutionFinish}
+                  onAbandon={handleExecutionAbandon}
+                />
+              );
+            }
+            if (
+              current.modality === "RUNNING" ||
+              current.modality === "CYCLING" ||
+              current.modality === "SWIMMING"
+            ) {
+              return (
+                <EnduranceExecution
+                  blocks={current.blocks}
+                  modality={current.modality}
+                  timerEvents={execution?.events}
+                  onStepComplete={onStep}
+                  onFinish={handleExecutionFinish}
+                  onAbandon={handleExecutionAbandon}
+                />
+              );
+            }
+            return (
+              <WorkoutExecution
+                blocks={current.blocks}
+                timerEvents={execution?.events}
+                onStepComplete={onStep}
+                onFinish={handleExecutionFinish}
+                onAbandon={handleExecutionAbandon}
+              />
+            );
+          })()}
 
         {pendingSync > 0 && (
           <p className="text-center text-xs text-muted" role="status">
