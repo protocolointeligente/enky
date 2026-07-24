@@ -124,3 +124,52 @@ export const CopyIcon = (p: IconProps) => (
     <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
   </Base>
 );
+
+export const BrainIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M12 4a4 4 0 0 0-4 4 4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4 4 4 0 0 0-4-4Z" />
+    <path d="M12 4v16M8 8H4M16 8h4M6 12H2M22 12h-4M8 16H4M16 16h4" />
+  </Base>
+);
+
+export const BarChartIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M8 12v4M12 9v7M16 13v3M4 20h16" />
+  </Base>
+);
+
+export const ShoppingBagIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M3 9l1-4h16l1 4M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9M3 9h18M9 20v-6h6v6" />
+  </Base>
+);
+
+export const GridIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M3 3h8v8H3zM13 3h8v8h-8zM13 13h8v8h-8zM3 13h8v8H3z" />
+  </Base>
+);
+
+export const ChevronUpIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="m18 15-6-6-6 6" />
+  </Base>
+);
+
+export const LogoutIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M16 17l5-5-5-5M21 12H9M12 19H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6" />
+  </Base>
+);
+
+export const BookOpenIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M2 4h9v16H2zM13 4h9v16h-9zM12 4v16" />
+  </Base>
+);
+
+export const ZapIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M13 2 4.5 13.5H12L11 22l8.5-11.5H13L13 2Z" />
+  </Base>
+);

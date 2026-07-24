@@ -78,3 +78,30 @@ export function computeLoadState(dailyLoad: number[]): LoadState {
     dataDays,
   };
 }
+
+export interface PmcPoint {
+  ctl: number;
+  atl: number;
+  tsb: number; // forma NO DIA = ctl_ontem − atl_ontem (convenção TrainingPeaks)
+}
+
+/**
+ * Série diária do Performance Management Chart (CTL/ATL/TSB) — o gráfico de forma
+ * do intervals.icu/TrainingPeaks. Mesma EWMA da computeLoadState, mas devolve um
+ * ponto por dia (mais antigo → mais recente) para plotar a curva. O TSB do dia é
+ * medido ANTES de aplicar a carga do próprio dia (fitness/fadiga da véspera).
+ */
+export function computePmcSeries(dailyLoad: number[]): PmcPoint[] {
+  const alpha42 = ewmaAlpha(CTL_TIME_CONSTANT);
+  const alpha7 = ewmaAlpha(ATL_TIME_CONSTANT);
+  let ctl = 0;
+  let atl = 0;
+  const series: PmcPoint[] = [];
+  for (const load of dailyLoad) {
+    const tsb = ctl - atl;
+    ctl += (load - ctl) * alpha42;
+    atl += (load - atl) * alpha7;
+    series.push({ ctl, atl, tsb });
+  }
+  return series;
+}

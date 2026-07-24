@@ -125,7 +125,9 @@ export default function TrainerCalendarPage() {
   const [selected, setSelected] = useState<CalendarCard | null>(null);
   const [createDate, setCreateDate] = useState<string | null>(null);
   const [dayMenu, setDayMenu] = useState<string | null>(null);
+  const [weekMenu, setWeekMenu] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<CalendarCard | null>(null);
+  const [weekClipboard, setWeekClipboard] = useState<{ mondayISO: string; cards: CalendarCard[] } | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [selectorOpen, setSelectorOpen] = useState(false);
@@ -133,10 +135,11 @@ export default function TrainerCalendarPage() {
   const [summaryOpen, setSummaryOpen] = useState(true);
   const exerciseOptions = useExerciseOptions(checked);
 
-  const days = useMemo(
-    () => (view === "week" ? getWeekDays(anchor) : getMonthMatrix(anchor).flat()),
+  const weeks = useMemo(
+    () => (view === "week" ? [getWeekDays(anchor)] : getMonthMatrix(anchor)),
     [view, anchor],
   );
+  const days = useMemo(() => weeks.flat(), [weeks]);
   const range = useMemo(() => {
     const first = days[0];
     const last = days[days.length - 1];
@@ -299,6 +302,78 @@ export default function TrainerCalendarPage() {
     }
   }
 
+  // ── Operações por semana ──────────────────────────────────────────────
+  // Composição sobre /duplicate (preserva o dia-da-semana via delta de data e
+  // aceita athleteId alvo) e /cancel. Copiar guarda os cards; colar duplica
+  // cada um deslocado o número inteiro de semanas até a semana destino, no
+  // atleta selecionado no cabeçalho (ou no próprio atleta de origem).
+  function weekCardsOf(week: Date[]): CalendarCard[] {
+    return week.flatMap((d) => cardsByDay.get(toISODate(d)) ?? []);
+  }
+
+  function copyWeek(week: Date[]) {
+    const weekCards = weekCardsOf(week);
+    setWeekMenu(null);
+    if (weekCards.length === 0) return toast.info("Semana sem treinos para copiar.");
+    setWeekClipboard({ mondayISO: toISODate(week[0]!), cards: weekCards });
+    toast.success(`${weekCards.length} treino(s) copiado(s). Cole em outra semana.`);
+  }
+
+  async function pasteWeek(week: Date[]) {
+    if (!weekClipboard) return;
+    setWeekMenu(null);
+    const deltaDays = Math.round(
+      (Date.parse(`${toISODate(week[0]!)}T00:00:00Z`) -
+        Date.parse(`${weekClipboard.mondayISO}T00:00:00Z`)) /
+        86400000,
+    );
+    let ok = 0;
+    let fail = 0;
+    for (const card of weekClipboard.cards) {
+      try {
+        await apiFetch(`/api/trainer/workouts/${card.id}/duplicate`, {
+          method: "POST",
+          body: JSON.stringify({
+            plannedDate: shiftISO(card.plannedDate, deltaDays),
+            athleteId: athleteId || card.athleteId,
+          }),
+        });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    if (ok) toast.success(`${ok} treino(s) colado(s) como rascunho${fail ? ` · ${fail} falhou(ram)` : ""}.`);
+    else toast.error("Não foi possível colar a semana.");
+    await load();
+  }
+
+  async function deleteWeek(week: Date[]) {
+    const cancellable = weekCardsOf(week).filter(isMovable);
+    setWeekMenu(null);
+    if (cancellable.length === 0)
+      return toast.info("Nenhum treino cancelável nesta semana (concluídos/com retorno são mantidos).");
+    if (
+      !window.confirm(
+        `Cancelar ${cancellable.length} treino(s) desta semana? Treinos com retorno do atleta são mantidos.`,
+      )
+    )
+      return;
+    let ok = 0;
+    let fail = 0;
+    for (const card of cancellable) {
+      try {
+        await apiFetch(`/api/trainer/workouts/${card.id}/cancel`, { method: "POST" });
+        ok++;
+      } catch {
+        fail++;
+      }
+    }
+    if (ok) toast.success(`${ok} treino(s) cancelado(s)${fail ? ` · ${fail} falhou(ram)` : ""}.`);
+    else toast.error("Não foi possível excluir a semana.");
+    await load();
+  }
+
   function clearFilters() {
     setModality("");
     setStatus("");
@@ -318,6 +393,7 @@ export default function TrainerCalendarPage() {
       className={uiClasses.page}
       onClick={() => {
         if (dayMenu) setDayMenu(null);
+        if (weekMenu) setWeekMenu(null);
         if (selectorOpen) setSelectorOpen(false);
         if (filtersOpen) setFiltersOpen(false);
       }}
@@ -535,10 +611,10 @@ export default function TrainerCalendarPage() {
         {view === "list" ? (
           <ListView cards={listCards} onOpen={setSelected} />
         ) : (
-          <section className="min-w-0">
-            <div className={view === "month" ? "grid grid-cols-7 gap-1.5" : "grid grid-cols-1 gap-2 sm:grid-cols-7"}>
-              {view === "month" &&
-                WEEKDAY_LABELS.map((label) => (
+          <section className="min-w-0 flex flex-col gap-1.5">
+            {view === "month" && (
+              <div className="grid grid-cols-[repeat(7,minmax(0,1fr))_2rem] gap-1.5">
+                {WEEKDAY_LABELS.map((label) => (
                   <div
                     key={label}
                     className="py-1 text-center text-xs font-semibold uppercase tracking-wide text-faint"
@@ -546,88 +622,128 @@ export default function TrainerCalendarPage() {
                     {label}
                   </div>
                 ))}
-              {days.map((day) => {
-                const iso = toISODate(day);
-                const dayCards = cardsByDay.get(iso) ?? [];
-                const muted = view === "month" && !isSameMonth(day, anchor);
-                const isDropTarget = dragOver === iso;
-                return (
-                  <div
-                    key={iso}
-                    onDragOver={(e) => {
-                      if (dragId) {
-                        e.preventDefault();
-                        setDragOver(iso);
-                      }
-                    }}
-                    onDragLeave={() => setDragOver((v) => (v === iso ? null : v))}
-                    onDrop={() => {
-                      const card = cards.find((c) => c.id === dragId);
-                      setDragOver(null);
-                      setDragId(null);
-                      if (card) void moveTo(card, iso);
-                    }}
-                    className={`group relative flex ${
-                      view === "week" ? "min-h-[180px]" : "min-h-[130px]"
-                    } flex-col rounded-xl border p-1.5 transition-colors ${
-                      isDropTarget
-                        ? "border-orange bg-orange/10"
-                        : isToday(day)
-                          ? "border-electric bg-electric/5"
-                          : "border-line hover:border-line-strong"
-                    } ${muted ? "opacity-40" : ""}`}
-                  >
-                    <div className="mb-1 flex items-center justify-between">
-                      <span
-                        className={`text-xs font-bold ${isToday(day) ? "text-electric-hi" : "text-muted"}`}
-                      >
-                        {view === "week"
-                          ? day.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })
-                          : day.getDate()}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={`Ações em ${iso}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDayMenu(dayMenu === iso ? null : iso);
+                <div />
+              </div>
+            )}
+            {weeks.map((week) => {
+              const weekKey = toISODate(week[0]!);
+              const gridCols =
+                view === "month"
+                  ? "grid grid-cols-[repeat(7,minmax(0,1fr))_2rem] gap-1.5"
+                  : "grid grid-cols-1 gap-2 sm:grid-cols-[repeat(7,minmax(0,1fr))_2rem]";
+              return (
+                <div key={weekKey} className={gridCols}>
+                  {week.map((day) => {
+                    const iso = toISODate(day);
+                    const dayCards = cardsByDay.get(iso) ?? [];
+                    const muted = view === "month" && !isSameMonth(day, anchor);
+                    const isDropTarget = dragOver === iso;
+                    return (
+                      <div
+                        key={iso}
+                        onDragOver={(e) => {
+                          if (dragId) {
+                            e.preventDefault();
+                            setDragOver(iso);
+                          }
                         }}
-                        className="flex h-5 w-5 items-center justify-center rounded-md text-faint opacity-0 transition hover:bg-surface hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
-                      >
-                        <PlusIcon width={14} height={14} />
-                      </button>
-                    </div>
-
-                    <div className="flex flex-1 flex-col gap-1.5">
-                      {dayCards.map((card) => (
-                        <WorkoutCardMini
-                          key={card.id}
-                          card={card}
-                          onOpen={() => setSelected(card)}
-                          onDragStart={() => setDragId(card.id)}
-                          onDragEnd={() => {
-                            setDragId(null);
-                            setDragOver(null);
-                          }}
-                        />
-                      ))}
-                    </div>
-
-                    {dayMenu === iso && (
-                      <DayMenu
-                        iso={iso}
-                        hasClipboard={clipboard !== null}
-                        onCreate={() => {
-                          setCreateDate(iso);
-                          setDayMenu(null);
+                        onDragLeave={() => setDragOver((v) => (v === iso ? null : v))}
+                        onDrop={() => {
+                          const card = cards.find((c) => c.id === dragId);
+                          setDragOver(null);
+                          setDragId(null);
+                          if (card) void moveTo(card, iso);
                         }}
-                        onPaste={() => void pasteInto(iso)}
+                        className={`group relative flex ${
+                          view === "week" ? "min-h-[180px]" : "min-h-[130px]"
+                        } flex-col rounded-xl border p-1.5 transition-colors ${
+                          isDropTarget
+                            ? "border-orange bg-orange/10"
+                            : isToday(day)
+                              ? "border-electric bg-electric-lo"
+                              : "border-line bg-surface hover:border-line-strong hover:bg-surface-2"
+                        } ${muted ? "opacity-40" : ""}`}
+                      >
+                        <div className="mb-1 flex items-center justify-between">
+                          <span
+                            className={`text-xs font-bold ${isToday(day) ? "text-electric-hi" : "text-muted"}`}
+                          >
+                            {view === "week"
+                              ? day.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })
+                              : day.getDate()}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Ações em ${iso}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDayMenu(dayMenu === iso ? null : iso);
+                            }}
+                            className="flex h-5 w-5 items-center justify-center rounded-md text-faint opacity-0 transition hover:bg-surface hover:text-ink focus-visible:opacity-100 group-hover:opacity-100"
+                          >
+                            <PlusIcon width={14} height={14} />
+                          </button>
+                        </div>
+
+                        <div className="flex flex-1 flex-col gap-1.5">
+                          {dayCards.map((card) => (
+                            <WorkoutCardMini
+                              key={card.id}
+                              card={card}
+                              onOpen={() => setSelected(card)}
+                              onDragStart={() => setDragId(card.id)}
+                              onDragEnd={() => {
+                                setDragId(null);
+                                setDragOver(null);
+                              }}
+                            />
+                          ))}
+                        </div>
+
+                        {dayMenu === iso && (
+                          <DayMenu
+                            iso={iso}
+                            hasClipboard={clipboard !== null}
+                            onCreate={() => {
+                              setCreateDate(iso);
+                              setDayMenu(null);
+                            }}
+                            onPaste={() => void pasteInto(iso)}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Ícone lateral — ações da semana inteira */}
+                  <div className="relative flex items-start justify-center pt-1">
+                    <button
+                      type="button"
+                      aria-label={`Ações da semana de ${weekKey}`}
+                      aria-haspopup="menu"
+                      aria-expanded={weekMenu === weekKey}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setWeekMenu(weekMenu === weekKey ? null : weekKey);
+                      }}
+                      className={`flex h-7 w-7 items-center justify-center rounded-lg border border-line text-muted transition hover:bg-surface hover:text-ink ${
+                        weekMenu === weekKey ? "bg-surface text-ink" : ""
+                      }`}
+                    >
+                      ⋮
+                    </button>
+                    {weekMenu === weekKey && (
+                      <WeekMenu
+                        hasClipboard={weekClipboard !== null}
+                        onCopy={() => copyWeek(week)}
+                        onPaste={() => void pasteWeek(week)}
+                        onDelete={() => void deleteWeek(week)}
                       />
                     )}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
           </section>
         )}
 
@@ -760,6 +876,13 @@ export default function TrainerCalendarPage() {
 
 function fmtNum(n: number | undefined): string {
   return n == null ? "—" : Math.round(n).toString();
+}
+
+// Desloca uma data yyyy-mm-dd por N dias inteiros em UTC — sem drift de DST.
+function shiftISO(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 // Seletor de atleta pesquisável: busca, recentes, todos. Troca sem navegação.
@@ -1108,6 +1231,41 @@ function DayMenu({
         </span>
       </span>
       <style>{`.menu-item{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;color:var(--color-ink);padding:7px 8px;border-radius:8px;font-size:13px;text-align:left;cursor:pointer}.menu-item:hover{background:var(--color-surface)}`}</style>
+    </div>
+  );
+}
+
+function WeekMenu({
+  hasClipboard,
+  onCopy,
+  onPaste,
+  onDelete,
+}: {
+  hasClipboard: boolean;
+  onCopy: () => void;
+  onPaste: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      role="menu"
+      className="absolute right-0 top-9 z-20 w-48 rounded-xl border border-line-strong bg-petrol p-1.5 shadow-2xl shadow-black/50"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <p className="px-2 py-1 text-[11px] uppercase tracking-wide text-faint">Semana</p>
+      <button type="button" className="menu-item" onClick={onCopy}>
+        ⧉ Copiar semana
+      </button>
+      {hasClipboard && (
+        <button type="button" className="menu-item" onClick={onPaste}>
+          ▣ Colar semana
+        </button>
+      )}
+      <div className="my-1 border-t border-line" />
+      <button type="button" className="menu-item text-danger" onClick={onDelete}>
+        ✕ Excluir semana
+      </button>
+      <style>{`.menu-item{display:flex;align-items:center;gap:8px;width:100%;border:0;background:transparent;color:var(--color-ink);padding:7px 8px;border-radius:8px;font-size:13px;text-align:left;cursor:pointer}.menu-item:hover{background:var(--color-surface)}.menu-item.text-danger{color:var(--color-danger)}`}</style>
     </div>
   );
 }

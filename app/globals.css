@@ -1,64 +1,95 @@
 @import "tailwindcss";
 
 /*
-  ENKY design tokens (brand manual v1.0 §5–6). Azul-petróleo estrutura,
+  ENKY design tokens (brand manual v2.1 §5–6). Azul-petróleo estrutura,
   laranja ativa, azul elétrico informa dados/links, turquesa sinaliza sucesso.
-  Tokens semânticos (bg-deep / text-ink / border-line …) expostos como theme
-  Tailwind v4 — as utilities referenciam var(--color-*), então trocar as
-  variáveis por tema re-tematiza TODAS as telas sem tocar em componente.
+  Tokens semânticos expostos como theme Tailwind v4 — as utilities referenciam
+  var(--color-*), então trocar as variáveis por tema re-tematiza TODAS as telas
+  sem tocar em componente.
 
   Tema: o <html> recebe data-theme="dark"|"light" (resolvido de
   localStorage 'enky-theme' = system|light|dark por um script anti-flash no
   layout). O padrão sem data-theme é o escuro (valores do @theme).
+
+  Paleta brand book v2.1: petrol #0B2A38, orange #FF6500, electric #0066FF,
+  turq #00D6C3, cinza #E6EBEB.
 */
 @theme {
   /* ---- ESCURO (padrão) ---- */
-  --color-deep: #04202b; /* fundo da página */
-  --color-petrol: #062a38; /* painéis e navegação */
-  --color-surface: #0a3546; /* superfície elevada */
-  --color-surface-2: #0e4157; /* superfície de destaque / hover */
-  --color-line: #16465b; /* divisórias */
-  --color-line-strong: #1d5a74;
+  --color-deep:        #030f15; /* fundo da página — mais profundo para maior contraste */
+  --color-petrol:      #0B2A38; /* painéis e navegação — brand book v2.1 */
+  --color-surface:     #0e3347; /* superfície elevada */
+  --color-surface-2:   #134057; /* superfície de destaque / hover */
+  --color-line:        #1a4f68; /* divisórias */
+  --color-line-strong: #235f7c;
 
-  --color-ink: #f2f6f8; /* texto primário */
-  --color-muted: #a2b7c1; /* texto secundário */
-  --color-faint: #6f8b98; /* texto terciário / placeholder */
+  /* Cards de KPI e métricas — tom um grau mais claro que surface */
+  --color-kpi-bg:      #0f3a50;
 
-  --color-orange: #ff6500; /* CTA / performance */
-  --color-orange-hi: #ff7d2e;
-  --color-electric: #0066ff; /* dados / links */
-  --color-electric-hi: #3d86ff;
-  --color-turq: #00d6c3; /* sucesso / recuperação */
-  --color-danger: #e5484d; /* erro / risco */
-  --color-cloud: #e6e8eb;
+  --color-ink:    #f0f6f9; /* texto primário */
+  --color-muted:  #8fb0bf; /* texto secundário */
+  --color-faint:  #527a8a; /* texto terciário / placeholder */
+
+  --color-orange:    #ff6500; /* CTA / performance */
+  --color-orange-hi: #ff8030;
+  --color-orange-lo: rgba(255,101,0,0.12);
+
+  --color-electric:    #0066ff; /* dados / links */
+  --color-electric-hi: #4d94ff;
+  --color-electric-lo: rgba(0,102,255,0.12);
+
+  --color-turq:    #00d6c3; /* sucesso / recuperação */
+  --color-turq-hi: #00edd8;
+  --color-turq-lo: rgba(0,214,195,0.12);
+
+  --color-danger:    #e5484d; /* erro / risco alto */
+  --color-danger-lo: rgba(229,72,77,0.12);
+
+  --color-warning:    #f59e0b; /* atenção moderada */
+  --color-warning-lo: rgba(245,158,11,0.12);
+
+  --color-cloud: #E6EBEB; /* cinza claro brand */
 
   /* Texto sobre preenchimento de marca (laranja/turquesa). Constante nos dois
      temas — o CTA laranja sempre usa texto petróleo escuro (contraste AA). */
-  --color-onbrand: #052532;
+  --color-onbrand: #04141c;
 
   --font-display: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans:    var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ---- CLARO ---- */
 :root[data-theme="light"] {
-  --color-deep: #eaeef1;
-  --color-petrol: #ffffff;
-  --color-surface: #f1f5f7;
-  --color-surface-2: #e3eaee;
-  --color-line: #d5dee4;
-  --color-line-strong: #bac7cf;
+  --color-deep:        #edf2f5;
+  --color-petrol:      #ffffff;
+  --color-surface:     #f1f6f9;
+  --color-surface-2:   #e4ecf0;
+  --color-line:        #cdd9e0;
+  --color-line-strong: #b3c5cf;
+  --color-kpi-bg:      #f5f9fb;
 
-  --color-ink: #06232e;
-  --color-muted: #3f5765;
-  --color-faint: #64808d;
+  --color-ink:   #04202d;
+  --color-muted: #3a5c6d;
+  --color-faint: #5f808f;
 
-  --color-orange: #ff6500;
-  --color-orange-hi: #e85d00;
-  --color-electric: #0056d6;
-  --color-electric-hi: #0043ab;
-  --color-turq: #07907f;
-  --color-danger: #c4383d;
+  --color-orange:      #ff6500;
+  --color-orange-hi:   #d95500;
+  --color-orange-lo:   rgba(255,101,0,0.10);
+
+  --color-electric:    #0052cc;
+  --color-electric-hi: #003ea0;
+  --color-electric-lo: rgba(0,82,204,0.10);
+
+  --color-turq:    #05867a;
+  --color-turq-hi: #036e64;
+  --color-turq-lo: rgba(5,134,122,0.10);
+
+  --color-danger:    #c4383d;
+  --color-danger-lo: rgba(196,56,61,0.10);
+
+  --color-warning:    #d97706;
+  --color-warning-lo: rgba(217,119,6,0.10);
+
   color-scheme: light;
 }
 :root[data-theme="dark"] {
@@ -87,6 +118,43 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ── KPI micro-trend badge ── */
+.trend-up {
+  color: var(--color-turq);
+  background: var(--color-turq-lo);
+}
+.trend-down {
+  color: var(--color-danger);
+  background: var(--color-danger-lo);
+}
+.trend-neutral {
+  color: var(--color-muted);
+  background: var(--color-surface);
+}
+
+/* ── Semáforo de readiness ── */
+.readiness-ready   { color: var(--color-turq);    background: var(--color-turq-lo); }
+.readiness-warning { color: var(--color-warning);  background: var(--color-warning-lo); }
+.readiness-risk    { color: var(--color-danger);   background: var(--color-danger-lo); }
+
+/* ── Pulsação do dot de alerta ── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.dot-pulse {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ── Entrada suave para cards ── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.25s ease-out both;
+}
+
 /* Logo theme-aware: mostra a variante certa por tema, sem flash.
    Padrão (sem data-theme = escuro) → esconde a variante clara. */
 [data-theme-img="light"] {
@@ -97,6 +165,35 @@ body {
 }
 :root[data-theme="light"] [data-theme-img="dark"] {
   display: none;
+}
+
+/* ── Sidebar nav link ── */
+.sidebar-link-active {
+  background: var(--color-surface-2);
+  color: var(--color-ink);
+  border-left: 2px solid var(--color-orange);
+  padding-left: calc(0.75rem - 2px); /* compensa a borda */
+}
+.sidebar-link-idle {
+  color: var(--color-muted);
+  border-left: 2px solid transparent;
+  padding-left: calc(0.75rem - 2px);
+}
+
+/* ── Calendar — saturação aumentada ── */
+.cal-published  { background: var(--color-electric-lo); color: var(--color-electric-hi); border: 1px solid rgba(0,102,255,0.25); }
+.cal-completed  { background: var(--color-turq-lo);     color: var(--color-turq-hi);     border: 1px solid rgba(0,214,195,0.25); }
+.cal-missed     { background: var(--color-danger-lo);   color: var(--color-danger);       border: 1px solid rgba(229,72,77,0.25); }
+.cal-draft      { background: var(--color-surface);     color: var(--color-muted);        border: 1px solid var(--color-line); }
+.cal-in-progress { background: var(--color-orange-lo);  color: var(--color-orange-hi);    border: 1px solid rgba(255,101,0,0.25); }
+
+/* ── Bottom drawer — slide up ── */
+@keyframes slide-up {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.animate-slide-up {
+  animation: slide-up 0.22s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

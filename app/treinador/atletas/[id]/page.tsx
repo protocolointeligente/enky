@@ -199,10 +199,15 @@ export default function TrainerAthlete360Page({ params }: { params: Promise<{ id
               )}
             </div>
           </div>
-          <Link href={`/treinador/treinos/novo?athleteId=${id}`} className={uiClasses.button}>
-            <PlusIcon />
-            Criar treino
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/treinador/atletas/${id}/avaliacoes`} className={uiClasses.buttonSecondary}>
+              Avaliações
+            </Link>
+            <Link href={`/treinador/treinos/novo?athleteId=${id}`} className={uiClasses.button}>
+              <PlusIcon />
+              Criar treino
+            </Link>
+          </div>
         </header>
 
         {/* ── Métricas sempre visíveis ─────────────────────────────── */}
@@ -246,23 +251,41 @@ export default function TrainerAthlete360Page({ params }: { params: Promise<{ id
         </section>
 
         {/* ── Abas ─────────────────────────────────────────────────── */}
-        <div className="flex gap-1 overflow-x-auto whitespace-nowrap border-b border-line">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              aria-current={tab === t ? "page" : undefined}
-              className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-                tab === t
-                  ? "border-orange text-ink"
-                  : "border-transparent text-muted hover:text-ink"
-              }`}
+        <div className="flex flex-col gap-0">
+          {/* Mobile: select dropdown — evita scroll horizontal */}
+          <div className="md:hidden">
+            <select
+              value={tab}
+              onChange={(e) => setTab(e.target.value as Tab)}
+              className="w-full rounded-xl border border-line bg-deep px-4 py-3 text-sm font-semibold text-ink outline-none focus:border-electric focus:ring-1 focus:ring-electric/30"
+              aria-label="Seção da ficha do atleta"
             >
-              {t}
-            </button>
-          ))}
+              {TABS.map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Tablet/Desktop: pills que quebram linha naturalmente */}
+          <div className="hidden md:flex flex-wrap gap-1.5 border-b border-line pb-3">
+            {TABS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                aria-current={tab === t ? "page" : undefined}
+                className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition-all ${
+                  tab === t
+                    ? "bg-orange text-onbrand shadow-sm"
+                    : "bg-surface text-muted hover:bg-surface-2 hover:text-ink"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
+
 
         <section>
           {tab === "Visão geral" && (

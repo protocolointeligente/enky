@@ -70,7 +70,11 @@ export type AuditAction =
   // trilha não pode depender de qual via trouxe a atividade.
   | "CONNECT_EXTERNAL_PROVIDER"
   | "DISCONNECT_EXTERNAL_PROVIDER"
-  | "IMPORT_EXTERNAL_ACTIVITY";
+  | "IMPORT_EXTERNAL_ACTIVITY"
+  // Etapa/Fase B — Avaliação física. O treinador registra e apaga resultados de
+  // teste do atleta (dado sensível de desempenho); ambos auditados.
+  | "RECORD_TEST_RESULT"
+  | "DELETE_TEST_RESULT";
 
 export interface AuditLogInput {
   action: AuditAction;

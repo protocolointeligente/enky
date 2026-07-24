@@ -9,14 +9,50 @@ import { uiClasses } from "@/app/_lib/ui";
 import { ChevronRightIcon } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/theme-toggle";
 
-// "Mais" (§7): destinos secundários + Sair. Rotas ainda não construídas ficam
-// como "em breve" (desabilitadas) para o menu ser completo sem levar a 404.
-const AVAILABLE = [
-  { href: "/atleta/prontidao", label: "Prontidão", hint: "Check-in diário: sono, fadiga, dor" },
-  { href: "/atleta/relatorios", label: "Relatórios", hint: "Resumos do seu treinador" },
+// "Mais" (§7): destinos secundários + Sair.
+const PRIMARY_LINKS = [
+  {
+    href: "/atleta/prontidao",
+    label: "Prontidão",
+    hint: "Check-in diário: sono, fadiga, motivação",
+    icon: "🔋",
+  },
+  {
+    href: "/atleta/relatorios",
+    label: "Relatórios",
+    hint: "Resumos do seu treinador",
+    icon: "📊",
+  },
+  {
+    href: "/atleta/avaliacoes",
+    label: "Avaliações",
+    hint: "Seus testes físicos e resultados",
+    icon: "📋",
+  },
+  {
+    href: "/atleta/integracoes",
+    label: "Integrações",
+    hint: "Conecte Strava, Garmin e wearables",
+    icon: "🔗",
+  },
 ];
 
-const SOON = ["Avaliações", "Objetivos", "Mensagens", "Biblioteca", "Compras", "Perfil", "Configurações"];
+const MARKETPLACE_LINKS = [
+  {
+    href: "/marketplace",
+    label: "Marketplace",
+    hint: "Planos e consultorias de treinadores",
+    icon: "🏪",
+  },
+  {
+    href: "/marketplace/biblioteca",
+    label: "Minha biblioteca",
+    hint: "Conteúdos que você adquiriu",
+    icon: "📚",
+  },
+];
+
+const SOON = ["Objetivos", "Mensagens", "Perfil", "Configurações"];
 
 export default function AthleteMaisPage() {
   const router = useRouter();
@@ -25,7 +61,6 @@ export default function AthleteMaisPage() {
   async function handleLogout() {
     setLoggingOut(true);
     try {
-      // Idempotente no servidor; mesmo se falhar, sai. Limpa dados locais (§33/§35/§52).
       await apiFetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
       await clearAppCaches();
       router.push("/login");
@@ -43,15 +78,19 @@ export default function AthleteMaisPage() {
           <ThemeToggle />
         </header>
 
+        {/* Links principais */}
         <section className="flex flex-col gap-2">
-          {AVAILABLE.map((item) => (
+          {PRIMARY_LINKS.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="flex items-center justify-between rounded-xl border border-line bg-petrol/70 p-4 transition-colors hover:border-line-strong"
+              className="flex items-center gap-3 rounded-2xl border border-line bg-petrol p-4 transition-colors hover:border-line-strong"
             >
-              <div className="min-w-0">
-                <p className="font-medium text-ink">{item.label}</p>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface text-lg" aria-hidden="true">
+                {item.icon}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-ink">{item.label}</p>
                 <p className="truncate text-xs text-muted">{item.hint}</p>
               </div>
               <ChevronRightIcon className="shrink-0 text-faint" />
@@ -59,6 +98,28 @@ export default function AthleteMaisPage() {
           ))}
         </section>
 
+        {/* Marketplace */}
+        <section className="flex flex-col gap-2">
+          <h2 className={uiClasses.subheading}>Marketplace</h2>
+          {MARKETPLACE_LINKS.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-3 rounded-2xl border border-line bg-petrol p-4 transition-colors hover:border-line-strong hover:border-orange/40"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-lo text-lg" aria-hidden="true">
+                {item.icon}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-ink">{item.label}</p>
+                <p className="truncate text-xs text-muted">{item.hint}</p>
+              </div>
+              <ChevronRightIcon className="shrink-0 text-faint" />
+            </Link>
+          ))}
+        </section>
+
+        {/* Em breve */}
         <section className="flex flex-col gap-2">
           <h2 className={uiClasses.subheading}>Em breve</h2>
           <div className="grid grid-cols-2 gap-2">
@@ -66,7 +127,7 @@ export default function AthleteMaisPage() {
               <div
                 key={label}
                 aria-disabled="true"
-                className="rounded-xl border border-dashed border-line bg-petrol/30 p-3 text-sm text-faint"
+                className="rounded-2xl border border-dashed border-line bg-petrol/30 p-3 text-sm text-faint"
               >
                 {label}
               </div>
@@ -74,13 +135,14 @@ export default function AthleteMaisPage() {
           </div>
         </section>
 
+        {/* Sair */}
         <button
           type="button"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="rounded-xl border border-line px-4 py-3 text-sm font-medium text-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-50"
+          className="rounded-2xl border border-line px-4 py-3 text-sm font-medium text-muted transition-colors hover:border-danger/40 hover:bg-danger-lo hover:text-danger disabled:opacity-50"
         >
-          {loggingOut ? "Saindo..." : "Sair"}
+          {loggingOut ? "Saindo..." : "Sair da conta"}
         </button>
       </div>
     </main>

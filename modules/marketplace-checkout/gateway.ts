@@ -17,6 +17,13 @@ export type MarketplacePaymentStatus =
   | "DISPUTED"
   | "EXPIRED";
 
+// Repasse ao vendedor: valor fixo em centavos que sai do total e vai para a
+// carteira do vendedor. O que sobra (comissão da plataforma) fica na conta ENKY.
+export interface MarketplaceSplit {
+  walletId: string;
+  fixedValueCents: number;
+}
+
 export interface CreateMarketplaceCheckoutInput {
   orderId: string;
   idempotencyKey: string;
@@ -25,6 +32,10 @@ export interface CreateMarketplaceCheckoutInput {
   method: MarketplacePaymentMethod;
   buyerName: string;
   buyerEmail: string;
+  /** CPF/CNPJ do comprador — exigido por gateways reais (Asaas). */
+  buyerTaxId?: string;
+  /** Repasse(s) ao(s) vendedor(es). Vazio = 100% plataforma (sem split). */
+  split?: MarketplaceSplit[];
   returnUrl?: string;
 }
 
