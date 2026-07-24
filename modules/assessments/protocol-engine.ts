@@ -458,16 +458,23 @@ function interpolateVdot(distanceM: number, timeS: number): number {
     const velocityMpM = distanceM / timeS * 60;
     return parseFloat((velocityMpM * 0.2 + 3.5).toFixed(1)); // simplified fallback
   }
-  rows.sort((a, b) => a[1] - b[1]);
-  if (timeS <= rows[0][1]) return rows[0][2];
-  if (timeS >= rows[rows.length - 1][1]) return rows[rows.length - 1][2];
+  // rows é não-vazio (guard acima) e os índices do laço estão em faixa por
+  // construção — as asserções só satisfazem noUncheckedIndexedAccess (erasadas
+  // em runtime, sem mudança de comportamento).
+  rows.sort((a, b) => a[1]! - b[1]!);
+  const first = rows[0]!;
+  const last = rows[rows.length - 1]!;
+  if (timeS <= first[1]!) return first[2]!;
+  if (timeS >= last[1]!) return last[2]!;
   for (let i = 0; i < rows.length - 1; i++) {
-    if (timeS >= rows[i][1] && timeS <= rows[i + 1][1]) {
-      const t = (timeS - rows[i][1]) / (rows[i + 1][1] - rows[i][1]);
-      return parseFloat((rows[i][2] + t * (rows[i + 1][2] - rows[i][2])).toFixed(1));
+    const a = rows[i]!;
+    const b = rows[i + 1]!;
+    if (timeS >= a[1]! && timeS <= b[1]!) {
+      const t = (timeS - a[1]!) / (b[1]! - a[1]!);
+      return parseFloat((a[2]! + t * (b[2]! - a[2]!)).toFixed(1));
     }
   }
-  return rows[rows.length - 1][2];
+  return last[2]!;
 }
 
 /**

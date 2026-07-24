@@ -64,8 +64,8 @@ describe("JP7 Masculino (Siri)", () => {
     const result = jp7MaleSiri(baseInputs);
     expect(result.derived["fat_mass_kg"]).toBeDefined();
     expect(result.derived["lean_mass_kg"]).toBeDefined();
-    const fatMass = result.derived["fat_mass_kg"].value;
-    const leanMass = result.derived["lean_mass_kg"].value;
+    const fatMass = result.derived["fat_mass_kg"]!.value;
+    const leanMass = result.derived["lean_mass_kg"]!.value;
     expectApprox(fatMass + leanMass, 80, 1);
   });
 
@@ -203,7 +203,7 @@ describe("Léger VO₂máx", () => {
   it("inclui VAM como valor derivado", () => {
     const result = legerVo2max({ last_level: 13, last_shuttle: 5, age_years: 25 });
     expect(result.derived["vam_kmh"]).toBeDefined();
-    expectApprox(result.derived["vam_kmh"].value, 8 + 0.5 * 13, 0.5);
+    expectApprox(result.derived["vam_kmh"]!.value, 8 + 0.5 * 13, 0.5);
   });
 });
 
@@ -241,7 +241,7 @@ describe("1RM Direto", () => {
 
   it("calcula força relativa se peso disponível", () => {
     const result = oneRmDirect({ load_kg: 100, weight_kg: 80 });
-    expectApprox(result.derived["relative_strength"].value, 1.25, 1);
+    expectApprox(result.derived["relative_strength"]!.value, 1.25, 1);
   });
 
   it("não há derived se peso não informado", () => {
@@ -310,8 +310,8 @@ describe("Dinamometria de Preensão Manual", () => {
 
   it("inclui valores derivados por lado", () => {
     const result = handgripAsymmetry({ right_1_kgf: 50, left_1_kgf: 45 });
-    expect(result.derived["right_best_kgf"].value).toBe(50);
-    expect(result.derived["left_best_kgf"].value).toBe(45);
+    expect(result.derived["right_best_kgf"]!.value).toBe(50);
+    expect(result.derived["left_best_kgf"]!.value).toBe(45);
   });
 });
 

@@ -494,6 +494,9 @@ model User {
   sentMessages               Message[]                  @relation("MessageSender")
   pushSubscriptions          PushSubscription[]         @relation("UserPushSubscriptions")
   productModerations         ProductModerationEvent[]   @relation("ProductModerationActor")
+  createdBatteries           AssessmentBattery[]         @relation("BatteryCreatedBy")
+  grantedConsents            ConsentRecord[]             @relation("ConsentGrantedBy")
+  recordedConsents           ConsentRecord[]             @relation("ConsentRecordedBy")
 
   @@index([email])
 }
@@ -580,6 +583,8 @@ model Organization {
   communications         CommunicationLog[]
   athleteGoals           AthleteGoal[]
   conversations          Conversation[]
+  assessmentBatteries    AssessmentBattery[]
+  consentRecords         ConsentRecord[]
 }
 
 model OrganizationMembership {
@@ -659,6 +664,7 @@ model AthleteProfile {
   groupMemberships    CoachGroupMember[]
   goals               AthleteGoal[]
   conversations       Conversation[]
+  consentRecords      ConsentRecord[]
 }
 
 // Papel do treinador na carteira do atleta (Etapa 4 §19).
@@ -2784,4 +2790,85 @@ model ProductModerationEvent {
   actor   User?              @relation("ProductModerationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([productId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MÓDULO DE AVALIAÇÃO FÍSICA — ETAPA 2: BATERIAS E CONSENTIMENTO
+// (feat/assessment-engine, 2026-07)
+// ─────────────────────────────────────────────────────────────────────────────
+
+enum BatteryStatus {
+  DRAFT    // em edição pelo treinador
+  ACTIVE   // publicada, pode ser aplicada a atletas
+  ARCHIVED // desativada, não aparece para novos atletas
+}
+
+enum ConsentStatus {
+  GRANTED  // atleta concedeu consentimento
+  REVOKED  // revogado pelo atleta ou treinador
+  EXPIRED  // validade expirada sem renovação
+}
+
+model AssessmentBattery {
+  id              String        @id @default(uuid())
+  organizationId  String
+  createdByUserId String
+
+  name        String        // ex.: "Avaliação Inicial — Corrida"
+  description String?
+  tags        String[]      @default([])
+  status      BatteryStatus @default(DRAFT)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User                    @relation("BatteryCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  items        AssessmentBatteryItem[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, createdByUserId])
+}
+
+model AssessmentBatteryItem {
+  id              String  @id @default(uuid())
+  batteryId       String
+  protocolCode    String
+  protocolVersion String  @default("1.0.0")
+  sortOrder       Int     @default(0)
+  isOptional      Boolean @default(false)
+  notes           String?
+
+  battery AssessmentBattery @relation(fields: [batteryId], references: [id], onDelete: Cascade)
+
+  @@unique([batteryId, protocolCode, protocolVersion])
+  @@index([batteryId, sortOrder])
+}
+
+// ConsentRecord: append-only. Revogação = novo registro REVOKED (nunca deletado).
+model ConsentRecord {
+  id               String        @id @default(uuid())
+  organizationId   String
+  athleteId        String
+  grantedByUserId  String
+  recordedByUserId String?
+
+  status         ConsentStatus @default(GRANTED)
+  consentVersion String        @default("1.0")
+  consentText    String
+  ipAddress      String?
+  userAgent      String?
+  notes          String?
+  revokedReason  String?
+  validUntil     DateTime?     @db.Timestamptz
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  athlete      AthleteProfile @relation(fields: [athleteId], references: [id], onDelete: Restrict)
+  grantedBy    User           @relation("ConsentGrantedBy", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+  recordedBy   User?          @relation("ConsentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, athleteId, createdAt])
+  @@index([organizationId, athleteId, status])
 }
