@@ -5,6 +5,7 @@ import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
 import { AthletesPanel } from "./_components/athletes-panel";
 import { AuditPanel } from "./_components/audit-panel";
+import { MarketplacePanel } from "./_components/marketplace-panel";
 import { OrganizationsPanel } from "./_components/organizations-panel";
 import { OverviewPanel } from "./_components/overview-panel";
 import { TrainersPanel } from "./_components/trainers-panel";
@@ -24,6 +25,7 @@ const TABS = [
   { id: "organizations", label: "Organizações" },
   { id: "trainers", label: "Treinadores" },
   { id: "athletes", label: "Atletas" },
+  { id: "marketplace", label: "Marketplace" },
   { id: "audit", label: "Auditoria" },
 ] as const;
 
@@ -80,6 +82,7 @@ export default function AdminPage() {
           {tab === "organizations" && <OrganizationsPanel />}
           {tab === "trainers" && <TrainersPanel />}
           {tab === "athletes" && <AthletesPanel />}
+          {tab === "marketplace" && <MarketplacePanel />}
           {tab === "audit" && <AuditPanel />}
         </div>
       </div>
