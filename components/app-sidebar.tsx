@@ -56,6 +56,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
       <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" />
     </>
   ),
+  mensagens: <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />,
   configuracoes: (
     <>
       <circle cx="12" cy="12" r="3" />

@@ -15,6 +15,7 @@ const TRAINER_LINKS = [
   { href: "/treinador/templates",  label: "Templates",     icon: "templates" },
   { href: "/treinador/exercicios", label: "Exercícios",    icon: "exercicios" },
   { href: "/treinador/relatorios", label: "Relatórios",    icon: "relatorios" },
+  { href: "/treinador/mensagens",  label: "Mensagens",     icon: "mensagens" },
   { href: "/treinador/gestao",     label: "Gestão",        icon: "gestao" },
   { href: "/treinador/planos",     label: "Planos",        icon: "planos" },
   { href: "/treinador/marketplace",label: "Marketplace",   icon: "marketplace" },

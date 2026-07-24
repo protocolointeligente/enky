@@ -42,6 +42,12 @@ const PRIMARY_LINKS = [
     icon: "🔗",
   },
   {
+    href: "/atleta/mensagens",
+    label: "Mensagens",
+    hint: "Converse com seu treinador",
+    icon: "💬",
+  },
+  {
     href: "/atleta/perfil",
     label: "Perfil",
     hint: "Dados, preferências, privacidade e segurança",
@@ -64,7 +70,7 @@ const MARKETPLACE_LINKS = [
   },
 ];
 
-const SOON = ["Mensagens"];
+const SOON: string[] = [];
 
 export default function AthleteMaisPage() {
   const router = useRouter();
@@ -132,20 +138,22 @@ export default function AthleteMaisPage() {
         </section>
 
         {/* Em breve */}
-        <section className="flex flex-col gap-2">
-          <h2 className={uiClasses.subheading}>Em breve</h2>
-          <div className="grid grid-cols-2 gap-2">
-            {SOON.map((label) => (
-              <div
-                key={label}
-                aria-disabled="true"
-                className="rounded-2xl border border-dashed border-line bg-petrol/30 p-3 text-sm text-faint"
-              >
-                {label}
-              </div>
-            ))}
-          </div>
-        </section>
+        {SOON.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <h2 className={uiClasses.subheading}>Em breve</h2>
+            <div className="grid grid-cols-2 gap-2">
+              {SOON.map((label) => (
+                <div
+                  key={label}
+                  aria-disabled="true"
+                  className="rounded-2xl border border-dashed border-line bg-petrol/30 p-3 text-sm text-faint"
+                >
+                  {label}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Sair */}
         <button
