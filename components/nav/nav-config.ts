@@ -67,24 +67,7 @@ export const TRAINER_NAV: NavItem[] = [
     mobilePrimary: true,
     group: "main",
   },
-  {
-    id: "trainer-intelligence",
-    label: "Intelligence",
-    shortLabel: "IA",
-    href: "/treinador/novidades",
-    icon: BrainIcon,
-    mobilePrimary: true,
-    group: "intelligence",
-  },
   // Drawer "Mais" (mobile) / sidebar (desktop)
-  {
-    id: "trainer-treinos",
-    label: "Treinos",
-    shortLabel: "Treinos",
-    href: "/treinador/treinos",
-    icon: PlayIcon,
-    group: "training",
-  },
   {
     id: "trainer-periodizacao",
     label: "Periodização",

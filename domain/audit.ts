@@ -128,7 +128,10 @@ export type AuditAction =
   // outras sessões é ato de segurança. Todos auditados (não guardam dado sensível).
   | "REQUEST_DATA_EXPORT"
   | "REQUEST_ACCOUNT_DELETION"
-  | "REVOKE_OTHER_SESSIONS";
+  | "REVOKE_OTHER_SESSIONS"
+  // Superadmin §16.1 — moderação de produto do marketplace. Ação sensível
+  // (afeta o que o público vê e a receita do vendedor); sempre auditada.
+  | "MODERATE_PRODUCT";
 
 export interface AuditLogInput {
   action: AuditAction;

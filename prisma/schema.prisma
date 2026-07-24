@@ -493,6 +493,7 @@ model User {
   authoredGoalEvents         AthleteGoalEvent[]         @relation("GoalEventAuthor")
   sentMessages               Message[]                  @relation("MessageSender")
   pushSubscriptions          PushSubscription[]         @relation("UserPushSubscriptions")
+  productModerations         ProductModerationEvent[]   @relation("ProductModerationActor")
 
   @@index([email])
 }
@@ -1741,6 +1742,7 @@ model MarketplaceProduct {
   reviews          MarketplaceReview[]
   entitlements     MarketplaceEntitlement[]
   cartItems        MarketplaceCartItem[]
+  moderationEvents ProductModerationEvent[]
 
   @@index([sellerOrganizationId])
   @@index([status, visibility])
@@ -2752,4 +2754,34 @@ model PushSubscription {
   user User @relation("UserPushSubscriptions", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// MODERAÇÃO DE PRODUTOS DO MARKETPLACE (Superadmin §16.1)
+// Histórico append-only de moderação (quem, quando, de/para, motivo). O status
+// vive em MarketplaceProduct.status; aqui fica a trilha. Nada é apagado.
+// ---------------------------------------------------------------------------
+
+enum ProductModerationAction {
+  APPROVE
+  REJECT
+  SUSPEND
+  REINSTATE
+  ARCHIVE
+}
+
+model ProductModerationEvent {
+  id          String                   @id @default(uuid())
+  productId   String
+  actorUserId String?
+  action      ProductModerationAction
+  fromStatus  MarketplaceProductStatus
+  toStatus    MarketplaceProductStatus
+  reason      String?
+  createdAt   DateTime                 @default(now()) @db.Timestamptz
+
+  product MarketplaceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  actor   User?              @relation("ProductModerationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
 }

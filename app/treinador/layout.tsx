@@ -9,8 +9,6 @@ const TRAINER_LINKS = [
   { href: "/treinador",            label: "Painel",        icon: "painel" },
   { href: "/treinador/atletas",    label: "Atletas",       icon: "atletas" },
   { href: "/treinador/calendario", label: "Calendário",    icon: "calendario" },
-  { href: "/treinador/novidades",  label: "Intelligence",  icon: "novidades" },
-  { href: "/treinador/treinos",    label: "Treinos",       icon: "treinos" },
   { href: "/treinador/periodizacao",label: "Periodização", icon: "periodizacao" },
   { href: "/treinador/templates",  label: "Templates",     icon: "templates" },
   { href: "/treinador/exercicios", label: "Exercícios",    icon: "exercicios" },
