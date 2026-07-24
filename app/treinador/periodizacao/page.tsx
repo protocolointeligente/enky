@@ -69,9 +69,15 @@ function fmtDay(iso: string): string {
 export default function TrainerPeriodizationPage() {
   const { checked } = useRequireRole("TRAINER");
   const [roster, setRoster] = useState<RosterEntry[]>([]);
-  const [athleteId, setAthleteId] = useState("");
+  // Contexto (atleta + plano) persistido na URL: recarregar ou voltar retorna ao
+  // mesmo plano (§17). Lê os params uma vez; escreve a cada mudança (replaceState).
+  const [athleteId, setAthleteId] = useState(() =>
+    typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("athlete") ?? "") : "",
+  );
   const [plans, setPlans] = useState<PlanSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() =>
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("plan") : null,
+  );
   const [detail, setDetail] = useState<PlanDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,23 +93,46 @@ export default function TrainerPeriodizationPage() {
       .then((r) => {
         const active = r.athletes.filter((a) => a.status === "ACTIVE");
         setRoster(active);
-        if (active[0]) setAthleteId(active[0].athleteProfileId);
+        // Preserva o atleta da URL se ainda válido; senão cai no primeiro ativo.
+        setAthleteId((cur) =>
+          cur && active.some((a) => a.athleteProfileId === cur)
+            ? cur
+            : (active[0]?.athleteProfileId ?? ""),
+        );
       })
       .catch((err) => setError(err instanceof ApiClientError ? err.message : "Erro inesperado."))
       .finally(() => setLoading(false));
   }, [checked]);
 
   useEffect(() => {
-    setSelectedId(null);
     setDetail(null);
     if (!athleteId) {
       setPlans([]);
+      setSelectedId(null);
       return;
     }
     apiFetch<{ periodizations: PlanSummary[] }>(`/api/trainer/athletes/${athleteId}/periodizations`)
-      .then((r) => setPlans(r.periodizations))
-      .catch(() => setPlans([]));
+      .then((r) => {
+        setPlans(r.periodizations);
+        // Mantém o plano selecionado se pertence a este atleta (contexto da URL);
+        // senão limpa. Assim recarregar/voltar volta ao mesmo plano.
+        setSelectedId((cur) => (cur && r.periodizations.some((p) => p.id === cur) ? cur : null));
+      })
+      .catch(() => {
+        setPlans([]);
+        setSelectedId(null);
+      });
   }, [athleteId]);
+
+  // Espelha o contexto na URL (sem poluir o histórico).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams();
+    if (athleteId) params.set("athlete", athleteId);
+    if (selectedId) params.set("plan", selectedId);
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `?${qs}` : window.location.pathname);
+  }, [athleteId, selectedId]);
 
   const loadDetail = useCallback(async () => {
     setWeekAnalysis({});
@@ -183,6 +212,19 @@ export default function TrainerPeriodizationPage() {
   return (
     <main className={uiClasses.page}>
       <div className={uiClasses.wide}>
+        <nav className="flex items-center gap-1.5 text-xs text-muted" aria-label="Trilha de navegação">
+          <Link href="/treinador" className="transition-colors hover:text-ink">
+            Painel
+          </Link>
+          <span className="text-faint">›</span>
+          <span className="text-ink">Periodização</span>
+          {detail && (
+            <>
+              <span className="text-faint">›</span>
+              <span className="max-w-[40ch] truncate text-ink">{detail.title}</span>
+            </>
+          )}
+        </nav>
         <header className="flex flex-col gap-1">
           <span className={uiClasses.eyebrow}>Periodização</span>
           <h1 className={uiClasses.heading}>Planejamento estratégico</h1>

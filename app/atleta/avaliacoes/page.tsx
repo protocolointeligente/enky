@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { ApiClientError, apiFetch } from "@/app/_lib/api-client";
 import { uiClasses } from "@/app/_lib/ui";
 import { useRequireRole } from "@/app/_lib/use-session";
+import { EmptyState } from "@/components/ui/empty-state";
+import { LayersIcon } from "@/components/ui/icons";
 import type { AssessmentView } from "@/modules/assessments/assessment-service";
 import { formatSecondsAsPace, isPaceUnit, type Zone } from "@/modules/assessments/zones";
 
@@ -56,10 +58,11 @@ export default function AthleteAssessmentsPage() {
         {error && <p className={uiClasses.error}>{error}</p>}
 
         {items && items.length === 0 && (
-          <p className="text-muted">
-            Você ainda não tem avaliações registradas. Elas aparecem aqui quando seu treinador as
-            lança.
-          </p>
+          <EmptyState
+            title="Nenhuma avaliação ainda"
+            description="Seus testes físicos e zonas aparecem aqui quando seu treinador os registra."
+            icon={<LayersIcon width={28} height={28} />}
+          />
         )}
 
         {items && items.length > 0 && (
